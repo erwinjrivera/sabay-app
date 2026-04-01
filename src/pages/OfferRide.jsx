@@ -600,7 +600,6 @@ export default function OfferRide() {
             {/* The clickable handle/dome */}
             <div className="fr-peek" onClick={() => setIsPanelOpen(!isPanelOpen)}>
                <div className="fr-panel-handle"></div>
-               {!isPanelOpen && <p style={{margin:0, textAlign:'center', color:'#888', fontSize:'0.9rem', marginTop: '12px'}}>Choose date and time</p>}
             </div>
 
             <div className="fr-panel-content">
@@ -666,7 +665,7 @@ export default function OfferRide() {
                  disabled={!fromLocation || !toLocation || isSubmitting}
                  style={(!fromLocation || !toLocation || isSubmitting) ? { background: '#ccc', color: '#888', cursor: 'not-allowed' } : {}}
                >
-                 {isSubmitting ? 'Establishing connection...' : 'Offer a Ride'}
+                 {isSubmitting ? 'Offering...' : 'Offer a Ride'}
                </button>
             </div>
           </div>

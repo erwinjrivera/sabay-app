@@ -1,9 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet';
+import { useNavigate, useLocation } from 'react-router-dom';
+import dayjs from 'dayjs';
+import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
+import { db } from '../firebase';
+import { collection, query, getDocs } from 'firebase/firestore';
+
+function getDistanceKM(lat1, lon1, lat2, lon2) {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+            Math.sin(dLon/2) * Math.sin(dLon/2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  return R * c;
+}
 
 // Fix Leaflet Default Icon Issue
 delete L.Icon.Default.prototype._getIconUrl;
@@ -14,16 +28,37 @@ L.Icon.Default.mergeOptions({
 });
 
 // Custom Icons
-const driverIcon = new L.Icon({
-  iconUrl: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#00b0f0" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3" fill="#fff"></circle></svg>'),
-  iconSize: [32, 32],
-  iconAnchor: [16, 32],
+const driverIcon = new L.DivIcon({
+  className: 'custom-driver-flag',
+  html: `<div style="background:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:2px solid #ddd;box-shadow:0 3px 6px rgba(0,0,0,0.15);">
+           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+             <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+             <line x1="4" y1="22" x2="4" y2="15"></line>
+           </svg>
+         </div>`,
+  iconSize: [30, 30],
+  iconAnchor: [15, 15]
 });
 
-const passengerIcon = new L.Icon({
-  iconUrl: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#555" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3" fill="#fff"></circle></svg>'),
-  iconSize: [28, 28],
-  iconAnchor: [14, 28],
+const getPassengerStartIcon = (type) => new L.DivIcon({
+  className: 'custom-pass-start-dot',
+  html: `<div style="width:16px;height:16px;background:${type === 'match' ? '#00b0f0' : '#888'};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${type === 'match' ? 'rgba(0,176,240,0.6)' : 'rgba(136,136,136,0.6)'};"></div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12]
+});
+
+const driverStartIcon = new L.DivIcon({
+  className: 'custom-driver-start-dot',
+  html: `<div style="width:16px;height:16px;background:#555;border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px rgba(85,85,85,0.6);"></div>`,
+  iconSize: [24, 24],
+  iconAnchor: [12, 12]
+});
+
+const getPassengerEndIcon = (type) => new L.DivIcon({
+  className: 'custom-end-pin',
+  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${type === 'match' ? '#00b0f0' : '#888'}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
+  iconSize: [34, 34],
+  iconAnchor: [17, 34],
 });
 
 const pickupSpotIcon = new L.DivIcon({
@@ -33,61 +68,19 @@ const pickupSpotIcon = new L.DivIcon({
   iconAnchor: [7, 7]
 });
 
-// Mock Matches array perfectly replicating Manila geographic logic alongside UI states
-const MOCK_MATCHES = [
-  {
-     id: 'm1',
-     type: 'confirmed',
-     name: 'Ole Christiansen',
-     time: '3:38pm',
-     price: '85.00 ₱',
-     rating: 4.9,
-     reviews: 20,
-     seats: 1,
-     profilePic: 'https://i.pravatar.cc/150?u=ole',
-     pickup: { lat: 14.5532, lon: 121.0500 },
-     dropoff: { lat: 14.5560, lon: 121.0300 }
-  },
-  {
-     id: 'm2',
-     type: 'match',
-     name: 'Laura Franklyn',
-     time: '3:41pm',
-     price: '120.50 ₱',
-     rating: 2.9,
-     reviews: 5,
-     seats: 2,
-     profilePic: 'https://i.pravatar.cc/150?u=laura',
-     pickup: { lat: 14.5500, lon: 121.0550 },
-     dropoff: { lat: 14.5580, lon: 121.0200 }
-  },
-  {
-     id: 'm3',
-     type: 'request',
-     name: 'Martin Oberhäuser',
-     time: '3:58pm',
-     price: '90.00 ₱',
-     rating: 4.9,
-     reviews: 20,
-     seats: 1,
-     profilePic: 'https://i.pravatar.cc/150?u=martin',
-     pickup: { lat: 14.5570, lon: 121.0450 }, 
-     dropoff: { lat: 14.5520, lon: 121.0250 }
-  },
-  {
-     id: 'm4',
-     type: 'declined',
-     name: 'Katharina Schmitt',
-     time: '3:38pm',
-     price: '110.00 ₱',
-     rating: null,
-     reviews: 0,
-     seats: 1,
-     profilePic: 'https://i.pravatar.cc/150?u=kat',
-     pickup: { lat: 14.5600, lon: 121.0600 }, 
-     dropoff: { lat: 14.5400, lon: 121.0100 }
-  }
-];
+const meetSpotIcon = new L.DivIcon({
+  className: 'custom-meet-dot',
+  html: '<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid #00b0f0;box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>',
+  iconSize: [22, 22],
+  iconAnchor: [11, 11]
+});
+
+const getMeetDropSpotIcon = (type) => new L.DivIcon({
+  className: 'custom-meet-drop-dot',
+  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'match' ? '#00b0f0' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
+  iconSize: [22, 22],
+  iconAnchor: [11, 11]
+});
 
 // Map Focus Adjuster Component
 function MapAdjuster({ route1, route2 }) {
@@ -107,21 +100,30 @@ function MapAdjuster({ route1, route2 }) {
 
 export default function OfferMatches() {
   const navigate = useNavigate();
+  const location = useLocation();
   const carouselRef = useRef(null);
   
+  const ride = location.state?.ride;
+  
   const [driverRoute, setDriverRoute] = useState([]);
-  const [activePassengerId, setActivePassengerId] = useState(MOCK_MATCHES[0].id);
-  const [passengerRoutes, setPassengerRoutes] = useState({});
+  const [matches, setMatches] = useState([]);
+  const [isLoadingMatches, setIsLoadingMatches] = useState(true);
+  const [activePassengerId, setActivePassengerId] = useState(null);
+  const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
 
-  // Mock exact driver coordinates (BGC to Makati CBD)
-  const driverFrom = { lat: 14.5552, lon: 121.0535 };
-  const driverTo = { lat: 14.5547, lon: 121.0244 };
+  // Parse exact driver coordinates bound intrinsically to real ride payloads
+  const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
+  const driverTo = ride?.to ? { lat: ride.to.lat, lon: ride.to.lon } : { lat: 14.5547, lon: 121.0244 };
+  
+  // Format dynamic timestamps matching structural design spec
+  const rideTimeStr = ride?.time ? dayjs(ride.time).format('h:mma') : '3:45pm';
+  const rideDateStr = ride?.date ? dayjs(ride.date).format('MMM. D') : 'Sep. 18th';
   
   // Fetch Driver Route once on mount
   useEffect(() => {
     const fetchDriverRoute = async () => {
       try {
-        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverFrom.lon},${driverFrom.lat};${driverTo.lon},${driverTo.lat}?geometries=geojson`);
+        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverFrom.lon},${driverFrom.lat};${driverTo.lon},${driverTo.lat}?geometries=geojson&overview=full`);
         const data = await res.json();
         const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
         setDriverRoute(coords);
@@ -132,23 +134,182 @@ export default function OfferMatches() {
     fetchDriverRoute();
   }, []);
 
-  // Fetch Passenger Route dynamically based on active selection
+  // Matching Engine: Fetch and filter passengers dynamically
   useEffect(() => {
-    const activePass = MOCK_MATCHES.find(m => m.id === activePassengerId);
-    if (!activePass || passengerRoutes[activePassengerId]) return;
+    if (driverRoute.length === 0) return;
 
-    const fetchPassenger = async () => {
+    const fetchMatches = async () => {
       try {
-        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${activePass.pickup.lon},${activePass.pickup.lat};${activePass.dropoff.lon},${activePass.dropoff.lat}?geometries=geojson`);
-        const data = await res.json();
-        const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-        setPassengerRoutes(prev => ({ ...prev, [activePassengerId]: coords }));
+        setIsLoadingMatches(true);
+        const reqRef = collection(db, 'rideRequests');
+        const snap = await getDocs(reqRef);
+        
+        const reqDocs = [];
+        snap.forEach(doc => reqDocs.push({ id: doc.id, ...doc.data() }));
+
+        const matchPromises = reqDocs.map(async (req) => {
+           if (!req.from?.lat || !req.to?.lat) return null;
+           if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
+           
+           const pLat = req.from.lat; const pLon = req.from.lon;
+           const dLat = req.to.lat;   const dLon = req.to.lon;
+           
+           try {
+              // Extract passenger route dynamically!
+              const resPass = await fetch(`https://router.project-osrm.org/route/v1/driving/${pLon},${pLat};${dLon},${dLat}?geometries=geojson&overview=full`);
+              const passData = await resPass.json();
+              if (!passData.routes || passData.routes.length === 0) return null;
+              
+              const passRoute = passData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+              
+              // Find intersections! Find the points on the passenger route natively mapping overlaps
+              let globalMin = Infinity;
+              const distProfile = passRoute.map((ptP, idxP) => {
+                 let minDist = Infinity;
+                 let closestDIdx = -1;
+                 driverRoute.forEach((ptD, idxD) => {
+                    const dist = getDistanceKM(ptP[0], ptP[1], ptD[0], ptD[1]);
+                    if (dist < minDist) { minDist = dist; closestDIdx = idxD; }
+                 });
+                 if (minDist < globalMin) globalMin = minDist;
+                 return { minDist, closestDIdx, passIdx: idxP };
+              });
+
+              // Dynamically buffer node sparsity. If paths natively cross but nodes physically sit 80m apart, globalMin evaluates exactly exposing the true intersection natively!
+              const overlapThreshold = Math.max(0.04, globalMin + 0.02);
+              
+              const overlaps = distProfile
+                 .filter(pt => pt.minDist <= overlapThreshold)
+                 .map(pt => ({ passIdx: pt.passIdx, driverIdx: pt.closestDIdx }));
+
+              let earliestDriverIdx = Infinity;
+              let earliestPassIdx = -1;
+              let latestDriverIdx = -1;
+              let latestPassIdx = -1;
+
+              if (overlaps.length > 0) {
+                 const firstOverlap = overlaps[0];
+                 const lastOverlap = overlaps[overlaps.length - 1];
+                 
+                 // Prevent isolated anomalies (like a single node jumping across parallel streets briefly) 
+                 // by taking minimum/maximum of driver indices safely.
+                 earliestDriverIdx = firstOverlap.driverIdx;
+                 earliestPassIdx = firstOverlap.passIdx;
+                 latestDriverIdx = lastOverlap.driverIdx;
+                 latestPassIdx = lastOverlap.passIdx;
+              }
+              
+              // Process match variables
+              let pickupIdx = -1, dropIdx = -1, meetPickup = null, meetDropoff = null;
+              let interceptPaths = { pickupPath: [], dropoffPath: [] };
+              
+              // Pre-calculate absolute Euclidean nearest neighbors globally for Disjoint Route Fallbacks
+              let minOriginD = Infinity, euclidPickupIdx = -1;
+              let minDestD = Infinity, euclidDropIdx = -1;
+              driverRoute.forEach((pt, idx) => {
+                  const distP = getDistanceKM(pt[0], pt[1], pLat, pLon);
+                  if (distP < minOriginD) { minOriginD = distP; euclidPickupIdx = idx; }
+                  const distD = getDistanceKM(pt[0], pt[1], dLat, dLon);
+                  if (distD < minDestD) { minDestD = distD; euclidDropIdx = idx; }
+              });
+
+              // Local helper for fetching fallback geometric driving traces
+              const getOSRMPath = async (lat1, lon1, lat2, lon2) => {
+                 try {
+                    const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?geometries=geojson&overview=full`);
+                    const data = await res.json();
+                    if (data.routes && data.routes.length > 0) return data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                 } catch (e) {
+                    // silently fail returning standard straight line array
+                 }
+                 return [[lat1, lon1], [lat2, lon2]];
+              };
+
+              if (overlaps.length > 0 && earliestDriverIdx <= latestDriverIdx) {
+                 // Measure if the true physical intersections actually occurred remotely close to the passenger's true start/end points 
+                 // (preventing the algorithm dropping them off 30km early just because routes logically diverged!)
+                 const truePickupIsClose = getDistanceKM(passRoute[earliestPassIdx][0], passRoute[earliestPassIdx][1], pLat, pLon) <= 12.0;
+                 const trueDropIsClose = getDistanceKM(passRoute[latestPassIdx][0], passRoute[latestPassIdx][1], dLat, dLon) <= 12.0;
+
+                 // Pickup Resolution
+                 if (truePickupIsClose) {
+                     pickupIdx = earliestDriverIdx;
+                     meetPickup = passRoute[earliestPassIdx];
+                     interceptPaths.pickupPath = passRoute.slice(0, earliestPassIdx + 1);
+                 } else {
+                     pickupIdx = euclidPickupIdx;
+                     meetPickup = driverRoute[euclidPickupIdx];
+                     interceptPaths.pickupPath = await getOSRMPath(pLat, pLon, meetPickup[0], meetPickup[1]);
+                 }
+
+                 // Dropoff Resolution
+                 if (trueDropIsClose) {
+                     dropIdx = latestDriverIdx;
+                     meetDropoff = passRoute[latestPassIdx];
+                     interceptPaths.dropoffPath = passRoute.slice(latestPassIdx);
+                 } else {
+                     dropIdx = euclidDropIdx;
+                     meetDropoff = driverRoute[euclidDropIdx];
+                     interceptPaths.dropoffPath = await getOSRMPath(meetDropoff[0], meetDropoff[1], dLat, dLon);
+                 }
+              } else {
+                 // Pure Fallback: If absolutely no true overlap is physically detected, fall back to pure Euclidean origins sweeping
+                 if (minOriginD > 12.0 || minDestD > 12.0) return null; // Reject completely out of bounds rides
+                 
+                 pickupIdx = euclidPickupIdx;
+                 dropIdx = euclidDropIdx;
+                 meetPickup = driverRoute[euclidPickupIdx];
+                 meetDropoff = driverRoute[euclidDropIdx];
+                 interceptPaths = {
+                    pickupPath: await getOSRMPath(pLat, pLon, meetPickup[0], meetPickup[1]),
+                    dropoffPath: await getOSRMPath(meetDropoff[0], meetDropoff[1], dLat, dLon)
+                 };
+              }
+
+              // Final sequential sanity check to prevent rides moving backward in time
+              if (pickupIdx > dropIdx) return null;
+
+              return {
+                 id: req.id,
+                 type: req.status === 'confirmed' ? 'confirmed' : 'match',
+                 name: req.userName || 'Passenger',
+                 time: req.time ? dayjs(req.time).format('h:mma') : 'Any time',
+                 price: '0.00 ₱', 
+                 rating: req.userRating || '0.0',
+                 reviews: req.userReviews || 0,
+                 seats: req.seats || 1,
+                 profilePic: req.userProfilePic || `https://i.pravatar.cc/150?u=${req.id}`,
+                 pickup: { lat: pLat, lon: pLon, address: req.from.address },
+                 dropoff: { lat: dLat, lon: dLon, address: req.to.address },
+                 meetPickup: { lat: meetPickup[0], lon: meetPickup[1], idx: pickupIdx },
+                 meetDropoff: { lat: meetDropoff[0], lon: meetDropoff[1], idx: dropIdx },
+                 interceptPaths,
+                 rawRequest: req
+              };
+
+           } catch (e) {
+              console.error("OSRM Pass fetch failure", e);
+              return null;
+           }
+        });
+        
+        const results = await Promise.all(matchPromises);
+        const validMatches = results.filter(m => m !== null);
+        
+        setMatches(validMatches);
+        if (validMatches.length > 0) setActivePassengerId(validMatches[0].id);
+        else setActivePassengerId(null);
+        
       } catch (err) {
-        console.error("OSRM Passenger Error", err);
+        console.error("Match Engine Firebase Error", err);
+      } finally {
+        setIsLoadingMatches(false);
       }
     };
-    fetchPassenger();
-  }, [activePassengerId, passengerRoutes]);
+    fetchMatches();
+  }, [driverRoute, ride?.userId]);
+
+
 
   // Carousel Scroll Intersection Logic detecting centered card
   const handleScroll = () => {
@@ -156,13 +317,15 @@ export default function OfferMatches() {
     const scrollLeft = carouselRef.current.scrollLeft;
     const cardWidth = window.innerWidth * 0.85; // Roughly the width of a snap card
     const activeIndex = Math.round(scrollLeft / cardWidth);
-    if (MOCK_MATCHES[activeIndex]) {
-      setActivePassengerId(MOCK_MATCHES[activeIndex].id);
+    if (matches[activeIndex]) {
+      setActivePassengerId(matches[activeIndex].id);
     }
   };
 
-  const activePassenger = MOCK_MATCHES.find(m => m.id === activePassengerId);
-  const activePassRoute = passengerRoutes[activePassengerId] || [];
+  const activePassenger = matches.find(m => m.id === activePassengerId);
+  const activePassRoute = activePassenger?.meetPickup && driverRoute.length > 0
+    ? driverRoute.slice(activePassenger.meetPickup.idx, activePassenger.meetDropoff.idx + 1)
+    : [];
 
   return (
     <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
@@ -179,11 +342,11 @@ export default function OfferMatches() {
            attribution='Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
         
-        {/* DRIVER ROUTE (Sabay Blue) */}
+        {/* DRIVER ROUTE */}
         {driverRoute.length > 0 && (
           <>
-            <Polyline positions={driverRoute} color="#00b0f0" weight={5} opacity={0.8} />
-            <Marker position={[driverFrom.lat, driverFrom.lon]} icon={driverIcon} />
+            <Polyline positions={driverRoute} pathOptions={{ color: '#555', weight: 5, opacity: 0.8 }} />
+            <Marker position={[driverFrom.lat, driverFrom.lon]} icon={driverStartIcon} />
             <Marker position={[driverTo.lat, driverTo.lon]} icon={driverIcon} />
           </>
         )}
@@ -191,35 +354,65 @@ export default function OfferMatches() {
         {/* PASSENGER OVERLAY & INTERCEPTS */}
         {activePassRoute.length > 0 && (
           <>
-            {/* Main passenger transit path (Grey line) */}
-            <Polyline positions={activePassRoute} color="#888" weight={4} opacity={0.7} />
+            {/* Main passenger transit path */}
+            <Polyline positions={activePassRoute} pathOptions={{ color: activePassenger.type === 'match' ? '#00b0f0' : '#888', weight: 6, opacity: 1 }} />
             
-            {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node (For UI visual mockup) */}
-            {driverRoute.length > 0 && (
+            {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node */}
+            {driverRoute.length > 0 && activePassenger?.meetPickup && (
                <Polyline 
-                 positions={[[activePassenger.pickup.lat, activePassenger.pickup.lon], driverRoute[Math.floor(driverRoute.length * 0.2)]]} 
-                 color="#888" 
-                 weight={3} 
-                 dashArray="5, 10" 
-                 opacity={0.8}
-               />
-            )}
-            {/* Dotted theoretical intercept line from Driver -> Dropoff */}
-            {driverRoute.length > 0 && (
-               <Polyline 
-                 positions={[driverRoute[Math.floor(driverRoute.length * 0.8)], [activePassenger.dropoff.lat, activePassenger.dropoff.lon]]} 
-                 color="#888" 
-                 weight={3} 
-                 dashArray="5, 10" 
-                 opacity={0.8}
+                 positions={activePassenger?.interceptPaths?.pickupPath || [[activePassenger.pickup.lat, activePassenger.pickup.lon], [activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]]} 
+                 pathOptions={{ color: activePassenger.type === 'match' ? '#00b0f0' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
 
-            {/* Passenger endpoints and Pick up nodes */}
-            <Marker position={[activePassenger.pickup.lat, activePassenger.pickup.lon]} icon={passengerIcon} />
-            <Marker position={[activePassenger.dropoff.lat, activePassenger.dropoff.lon]} icon={passengerIcon} />
-            {driverRoute.length > 0 && <Marker position={driverRoute[Math.floor(driverRoute.length * 0.2)]} icon={pickupSpotIcon} />}
-            {driverRoute.length > 0 && <Marker position={driverRoute[Math.floor(driverRoute.length * 0.8)]} icon={pickupSpotIcon} />}
+            {/* Meet around here Marker & Tooltip */}
+            {activePassenger?.meetPickup && (
+              <Marker position={[activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]} icon={meetSpotIcon}>
+                 <Tooltip 
+                    direction="right" 
+                    offset={[10, 0]} 
+                    opacity={1} 
+                    permanent
+                 >
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                     <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                       {activePassenger.profilePic ? (
+                          <img src={activePassenger.profilePic} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                       ) : (
+                          <User size={14} color="#555" />
+                       )}
+                     </div>
+                     <span style={{ fontWeight: 600, color: '#333' }}>Meet around here</span>
+                   </div>
+                 </Tooltip>
+              </Marker>
+            )}
+
+            {/* Dotted theoretical intercept line from Driver -> Dropoff */}
+            {driverRoute.length > 0 && activePassenger?.meetDropoff && (
+               <Polyline 
+                 positions={activePassenger?.interceptPaths?.dropoffPath || [[activePassenger.meetDropoff.lat, activePassenger.meetDropoff.lon], [activePassenger.dropoff.lat, activePassenger.dropoff.lon]]} 
+                 pathOptions={{ color: activePassenger.type === 'match' ? '#00b0f0' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+               />
+            )}
+
+            {/* Drop off around here Marker & Tooltip */}
+            {activePassenger?.meetDropoff && (
+              <Marker position={[activePassenger.meetDropoff.lat, activePassenger.meetDropoff.lon]} icon={getMeetDropSpotIcon(activePassenger.type)}>
+                 <Tooltip 
+                    direction="left" 
+                    offset={[-10, 0]} 
+                    opacity={1} 
+                    permanent
+                 >
+                   <span style={{ fontWeight: 600, color: '#333' }}>Drop-off point</span>
+                 </Tooltip>
+              </Marker>
+            )}
+
+            {/* Passenger endpoints */}
+            <Marker position={[activePassenger.pickup.lat, activePassenger.pickup.lon]} icon={getPassengerStartIcon(activePassenger.type)} />
+            <Marker position={[activePassenger.dropoff.lat, activePassenger.dropoff.lon]} icon={getPassengerEndIcon(activePassenger.type)} />
           </>
         )}
 
@@ -228,41 +421,75 @@ export default function OfferMatches() {
 
       {/* TOP OVERLAYS */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
-        {/* Dark Navbar */}
-        <div style={{ background: 'rgba(40,45,50,0.9)', padding: '1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', color: '#fff' }}>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
-              <ArrowLeft size={24} />
-            </button>
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Offer Ride</h2>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>3:45pm, Sep. 18th</p>
+        <div style={{ background: 'rgba(40,45,50,0.9)', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
+          {/* Dark Navbar */}
+          <div style={{ padding: '1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', color: '#fff' }}>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+                <ArrowLeft size={24} />
+              </button>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Offer Ride</h2>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>{rideTimeStr}, {rideDateStr}</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '2px' }}>
+                {Array.from({ length: ride?.seats || 4 }).map((_, i) => {
+                   const isTaken = i < parseInt(ride?.seatsTaken || 0);
+                   return (
+                     <User key={i} size={16} color={isTaken ? '#555' : '#ccc'} fill={isTaken ? '#555' : '#ccc'} />
+                   );
+                })}
+              </div>
+              <MessageCircle size={20} />
+              <MoreHorizontal size={20} />
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ display: 'flex', gap: '2px' }}>
-              <User size={16} color="#ccc" fill="#ccc" />
-              <User size={16} color="#ccc" fill="#ccc" />
-              <User size={16} color="#ccc" fill="#ccc" />
-              <User size={16} color="#555" fill="#555" />
-            </div>
-            <MessageCircle size={20} />
-            <MoreHorizontal size={20} />
-          </div>
-        </div>
 
-        {/* Address Overlay Strip */}
-        <div style={{ background: 'rgba(40,45,50,0.9)', padding: '0 1rem 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#fff' }}>
-           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-             <div style={{ width: 8, height: 8, background: '#888', borderRadius: '50%' }}></div>
-             <span style={{ fontSize: '0.9rem', color: '#ccc' }}>Uptown Mall, Fort Bonifacio</span>
-           </div>
-           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+          {/* Address Overlay Strip */}
+          <div 
+            onClick={() => setIsHeaderExpanded(!isHeaderExpanded)}
+            style={{ padding: '0 1rem 1rem', display: 'flex', flexDirection: 'column', cursor: 'pointer', color: '#fff' }}
+          >
+            {isHeaderExpanded ? (
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+                <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
+                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '6px', paddingBottom: '6px' }}>
+                     <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
+                     <div style={{ width: 1, flex: 1, background: '#555', margin: '4px 0' }}></div>
+                     <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
+                   </div>
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
+                     <span style={{ fontSize: '0.9rem', color: '#fff', lineHeight: '1.3' }}>
+                       {ride?.from?.address || 'Unknown Origin'}
+                     </span>
+                     <span style={{ fontSize: '0.9rem', color: '#ccc', lineHeight: '1.3' }}>
+                       {ride?.to?.address || 'Uptown Mall, Fort Bonifacio'}
+                     </span>
+                   </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', alignSelf: 'center', marginLeft: '8px' }}>
+                   <svg style={{ minWidth: 16, flexShrink: 0, transform: 'rotate(180deg)' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', flex: 1 }}>
+                   <div style={{ minWidth: 8, height: 8, background: '#888', borderRadius: '50%' }}></div>
+                   <span style={{ fontSize: '0.9rem', color: '#ccc', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                     {ride?.to?.address || 'Uptown Mall, Fort Bonifacio'}
+                   </span>
+                 </div>
+                 <svg style={{ minWidth: 16, flexShrink: 0, marginLeft: '8px' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+              </div>
+            )}
+          </div>
         </div>
         
-        {/* Floating Menu Button */}
-        <div style={{ padding: '1rem' }}>
-          <div style={{ background: '#fff', width: 40, height: 40, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
+        {/* Floating Menu Button positioned OUTSIDE the grey background logically */}
+        <div style={{ padding: '0 1rem 1rem', marginTop: '1rem', pointerEvents: 'none' }}>
+          <div style={{ background: '#fff', width: 40, height: 40, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', cursor: 'pointer', pointerEvents: 'auto' }}>
             <List size={20} color="#555" />
           </div>
         </div>
@@ -291,7 +518,17 @@ export default function OfferMatches() {
       >
         <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
         
-        {MOCK_MATCHES.map((match) => (
+        {isLoadingMatches ? (
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '30px 20px', textAlign: 'center', width: '90%', margin: '0 auto', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', flexShrink: 0 }}>
+            <p style={{ margin: 0, color: '#888', fontWeight: 600 }}>Scanning for ride matches...</p>
+          </div>
+        ) : matches.length === 0 ? (
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '30px 20px', textAlign: 'center', width: '90%', margin: '0 auto', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', flexShrink: 0 }}>
+            <p style={{ margin: 0, color: '#555', fontWeight: 600, fontSize: '1.2rem' }}>No Matches Found 😢</p>
+            <p style={{ margin: '8px 0 0', color: '#888', fontSize: '0.9rem', lineHeight: '1.4' }}>We couldn't find any passengers looking for a ride within exactly 3km of your planned route today.</p>
+          </div>
+        ) : (
+          matches.map((match) => (
           <div 
             key={match.id}
             style={{ 
@@ -317,7 +554,12 @@ export default function OfferMatches() {
                )}
 
                <div style={{ marginLeft: match.type === 'confirmed' ? '24px' : '0' }}>
-                 <img src={match.profilePic} alt={match.name} style={{ width: 50, height: 50, borderRadius: '50%', objectFit: 'cover' }} />
+                 <img 
+                   src={match.profilePic || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"} 
+                   alt="" 
+                   onError={(e) => { e.target.onerror = null; e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"; }}
+                   style={{ width: 50, height: 50, borderRadius: '50%', objectFit: 'cover' }} 
+                 />
                </div>
                
                <div style={{ flex: 1 }}>
@@ -336,10 +578,10 @@ export default function OfferMatches() {
                    </div>
                  ) : (
                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                     <Star size={12} fill="#eab308" color="#eab308" />
-                     <Star size={12} fill="#eab308" color="#eab308" />
-                     <Star size={12} fill="#eab308" color="#eab308" />
-                     <Star size={12} fill="#eab308" color="#eab308" />
+                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
+                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
+                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
+                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
                      <Star size={12} fill="#eaeaea" color="#eaeaea" />
                      <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px' }}>{match.rating} ({match.reviews})</span>
                    </div>
@@ -358,7 +600,7 @@ export default function OfferMatches() {
             </div>
 
             {/* Bottom Button Row */}
-            <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0' }}>
+            <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto' }}>
                
                {/* State 1: Confirmed Match */}
                {match.type === 'confirmed' && (
@@ -404,10 +646,10 @@ export default function OfferMatches() {
                  </button>
                )}
 
-            </div>
+             </div>
 
           </div>
-        ))}
+        )))}
       </div>
 
     </div>

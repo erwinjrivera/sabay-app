@@ -310,6 +310,8 @@ export default function FindRide() {
 
       const payload = {
         userId: currentUser.uid,
+        userName: currentUser.displayName || 'Passenger',
+        userProfilePic: currentUser.photoURL || '',
         status: 'open',
         type: 'passenger',
         from: {
@@ -597,7 +599,6 @@ export default function FindRide() {
             {/* The clickable handle/dome */}
             <div className="fr-peek" onClick={() => setIsPanelOpen(!isPanelOpen)}>
                <div className="fr-panel-handle"></div>
-               {!isPanelOpen && <p style={{margin:0, textAlign:'center', color:'#888', fontSize:'0.9rem', marginTop: '12px'}}>Choose date and time</p>}
             </div>
 
             <div className="fr-panel-content">
@@ -663,7 +664,7 @@ export default function FindRide() {
                  disabled={!fromLocation || !toLocation || isSubmitting}
                  style={(!fromLocation || !toLocation || isSubmitting) ? { background: '#ccc', color: '#888', cursor: 'not-allowed' } : {}}
                >
-                 {isSubmitting ? 'Establishing connection...' : 'Find a Ride'}
+                 {isSubmitting ? 'Finding...' : 'Find a Ride'}
                </button>
             </div>
           </div>
