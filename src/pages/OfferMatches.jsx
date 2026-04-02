@@ -154,7 +154,7 @@ export default function OfferMatches() {
            if (!req.from?.lat || !req.to?.lat) return null;
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
-           const typeStatus = req.status === 'confirmed' ? 'confirmed' : req.status === 'offered' ? 'offered' : 'match';
+           const typeStatus = (req.status === 'confirmed' && req.offeredByRideId === ride?.id) ? 'confirmed' : (req.status === 'offered' && req.offeredByRideId === ride?.id) ? 'offered' : 'match';
            const nameParams = req.userName || 'Passenger';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
            const ratingParams = req.userRating || '0.0';

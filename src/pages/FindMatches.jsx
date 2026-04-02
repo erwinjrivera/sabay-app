@@ -153,7 +153,7 @@ export default function FindMatches() {
            if (!req.from?.lat || !req.to?.lat) return null;
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
-           const typeStatus = req.status === 'confirmed' ? 'confirmed' : req.status === 'offered' ? 'offered' : (req.status === 'request' && req.requestedByRideId === ride?.id) ? 'request' : 'match';
+           const typeStatus = (req.status === 'confirmed' && req.requestedByRideId === ride?.id) ? 'confirmed' : (req.status === 'request' && req.requestedByRideId === ride?.id) ? 'request' : 'match';
            const nameParams = req.userName || 'Erwin Rivera';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
            const ratingParams = req.userRating || '0.0';
@@ -322,6 +322,18 @@ export default function FindMatches() {
              });
              return changed ? next : prev;
          });
+     } else if (volatilePassengerState?.status === 'confirmed' && volatilePassengerState?.offeredByRideId) {
+         setMatches(prev => {
+             let changed = false;
+             const next = prev.map(m => {
+                 if (m.id === volatilePassengerState.offeredByRideId && m.type !== 'confirmed') {
+                     changed = true;
+                     return { ...m, type: 'confirmed' };
+                 }
+                 return m;
+             });
+             return changed ? next : prev;
+         });
      } else if (volatilePassengerState?.status === 'open' || volatilePassengerState?.status === 'cancelled_by_passenger' || !volatilePassengerState) {
          setMatches(prev => {
              let changed = false;
@@ -366,11 +378,26 @@ export default function FindMatches() {
         requestedByRideId: ride?.id || 'unknown' 
       });
     } catch (error) {
-      console.error("Join request state synchronization failed:", error);
+      console.error("Match request state synchronization failed:", error);
     }
   };
 
-  const confirmedPassengers = matches.filter(m => m.type === 'confirmed');
+  const handleAcceptOffer = async (matchId) => {
+    setMatches((prev) => 
+      prev.map((m) => m.id === matchId ? { ...m, type: 'confirmed' } : m)
+    );
+    try {
+      const passengerDocRef = doc(db, 'rideRequests', ride.id);
+      await updateDoc(passengerDocRef, { 
+        status: 'confirmed',
+        offeredByRideId: matchId 
+      });
+    } catch (error) {
+      console.error("Accept offer state synchronization failed:", error);
+    }
+  };
+
+  const confirmedDrivers = matches.filter(m => m.type === 'confirmed');
 
   return (
     <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
@@ -700,7 +727,7 @@ export default function FindMatches() {
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                      <div style={{ position: 'absolute', top: 8, right: 8, background: '#ff0043', color: '#fff', width: 14, height: 14, borderRadius: '50%', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #333' }}>1</div>
                    </button>
-                   <button style={{ flex: 1, padding: '16px', background: '#ff0043', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
+                   <button onClick={() => handleAcceptOffer(match.id)} style={{ flex: 1, padding: '16px', background: '#ff0043', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
                      Accept Offer
                    </button>
                  </>
