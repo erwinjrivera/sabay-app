@@ -28,7 +28,7 @@ L.Icon.Default.mergeOptions({
 });
 
 // Custom Icons
-const driverIcon = new L.DivIcon({
+const passengerIcon = new L.DivIcon({
   className: 'custom-driver-flag',
   html: `<div style="background:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:2px solid #ddd;box-shadow:0 3px 6px rgba(0,0,0,0.15);">
            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -40,21 +40,21 @@ const driverIcon = new L.DivIcon({
   iconAnchor: [15, 15]
 });
 
-const getPassengerStartIcon = (type) => new L.DivIcon({
+const getDriverStartIcon = (type) => new L.DivIcon({
   className: 'custom-pass-start-dot',
   html: `<div style="width:16px;height:16px;background:${type === 'match' ? '#00b0f0' : type === 'offered' ? '#eab308' : '#888'};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${type === 'match' ? 'rgba(0,176,240,0.6)' : type === 'offered' ? 'rgba(234,179,8,0.6)' : 'rgba(136,136,136,0.6)'};"></div>`,
   iconSize: [24, 24],
   iconAnchor: [12, 12]
 });
 
-const driverStartIcon = new L.DivIcon({
+const passengerStartIcon = new L.DivIcon({
   className: 'custom-driver-start-dot',
   html: `<div style="width:16px;height:16px;background:#555;border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px rgba(85,85,85,0.6);"></div>`,
   iconSize: [24, 24],
   iconAnchor: [12, 12]
 });
 
-const getPassengerEndIcon = (type) => new L.DivIcon({
+const getDriverEndIcon = (type) => new L.DivIcon({
   className: 'custom-end-pin',
   html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${type === 'match' ? '#00b0f0' : type === 'offered' ? '#eab308' : '#888'}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
   iconSize: [34, 34],
@@ -97,8 +97,7 @@ function MapAdjuster({ route1, route2 }) {
   return null;
 }
 
-
-export default function OfferMatches() {
+export default function FindMatches() {
   const navigate = useNavigate();
   const location = useLocation();
   const carouselRef = useRef(null);
@@ -106,42 +105,42 @@ export default function OfferMatches() {
   
   const ride = location.state?.ride;
   
-  const [driverRoute, setDriverRoute] = useState([]);
+  const [passengerRoute, setPassengerRoute] = useState([]);
   const [matches, setMatches] = useState([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(true);
-  const [activePassengerId, setActivePassengerId] = useState(null);
+  const [activeDriverId, setActiveDriverId] = useState(null);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [isBottomPanelExpanded, setIsBottomPanelExpanded] = useState(false);
 
-  // Parse exact driver coordinates bound intrinsically to real ride payloads
-  const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
-  const driverTo = ride?.to ? { lat: ride.to.lat, lon: ride.to.lon } : { lat: 14.5547, lon: 121.0244 };
+  // Parse exact passenger coordinates bound intrinsically to real ride payloads
+  const passengerFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
+  const passengerTo = ride?.to ? { lat: ride.to.lat, lon: ride.to.lon } : { lat: 14.5547, lon: 121.0244 };
   
   // Format dynamic timestamps matching structural design spec
   const rideTimeStr = ride?.time ? dayjs(ride.time).format('h:mma') : '3:45pm';
   const rideDateStr = ride?.date ? dayjs(ride.date).format('MMM. D') : 'Sep. 18th';
   
-  // Fetch Driver Route once on mount
+  // Fetch Passenger Route once on mount
   useEffect(() => {
-    const fetchDriverRoute = async () => {
+    const fetchPassengerRoute = async () => {
       try {
-        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverFrom.lon},${driverFrom.lat};${driverTo.lon},${driverTo.lat}?geometries=geojson&overview=full`);
+        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFrom.lon},${passengerFrom.lat};${passengerTo.lon},${passengerTo.lat}?geometries=geojson&overview=full`);
         const data = await res.json();
         const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-        setDriverRoute(coords);
+        setPassengerRoute(coords);
       } catch (err) {
-        console.error("OSRM Driver Route Error", err);
+        console.error("OSRM Passenger Route Error", err);
       }
     };
-    fetchDriverRoute();
+    fetchPassengerRoute();
   }, []);
 
-  // Matching Engine: Fetch and filter passengers dynamically
+  // Matching Engine: Fetch and filter drivers dynamically
   useEffect(() => {
-    if (driverRoute.length === 0) return;
+    if (passengerRoute.length === 0) return;
 
     setIsLoadingMatches(true);
-    const reqRef = collection(db, 'rideRequests');
+    const reqRef = collection(db, 'rideOffers');
     
     const unsubscribe = onSnapshot(reqRef, async (snap) => {
         const reqDocs = [];
@@ -152,7 +151,7 @@ export default function OfferMatches() {
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
            const typeStatus = req.status === 'confirmed' ? 'confirmed' : req.status === 'offered' ? 'offered' : 'match';
-           const nameParams = req.userName || 'Passenger';
+           const nameParams = req.userName || 'Erwin Rivera';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
            const ratingParams = req.userRating || '0.0';
 
@@ -176,18 +175,18 @@ export default function OfferMatches() {
            
            try {
               // Extract passenger route dynamically!
-              const resPass = await fetch(`https://router.project-osrm.org/route/v1/driving/${pLon},${pLat};${dLon},${dLat}?geometries=geojson&overview=full`);
-              const passData = await resPass.json();
-              if (!passData.routes || passData.routes.length === 0) return null;
+              const resDriver = await fetch(`https://router.project-osrm.org/route/v1/driving/${pLon},${pLat};${dLon},${dLat}?geometries=geojson&overview=full`);
+              const driverData = await resDriver.json();
+              if (!driverData.routes || driverData.routes.length === 0) return null;
               
-              const passRoute = passData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+              const driverRoute = driverData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
               
               // Find intersections! Find the points on the passenger route natively mapping overlaps
               let globalMin = Infinity;
-              const distProfile = passRoute.map((ptP, idxP) => {
+              const distProfile = driverRoute.map((ptP, idxP) => {
                  let minDist = Infinity;
                  let closestDIdx = -1;
-                 driverRoute.forEach((ptD, idxD) => {
+                 passengerRoute.forEach((ptD, idxD) => {
                     const dist = getDistanceKM(ptP[0], ptP[1], ptD[0], ptD[1]);
                     if (dist < minDist) { minDist = dist; closestDIdx = idxD; }
                  });
@@ -209,32 +208,33 @@ export default function OfferMatches() {
               // Pre-calculate absolute Euclidean nearest neighbors globally for Disjoint Route Fallbacks
               let minOriginD = Infinity, euclidPickupIdx = -1;
               let minDestD = Infinity, euclidDropIdx = -1;
-              passRoute.forEach((pt, idx) => {
-                  const distP = getDistanceKM(pt[0], pt[1], driverFrom.lat, driverFrom.lon);
+              passengerRoute.forEach((pt, idx) => {
+                  const distP = getDistanceKM(pt[0], pt[1], pLat, pLon);
                   if (distP < minOriginD) { minOriginD = distP; euclidPickupIdx = idx; }
-                  const distD = getDistanceKM(pt[0], pt[1], driverTo.lat, driverTo.lon);
+                  const distD = getDistanceKM(pt[0], pt[1], dLat, dLon);
                   if (distD < minDestD) { minDestD = distD; euclidDropIdx = idx; }
               });
 
               if (overlaps.length > 0) {
-                 pickupIdx = Math.min(...overlaps.map(o => o.passIdx));
-                 dropIdx = Math.max(...overlaps.map(o => o.passIdx));
+                 pickupIdx = Math.min(...overlaps.map(o => o.driverIdx));
+                 dropIdx = Math.max(...overlaps.map(o => o.driverIdx));
                  
-                 meetPickup = passRoute[pickupIdx];
-                 meetDropoff = passRoute[dropIdx];
+                 meetPickup = passengerRoute[pickupIdx];
+                 meetDropoff = passengerRoute[dropIdx];
                  
-                 interceptPaths.pickupPath = passRoute.slice(0, pickupIdx + 1);
-                 interceptPaths.dropoffPath = passRoute.slice(dropIdx);
+                 interceptPaths.pickupPath = passengerRoute.slice(0, pickupIdx + 1);
+                 interceptPaths.dropoffPath = passengerRoute.slice(dropIdx);
               } else {
-                 if (minOriginD > 5.0 || minDestD > 5.0) return null; 
+                 // Pure Fallback: If absolutely no true overlap is physically detected, fall back to pure Euclidean origins sweeping
+                 if (minOriginD > 5.0 || minDestD > 5.0) return null; // Reject completely out of bounds rides
                  
                  pickupIdx = euclidPickupIdx;
                  dropIdx = euclidDropIdx;
-                 meetPickup = passRoute[euclidPickupIdx];
-                 meetDropoff = passRoute[euclidDropIdx];
+                 meetPickup = passengerRoute[euclidPickupIdx];
+                 meetDropoff = passengerRoute[euclidDropIdx];
                  interceptPaths = {
-                    pickupPath: passRoute.slice(0, pickupIdx + 1),
-                    dropoffPath: passRoute.slice(dropIdx)
+                    pickupPath: passengerRoute.slice(0, pickupIdx + 1),
+                    dropoffPath: passengerRoute.slice(dropIdx)
                  };
               }
 
@@ -249,7 +249,7 @@ export default function OfferMatches() {
                  meetPickup: { lat: meetPickup[0], lon: meetPickup[1], idx: pickupIdx },
                  meetDropoff: { lat: meetDropoff[0], lon: meetDropoff[1], idx: dropIdx },
                  interceptPaths,
-                 sharedPath: passRoute.slice(pickupIdx, dropIdx + 1),
+                 driverFullRoute: driverRoute,
                  rawRequest: req
               };
 
@@ -278,7 +278,7 @@ export default function OfferMatches() {
         
         setMatches(validMatches);
         setIsLoadingMatches(false);
-        setActivePassengerId(currentId => {
+        setActiveDriverId(currentId => {
            if (validMatches.length > 0 && !validMatches.find(m => m.id === currentId)) {
                return validMatches[0].id;
            }
@@ -291,16 +291,16 @@ export default function OfferMatches() {
     });
 
     return () => unsubscribe();
-  }, [driverRoute, ride?.userId]);
+  }, [passengerRoute, ride?.userId]);
 
-  // Real-time bidirectional matching state sync natively updating driver match views instantly if a passenger reacts
+  // Real-time bidirectional matching state sync natively updating passenger match views instantly if a driver reacts
   useEffect(() => {
     if (!ride?.id) return;
-    const unsub = onSnapshot(doc(db, 'rideOffers', ride.id), (docSnap) => {
+    const unsub = onSnapshot(doc(db, 'rideRequests', ride.id), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data.status === 'request' && data.requestedByRideId) {
-           setMatches(prev => prev.map(m => m.id === data.requestedByRideId ? { ...m, type: 'request' } : m));
+        if (data.status === 'offered' && data.offeredByRideId) {
+           setMatches(prev => prev.map(m => m.id === data.offeredByRideId ? { ...m, type: 'offered' } : m));
         }
       }
     });
@@ -314,27 +314,29 @@ export default function OfferMatches() {
     const cardWidth = window.innerWidth * 0.85; // Roughly the width of a snap card
     const activeIndex = Math.round(scrollLeft / cardWidth);
     if (matches[activeIndex]) {
-      setActivePassengerId(matches[activeIndex].id);
+      setActiveDriverId(matches[activeIndex].id);
     }
   };
 
-  const activePassenger = matches.find(m => m.id === activePassengerId);
-  const activePassRoute = activePassenger?.sharedPath || [];
+  const activeDriver = matches.find(m => m.id === activeDriverId);
+  const activeDriverRoute = activeDriver?.meetPickup && passengerRoute.length > 0
+    ? passengerRoute.slice(activeDriver.meetPickup.idx, activeDriver.meetDropoff.idx + 1)
+    : [];
 
-  const handleOfferRide = async (matchId) => {
+  const handleRequestJoin = async (matchId) => {
     // Optimistic generic map transition
     setMatches((prev) => 
-      prev.map((m) => m.id === matchId ? { ...m, type: 'offered' } : m)
+      prev.map((m) => m.id === matchId ? { ...m, type: 'request' } : m)
     );
     // Force backend synchronization
     try {
-      const matchDocRef = doc(db, 'rideRequests', matchId);
+      const matchDocRef = doc(db, 'rideOffers', matchId);
       await updateDoc(matchDocRef, { 
-        status: 'offered', 
-        offeredByRideId: ride?.id || 'unknown' 
+        status: 'request', 
+        requestedByRideId: ride?.id || 'unknown' 
       });
     } catch (error) {
-      console.error("Offered request state synchronization failed:", error);
+      console.error("Join request state synchronization failed:", error);
     }
   };
 
@@ -355,32 +357,45 @@ export default function OfferMatches() {
            attribution='Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
         
-        {/* DRIVER ROUTE */}
-        {driverRoute.length > 0 && (
+        {/* SWIPED DRIVER BASE ROUTE (Grey) */}
+        {activeDriver?.driverFullRoute?.length > 0 && (
           <>
-            <Polyline positions={driverRoute} pathOptions={{ color: '#555', weight: 5, opacity: 0.8 }} />
-            <Marker position={[driverFrom.lat, driverFrom.lon]} icon={driverStartIcon} />
-            <Marker position={[driverTo.lat, driverTo.lon]} icon={driverIcon} />
+            <Polyline positions={activeDriver.driverFullRoute} pathOptions={{ color: '#555', weight: 5, opacity: 0.8 }} />
+            <Marker position={[activeDriver.pickup.lat, activeDriver.pickup.lon]} icon={passengerStartIcon} />
+            <Marker position={[activeDriver.dropoff.lat, activeDriver.dropoff.lon]} icon={passengerIcon} />
           </>
         )}
 
-        {/* PASSENGER OVERLAY & INTERCEPTS */}
-        {activePassRoute.length > 0 && (
+        {/* PASSENGER PERSISTENT ROUTE (Visible if NO matches) */}
+        {!activeDriverRoute.length && passengerRoute.length > 0 && (
           <>
-            {/* Main passenger transit path */}
-            <Polyline positions={activePassRoute} pathOptions={{ color: activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : '#888', weight: 6, opacity: 1 }} />
+            <Polyline positions={passengerRoute} pathOptions={{ color: '#00b0f0', weight: 6, opacity: 0.8 }} />
+            <Marker position={[passengerFrom.lat, passengerFrom.lon]} icon={getDriverStartIcon('match')} />
+            <Marker position={[passengerTo.lat, passengerTo.lon]} icon={getDriverEndIcon('match')} />
+          </>
+        )}
+
+        {/* PASSENGER OVERLAY & INTERCEPTS (Colored) */}
+        {activeDriverRoute.length > 0 && (
+          <>
+            {/* Passenger endpoints rendered persistently for context */}
+            <Marker position={[passengerFrom.lat, passengerFrom.lon]} icon={getDriverStartIcon(activeDriver.type)} />
+            <Marker position={[passengerTo.lat, passengerTo.lon]} icon={getDriverEndIcon(activeDriver.type)} />
+
+            {/* Main passenger transit overlap path (solid Color) */}
+            <Polyline positions={activeDriverRoute} pathOptions={{ color: activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#eab308' : activeDriver.type === 'request' ? '#ea4335' : '#888', weight: 6, opacity: 1 }} />
             
             {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node */}
-            {driverRoute.length > 0 && activePassenger?.meetPickup && (
+            {passengerRoute.length > 0 && activeDriver?.meetPickup && (
                <Polyline 
-                 positions={activePassenger?.interceptPaths?.pickupPath || [[activePassenger.pickup.lat, activePassenger.pickup.lon], [activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]]} 
-                 pathOptions={{ color: activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 positions={activeDriver?.interceptPaths?.pickupPath || [[activeDriver.pickup.lat, activeDriver.pickup.lon], [activeDriver.meetPickup.lat, activeDriver.meetPickup.lon]]} 
+                 pathOptions={{ color: activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
 
             {/* Meet around here Marker & Tooltip */}
-            {activePassenger?.meetPickup && (
-              <Marker position={[activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]} icon={getMeetSpotIcon(activePassenger.type)}>
+            {activeDriver?.meetPickup && (
+              <Marker position={[activeDriver.meetPickup.lat, activeDriver.meetPickup.lon]} icon={getMeetSpotIcon(activeDriver.type)}>
                  <Tooltip 
                     direction="right" 
                     offset={[10, 0]} 
@@ -389,8 +404,8 @@ export default function OfferMatches() {
                  >
                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                      <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                       {activePassenger.profilePic ? (
-                          <img src={activePassenger.profilePic} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                       {activeDriver.profilePic ? (
+                          <img src={activeDriver.profilePic} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                        ) : (
                           <User size={14} color="#555" />
                        )}
@@ -402,16 +417,16 @@ export default function OfferMatches() {
             )}
 
             {/* Dotted theoretical intercept line from Driver -> Dropoff */}
-            {driverRoute.length > 0 && activePassenger?.meetDropoff && (
+            {passengerRoute.length > 0 && activeDriver?.meetDropoff && (
                <Polyline 
-                 positions={activePassenger?.interceptPaths?.dropoffPath || [[activePassenger.meetDropoff.lat, activePassenger.meetDropoff.lon], [activePassenger.dropoff.lat, activePassenger.dropoff.lon]]} 
-                 pathOptions={{ color: activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 positions={activeDriver?.interceptPaths?.dropoffPath || [[activeDriver.meetDropoff.lat, activeDriver.meetDropoff.lon], [activeDriver.dropoff.lat, activeDriver.dropoff.lon]]} 
+                 pathOptions={{ color: activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
 
             {/* Drop off around here Marker & Tooltip */}
-            {activePassenger?.meetDropoff && (
-              <Marker position={[activePassenger.meetDropoff.lat, activePassenger.meetDropoff.lon]} icon={getMeetDropSpotIcon(activePassenger.type)}>
+            {activeDriver?.meetDropoff && (
+              <Marker position={[activeDriver.meetDropoff.lat, activeDriver.meetDropoff.lon]} icon={getMeetDropSpotIcon(activeDriver.type)}>
                  <Tooltip 
                     direction="left" 
                     offset={[-10, 0]} 
@@ -422,14 +437,10 @@ export default function OfferMatches() {
                  </Tooltip>
               </Marker>
             )}
-
-            {/* Passenger endpoints */}
-            <Marker position={[activePassenger.pickup.lat, activePassenger.pickup.lon]} icon={getPassengerStartIcon(activePassenger.type)} />
-            <Marker position={[activePassenger.dropoff.lat, activePassenger.dropoff.lon]} icon={getPassengerEndIcon(activePassenger.type)} />
           </>
         )}
 
-        <MapAdjuster route1={driverRoute} route2={activePassRoute} />
+        <MapAdjuster route1={passengerRoute} route2={activeDriver?.driverFullRoute || []} />
       </MapContainer>
 
       {/* TOP OVERLAYS */}
@@ -442,7 +453,9 @@ export default function OfferMatches() {
                 <ArrowLeft size={24} />
               </button>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Offer Ride</h2>
+                <h1 style={{ margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                   <span style={{ fontWeight: 800, fontSize: '1.25rem' }}>Find Ride</span>
+                </h1>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>{rideTimeStr}, {rideDateStr}</p>
               </div>
             </div>
@@ -607,7 +620,7 @@ export default function OfferMatches() {
                   {match.type === 'match' || match.type === 'offered' || match.type === 'request' ? (
                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', justifyContent: 'flex-end', marginBottom: '4px' }}>
                         {Array.from({ length: match.seats || 4 }).map((_, i) => (
-                           <User key={i} size={12} fill={match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#eab308' : '#ea4335'} color={match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#eab308' : '#ea4335'} />
+                           <User key={i} size={12} fill={match.type === 'offered' ? '#eab308' : '#00b0f0'} color={match.type === 'offered' ? '#eab308' : '#00b0f0'} />
                         ))}
                      </div>
                   ) : null}
@@ -630,44 +643,44 @@ export default function OfferMatches() {
                  </>
                )}
 
-               {/* State 2: Match -> Offer Ride */}
+               {/* State 2: Match -> Request to Join */}
                {match.type === 'match' && (
                  <>
                    <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
-                   <button onClick={() => handleOfferRide(match.id)} style={{ flex: 1, padding: '16px', background: '#00b0f0', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
-                     Offer Ride
+                   <button onClick={() => handleRequestJoin(match.id)} style={{ flex: 1, padding: '16px', background: '#00b0f0', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
+                     Request to Join
                    </button>
                  </>
                )}
 
-               {/* State 5: Offered -> Pending Accept */}
-               {match.type === 'offered' && (
+               {/* State 3: Request -> Request Sent */}
+               {match.type === 'request' && (
                  <>
                    <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
-                   <button style={{ flex: 1, padding: '16px', background: '#eab308', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
-                     Ride Offered
+                   <button style={{ flex: 1, padding: '16px', background: '#ea4335', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'default' }}>
+                     Request Sent
                    </button>
                  </>
                )}
 
-               {/* State 3: Request -> Accept */}
-               {match.type === 'request' && (
+               {/* State 4: Offered -> Accept Offer */}
+               {match.type === 'offered' && (
                  <>
                    <button style={{ position: 'relative', width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                      <div style={{ position: 'absolute', top: 8, right: 8, background: '#ff0043', color: '#fff', width: 14, height: 14, borderRadius: '50%', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #333' }}>1</div>
                    </button>
                    <button style={{ flex: 1, padding: '16px', background: '#ff0043', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
-                     Accept Request
+                     Accept Offer
                    </button>
                  </>
                )}
 
-               {/* State 4: Declined -> Dismiss */}
+               {/* State 5: Declined -> Dismiss */}
                {match.type === 'declined' && (
                  <button style={{ flex: 1, padding: '16px', background: '#fff', border: 'none', color: '#555', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}>
                    Dismiss
@@ -717,53 +730,24 @@ export default function OfferMatches() {
 
         {/* Content (only visible fully when expanded) */}
         <div style={{ width: '100%', marginTop: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
-           <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>Ready to start your ride?</h3>
-           {confirmedPassengers.length === 0 && (
-             <p style={{ margin: '0 0 24px', color: '#888', fontSize: '0.9rem' }}>You don't have confirmed passengers yet.</p>
-           )}
-           <div style={{ marginBottom: confirmedPassengers.length === 0 ? '0' : '24px' }}></div>
+           <h3 style={{ margin: '0 0 24px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>Cancel your ride request?</h3>
            
-           {/* Confirmed Passenger Avatars Overlap */}
-           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '32px' }}>
-              {confirmedPassengers.length > 0 ? (
-                 confirmedPassengers.map((cp, idx) => (
-                    <div key={cp.id} style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', marginLeft: idx > 0 ? '-16px' : 0, overflow: 'hidden', background: '#e0e0e0', zIndex: 10 - idx }}>
-                        <img src={cp.profilePic} alt="confirmed user" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                 ))
-              ) : (
-                 // Fallback Mock Display if none confirmed identically matching blue generic avatars precisely
-                 <>
-                    <div style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', background: '#dbdbdb', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                       <User size={28} color="#fff" strokeWidth={2.5} />
-                    </div>
-                    <div style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', marginLeft: '-20px', background: '#dbdbdb', zIndex: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                       <User size={28} color="#fff" strokeWidth={2.5} />
-                    </div>
-                 </>
-              )}
-           </div>
-
-           {/* Buttons */}
            <button 
-             onClick={() => {
-               if (window.confirm("Are you sure you want to cancel this ride?")) {
-                 navigate('/my-rides');
+             onClick={async () => {
+               if (window.confirm("Are you sure you want to cancel this ride request?")) {
+                 try {
+                     if (ride?.id) {
+                         await updateDoc(doc(db, 'rideRequests', ride.id), { status: 'cancelled_by_passenger' });
+                     }
+                     navigate('/my-rides');
+                 } catch (e) {
+                     console.error("Cancellation error:", e);
+                 }
                }
              }}
-             style={{ width: '100%', padding: '16px', background: '#dbdbdb', border: 'none', borderRadius: '4px', color: '#555', fontWeight: 700, fontSize: '1rem', marginBottom: '16px', cursor: 'pointer' }}
+             style={{ width: '100%', padding: '16px', background: '#ea4335', border: 'none', borderRadius: '4px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
            >
              Cancel Ride
-           </button>
-           <button 
-             onClick={() => {
-               if (window.confirm("Are you ready to start your ride?")) {
-                 alert("Ride started successfully!");
-               }
-             }}
-             style={{ width: '100%', padding: '16px', background: '#00b0f0', border: 'none', borderRadius: '4px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
-           >
-             Start Ride
            </button>
         </div>
       </div>
