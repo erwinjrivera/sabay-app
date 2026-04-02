@@ -42,7 +42,7 @@ const passengerIcon = new L.DivIcon({
 
 const getDriverStartIcon = (type) => new L.DivIcon({
   className: 'custom-pass-start-dot',
-  html: `<div style="width:16px;height:16px;background:${type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#ea4335' : '#888'};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${type === 'match' ? 'rgba(0,176,240,0.6)' : type === 'offered' ? 'rgba(255,0,67,0.6)' : type === 'request' ? 'rgba(234,67,53,0.6)' : 'rgba(136,136,136,0.6)'};"></div>`,
+  html: `<div style="width:16px;height:16px;background:${type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${type === 'match' ? 'rgba(0,176,240,0.6)' : type === 'offered' ? 'rgba(255,0,67,0.6)' : type === 'request' ? 'rgba(234,179,8,0.6)' : 'rgba(136,136,136,0.6)'};"></div>`,
   iconSize: [24, 24],
   iconAnchor: [12, 12]
 });
@@ -56,7 +56,7 @@ const passengerStartIcon = new L.DivIcon({
 
 const getDriverEndIcon = (type) => new L.DivIcon({
   className: 'custom-end-pin',
-  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#ea4335' : '#888'}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
+  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
   iconSize: [34, 34],
   iconAnchor: [17, 34],
 });
@@ -70,14 +70,14 @@ const pickupSpotIcon = new L.DivIcon({
 
 const getMeetSpotIcon = (type) => new L.DivIcon({
   className: 'custom-meet-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#ea4335' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
+  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
   iconSize: [22, 22],
   iconAnchor: [11, 11]
 });
 
 const getMeetDropSpotIcon = (type) => new L.DivIcon({
   className: 'custom-meet-drop-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#ea4335' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
+  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
   iconSize: [22, 22],
   iconAnchor: [11, 11]
 });
