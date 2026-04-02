@@ -119,7 +119,7 @@ export default function MyRides() {
                      return (
                        <div 
                          key={ride.id}
-                         onClick={() => isDriver && navigate('/offer-matches', { state: { ride } })}
+                         onClick={() => isDriver ? navigate('/offer-matches', { state: { ride } }) : navigate('/find-matches', { state: { ride } })}
                          style={{ 
                            background: '#fff', 
                            borderRadius: '8px', 
@@ -127,7 +127,7 @@ export default function MyRides() {
                            overflow: 'hidden',
                            display: 'flex',
                            flexDirection: 'column',
-                           cursor: isDriver ? 'pointer' : 'default'
+                           cursor: 'pointer'
                          }}
                        >
                          {/* CARD HEADER */}
