@@ -294,18 +294,33 @@ export default function FindMatches() {
   }, [passengerRoute, ride?.userId]);
 
   // Real-time bidirectional matching state sync natively updating passenger match views instantly if a driver reacts
+  const [volatilePassengerState, setVolatilePassengerState] = useState(null);
+
   useEffect(() => {
     if (!ride?.id) return;
     const unsub = onSnapshot(doc(db, 'rideRequests', ride.id), (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.status === 'offered' && data.offeredByRideId) {
-           setMatches(prev => prev.map(m => m.id === data.offeredByRideId ? { ...m, type: 'offered' } : m));
-        }
+        setVolatilePassengerState(docSnap.data());
       }
     });
     return () => unsub();
   }, [ride?.id]);
+
+  useEffect(() => {
+     if (volatilePassengerState?.status === 'offered' && volatilePassengerState?.offeredByRideId) {
+         setMatches(prev => {
+             let changed = false;
+             const next = prev.map(m => {
+                 if (m.id === volatilePassengerState.offeredByRideId && m.type !== 'offered') {
+                     changed = true;
+                     return { ...m, type: 'offered' };
+                 }
+                 return m;
+             });
+             return changed ? next : prev;
+         });
+     }
+  }, [volatilePassengerState, matches]);
 
   // Carousel Scroll Intersection Logic detecting centered card
   const handleScroll = () => {
