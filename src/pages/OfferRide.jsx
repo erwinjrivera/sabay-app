@@ -310,6 +310,8 @@ export default function OfferRide() {
 
       const payload = {
         userId: currentUser.uid,
+        userName: currentUser.displayName || 'Driver',
+        userProfilePic: currentUser.photoURL || '',
         status: 'open',
         type: 'driver',
         from: {
@@ -330,15 +332,16 @@ export default function OfferRide() {
       };
 
       const addDocPromise = addDoc(collection(db, 'rideOffers'), payload);
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Firebase connection timed out. Dev environment may be disconnected from Firestore endpoint.")), 4000));
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Connection error. Please check your network and try again.")), 15000));
       
-      await Promise.race([addDocPromise, timeoutPromise]);
+      const docRef = await Promise.race([addDocPromise, timeoutPromise]);
       
-      navigate('/offer-matches');
+      const { createdAt, ...safePayload } = payload;
+      navigate('/offer-matches', { state: { ride: { id: docRef.id, ...safePayload } } });
     } catch (err) {
       console.error("Firestore error internally:", err);
-      setErrorMsg("Firebase Error: " + err.message + " (Redirecting to matches preview gracefully...)");
-      if (err.message.includes("timed out")) {
+      setErrorMsg(err.message + " (Redirecting to matches preview gracefully...)");
+      if (err.message.includes("Connection error")) {
          setTimeout(() => navigate('/offer-matches'), 2500);
       }
     } finally {

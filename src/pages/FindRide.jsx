@@ -332,14 +332,15 @@ export default function FindRide() {
       };
 
       const addDocPromise = addDoc(collection(db, 'rideRequests'), payload);
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Firebase connection timed out. Dev environment may be disconnected from Firestore endpoint.")), 4000));
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Connection error. Please check your network and try again.")), 15000));
       
-      await Promise.race([addDocPromise, timeoutPromise]);
-
-      navigate('/');
+      const docRef = await Promise.race([addDocPromise, timeoutPromise]);
+      
+      const { createdAt, ...safePayload } = payload;
+      navigate('/find-matches', { state: { ride: { id: docRef.id, ...safePayload } } });
     } catch (err) {
       console.error("Firestore error internally:", err);
-      setErrorMsg("Firebase Error: " + err.message);
+      setErrorMsg(err.message);
     } finally {
       setIsSubmitting(false);
     }
