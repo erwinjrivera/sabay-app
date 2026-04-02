@@ -762,7 +762,7 @@ export default function FindMatches() {
           background: '#f2f4f7', 
           borderTopLeftRadius: '24px',
           borderTopRightRadius: '24px',
-          boxShadow: '0 -4px 15px rgba(0,0,0,0.2)',
+          boxShadow: '0 -4px 15px rgba(0,0,0,0.1)',
           padding: '16px 24px 32px 24px',
           zIndex: 2000,
           transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))',

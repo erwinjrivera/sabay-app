@@ -141,9 +141,11 @@ body {
 .fr-header {
   display: flex;
   align-items: flex-start;
-  padding: 1.5rem 1rem 1rem;
-  background-color: #f2f4f7;
+  padding: 1rem 1rem 0;
+  background-color: rgba(40, 45, 50, 0.9);
+  color: white;
   z-index: 10;
+  position: relative;
 }
 
 .back-btn {
@@ -198,7 +200,7 @@ body {
   display: flex;
   flex-direction: column;
   flex: 1;
-  gap: 1rem;
+  gap: 10px;
 }
 
 .fr-input-wrapper {
@@ -222,12 +224,17 @@ body {
 
 .fr-input {
   width: 100%;
-  padding: 0.8rem 1rem;
-  border: 1px solid #e0e0e0;
+  padding: 0.8rem 2.5rem 0.8rem 1rem;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 0.95rem;
   outline: none;
-  transition: border 0.2s;
+  transition: all 0.2s;
+}
+.fr-input::placeholder {
+  color: #aaa;
 }
 
 .fr-input.fr-active {
@@ -237,9 +244,12 @@ body {
 
 .fr-tabs {
   display: flex;
-  padding: 1rem 2rem 0;
+  padding: 1rem 2rem 1rem;
   gap: 1.5rem;
-  background-color: #f2f4f7;
+  background-color: rgba(40, 45, 50, 0.9);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  position: relative;
+  z-index: 10;
 }
 
 .fr-tab-btn {
@@ -247,7 +257,7 @@ body {
   border: none;
   font-size: 1rem;
   font-weight: 500;
-  color: #888;
+  color: #bbb;
   padding: 0.4rem 1rem;
   border-radius: 20px;
   cursor: pointer;
@@ -255,7 +265,7 @@ body {
 }
 
 .fr-tab-btn.active {
-  background-color: #00b0f0;
+  background-color: rgba(255, 255, 255, 0.15);
   color: white;
 }
 
@@ -373,7 +383,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   background: white;
   border-top-left-radius: 24px;
   border-top-right-radius: 24px;
-  box-shadow: 0 -10px 40px rgba(0,0,0,0.2);
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.1);
   z-index: 100;
   display: flex;
   flex-direction: column;

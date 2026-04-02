@@ -512,9 +512,10 @@ export default function OfferMatches() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ display: 'flex', gap: '2px' }}>
                 {Array.from({ length: ride?.seats || 4 }).map((_, i) => {
-                   const isTaken = i < parseInt(ride?.seatsTaken || 0);
+                   const absoluteConfirmedCount = matches.filter(m => m.type === 'confirmed').reduce((acc, m) => acc + (parseInt(m.seats) || 1), 0);
+                   const isTaken = i < absoluteConfirmedCount;
                    return (
-                     <User key={i} size={16} color={isTaken ? '#555' : '#ccc'} fill={isTaken ? '#555' : '#ccc'} />
+                     <User key={i} size={16} color={isTaken ? '#28ec33' : '#ccc'} fill={isTaken ? '#28ec33' : '#ccc'} />
                    );
                 })}
               </div>
@@ -749,7 +750,7 @@ export default function OfferMatches() {
           background: '#f2f4f7', 
           borderTopLeftRadius: '24px',
           borderTopRightRadius: '24px',
-          boxShadow: '0 -4px 15px rgba(0,0,0,0.2)',
+          boxShadow: '0 -4px 15px rgba(0,0,0,0.1)',
           padding: '16px 24px 32px 24px',
           zIndex: 2000,
           transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))',

@@ -268,6 +268,19 @@ export default function FindRide() {
 
   const handleFindRideSubmit = async () => {
     setErrorMsg('');
+    if (!fromLocation || !toLocation) {
+       setErrorMsg("Please make sure you have specified both your exact 'Leaving from' and 'Going to' locations before submitting your ride request.");
+       return;
+    }
+
+    if (dateVal && timeVal) {
+       const selectedDateTime = dateVal.hour(timeVal.hour()).minute(timeVal.minute()).second(0);
+       if (selectedDateTime.isBefore(dayjs().subtract(2, 'minute'))) {
+          setErrorMsg("The selected departure time has already passed. Please choose a valid future time.");
+          return;
+       }
+    }
+    
     setIsSubmitting(true);
     let finalFromCoords = fromCoords;
     let finalToCoords = toCoords;
@@ -356,20 +369,15 @@ export default function FindRide() {
           <div className="fr-header" style={{ flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px', width: '100%' }}>
                <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', cursor: 'pointer', padding: 0 }}>
-                 <ArrowLeft size={24} color="#333" />
+                 <ArrowLeft size={24} color="#fff" />
                </button>
-               <h1 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 700, color: '#111' }}>Find Ride</h1>
+               <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#fff' }}>Find Ride</h1>
             </div>
             <div className="fr-inputs-wrapper">
-              <div className="fr-timeline">
-                <div className="fr-dot-blue">
-                   <div className="fr-dot-inner"></div>
-                </div>
-                <div className="fr-line-dashed"></div>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#ea4335" stroke="#ea4335" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
-                  <circle cx="12" cy="10" r="3" fill="white" stroke="white"></circle>
-                </svg>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '14px', marginRight: '16px', paddingBottom: '6px' }}>
+                <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
+                <div style={{ width: 1, height: '36px', background: '#555', margin: '4px 0' }}></div>
+                <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
               </div>
               <div className="fr-input-fields">
                 <div className="fr-input-wrapper">
@@ -389,7 +397,7 @@ export default function FindRide() {
                     }}
                   />
                   {activeField === 'from' && fromLocation && (
-                    <button className="fr-clear-btn" onClick={() => setFromLocation('')} style={{ background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
+                    <button className="fr-clear-btn" onClick={() => setFromLocation('')} style={{ background: '#999', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
                       <X size={12} color="#fff" strokeWidth={3} />
                     </button>
                   )}
@@ -412,7 +420,7 @@ export default function FindRide() {
                     }}
                   />
                   {activeField === 'to' && toLocation && (
-                    <button className="fr-clear-btn" onClick={() => setToLocation('')} style={{ background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
+                    <button className="fr-clear-btn" onClick={() => setToLocation('')} style={{ background: '#999', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
                       <X size={12} color="#fff" strokeWidth={3} />
                     </button>
                   )}
@@ -661,22 +669,36 @@ export default function FindRide() {
                  </div>
               </div>
 
-               {errorMsg && (
-                 <div style={{ background: '#ffebee', color: '#c62828', padding: '12px', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '1rem', border: '1px solid #ffcdd2' }}>
-                   <strong>Error: </strong> {errorMsg}
-                 </div>
-               )}
-               
                <button 
                  className="fr-submit-btn" 
                  onClick={handleFindRideSubmit}
-                 disabled={!fromLocation || !toLocation || isSubmitting}
-                 style={(!fromLocation || !toLocation || isSubmitting) ? { background: '#ccc', color: '#888', cursor: 'not-allowed' } : {}}
+                 disabled={isSubmitting}
+                 style={isSubmitting ? { background: '#ccc', color: '#888', cursor: 'not-allowed' } : {}}
                >
                  {isSubmitting ? 'Finding...' : 'Find Ride'}
                </button>
             </div>
           </div>
+
+          {/* CUSTOM ERROR PROMPT MODAL */}
+          {errorMsg && (
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+              <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+                <style>{`@keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }`}</style>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fee2e2', color: '#ff2744', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                  <X size={24} strokeWidth={3} />
+                </div>
+                <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Missing Information</h3>
+                <p style={{ margin: '0 0 24px', color: '#555', fontSize: '0.95rem', lineHeight: 1.4 }}>{errorMsg}</p>
+                <button 
+                  onClick={() => setErrorMsg('')}
+                  style={{ width: '100%', padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#111', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
+                >
+                  Okay
+                </button>
+              </div>
+            </div>
+          )}
 
         </div>
       </LocalizationProvider>
