@@ -320,6 +320,18 @@ export default function FindMatches() {
              });
              return changed ? next : prev;
          });
+     } else if (volatilePassengerState?.status === 'open' || volatilePassengerState?.status === 'cancelled_by_passenger' || !volatilePassengerState) {
+         setMatches(prev => {
+             let changed = false;
+             const next = prev.map(m => {
+                 if (m.type === 'offered') {
+                     changed = true;
+                     return { ...m, type: 'match' };
+                 }
+                 return m;
+             });
+             return changed ? next : prev;
+         });
      }
   }, [volatilePassengerState, matches]);
 
