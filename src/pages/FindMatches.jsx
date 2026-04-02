@@ -151,7 +151,7 @@ export default function FindMatches() {
            if (!req.from?.lat || !req.to?.lat) return null;
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
-           const typeStatus = req.status === 'confirmed' ? 'confirmed' : req.status === 'offered' ? 'offered' : 'match';
+           const typeStatus = req.status === 'confirmed' ? 'confirmed' : req.status === 'offered' ? 'offered' : (req.status === 'request' && req.requestedByRideId === ride?.id) ? 'request' : 'match';
            const nameParams = req.userName || 'Erwin Rivera';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
            const ratingParams = req.userRating || '0.0';
@@ -411,13 +411,13 @@ export default function FindMatches() {
             <Marker position={[passengerTo.lat, passengerTo.lon]} icon={getDriverEndIcon(activeDriver.type)} />
 
             {/* Main passenger transit overlap path (solid Color) */}
-            <Polyline positions={activeDriverRoute} pathOptions={{ color: activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#ea4335' : '#888', weight: 6, opacity: 1 }} />
+            <Polyline positions={activeDriverRoute} pathOptions={{ color: activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 6, opacity: 1 }} />
             
             {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node */}
             {passengerRoute.length > 0 && activeDriver?.meetPickup && (
                <Polyline 
                  positions={activeDriver?.interceptPaths?.pickupPath || [[activeDriver.pickup.lat, activeDriver.pickup.lon], [activeDriver.meetPickup.lat, activeDriver.meetPickup.lon]]} 
-                 pathOptions={{ color: activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#ea4335' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 pathOptions={{ color: activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
 
@@ -619,7 +619,7 @@ export default function FindMatches() {
                </div>
                
                <div style={{ flex: 1 }}>
-                 <p style={{ margin: 0, fontSize: '0.8rem', color: match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#ea4335' : '#888', fontWeight: 600 }}>
+                 <p style={{ margin: 0, fontSize: '0.8rem', color: match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888', fontWeight: 600 }}>
                    {match.time}
                  </p>
                  <h3 style={{ margin: '2px 0', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
@@ -648,7 +648,7 @@ export default function FindMatches() {
                   {match.type === 'match' || match.type === 'offered' || match.type === 'request' ? (
                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', justifyContent: 'flex-end', marginBottom: '4px' }}>
                         {Array.from({ length: match.seats || 4 }).map((_, i) => (
-                           <User key={i} size={12} fill={match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#ea4335' : '#888'} color={match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#ea4335' : '#888'} />
+                           <User key={i} size={12} fill={match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} color={match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} />
                         ))}
                      </div>
                   ) : null}
@@ -689,8 +689,8 @@ export default function FindMatches() {
                    <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
-                   <button style={{ flex: 1, padding: '16px', background: '#ea4335', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'default' }}>
-                     Request Sent
+                   <button style={{ flex: 1, padding: '16px', background: '#eab308', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'default' }}>
+                     Sent Request
                    </button>
                  </>
                )}
