@@ -358,7 +358,7 @@ export default function FindRide() {
                <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', cursor: 'pointer', padding: 0 }}>
                  <ArrowLeft size={24} color="#333" />
                </button>
-               <h1 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 700, color: '#111' }}>Find a Ride</h1>
+               <h1 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 700, color: '#111' }}>Find Ride</h1>
             </div>
             <div className="fr-inputs-wrapper">
               <div className="fr-timeline">
@@ -599,7 +599,10 @@ export default function FindRide() {
              
             {/* The clickable handle/dome */}
             <div className="fr-peek" onClick={() => setIsPanelOpen(!isPanelOpen)}>
-               <div className="fr-panel-handle"></div>
+               <div className="fr-panel-handle" style={{ opacity: isPanelOpen ? 0 : 1, transition: 'opacity 0.2s', margin: 0 }}></div>
+               <div style={{ position: 'absolute', top: '10px', right: '16px', opacity: isPanelOpen ? 1 : 0, transition: 'opacity 0.2s' }}>
+                  <X size={24} color="#555" strokeWidth={2.5} />
+               </div>
             </div>
 
             <div className="fr-panel-content">
@@ -631,13 +634,18 @@ export default function FindRide() {
               <div style={{ marginTop: '1.2rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                  <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '6px', fontWeight: 500 }}>Number of seats</label>
-                    <input
+                     <input
                        type="number"
                        min="1"
-                       max="8"
+                       max="4"
                        value={seats} 
-                       onChange={e => setSeats(Number(e.target.value))}
-                       style={{ width: '100%', padding: '14px', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '12px', background: '#fff', fontSize: '1rem', outline: 'none', color: '#333' }}
+                       onChange={e => {
+                         let val = parseInt(e.target.value, 10);
+                         if (isNaN(val) || val < 1) val = 1;
+                         if (val > 4) val = 4;
+                         setSeats(val);
+                       }}
+                       className="fr-drawer-input"
                     />
                  </div>
                  
@@ -648,7 +656,7 @@ export default function FindRide() {
                        placeholder="e.g. Meet me at the lobby"
                        value={noteToDriver}
                        onChange={e => setNoteToDriver(e.target.value)}
-                       style={{ width: '100%', padding: '14px', boxSizing: 'border-box', border: '1px solid #ccc', borderRadius: '12px', background: '#fff', fontSize: '1rem', outline: 'none', color: '#333' }}
+                       className="fr-drawer-input"
                     />
                  </div>
               </div>
@@ -665,7 +673,7 @@ export default function FindRide() {
                  disabled={!fromLocation || !toLocation || isSubmitting}
                  style={(!fromLocation || !toLocation || isSubmitting) ? { background: '#ccc', color: '#888', cursor: 'not-allowed' } : {}}
                >
-                 {isSubmitting ? 'Finding...' : 'Find a Ride'}
+                 {isSubmitting ? 'Finding...' : 'Find Ride'}
                </button>
             </div>
           </div>

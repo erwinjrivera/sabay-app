@@ -115,6 +115,7 @@ export default function OfferMatches() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showRetractOfferModal, setShowRetractOfferModal] = useState(false);
   const [matchToRetract, setMatchToRetract] = useState(null);
+  const [showCapacityFullModal, setShowCapacityFullModal] = useState(false);
 
   // Parse exact driver coordinates bound intrinsically to real ride payloads
   const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
@@ -382,6 +383,10 @@ export default function OfferMatches() {
   };
 
   const handleAcceptRequest = async (matchId) => {
+    if (confirmedPassengers.length >= (ride?.seats || 4)) {
+      setShowCapacityFullModal(true);
+      return;
+    }
     setMatches((prev) => 
       prev.map((m) => m.id === matchId ? { ...m, type: 'confirmed' } : m)
     );
@@ -744,7 +749,7 @@ export default function OfferMatches() {
           background: '#f2f4f7', 
           borderTopLeftRadius: '24px',
           borderTopRightRadius: '24px',
-          boxShadow: '0 -4px 15px rgba(0,0,0,0.1)',
+          boxShadow: '0 -4px 15px rgba(0,0,0,0.2)',
           padding: '16px 24px 32px 24px',
           zIndex: 2000,
           transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))',
@@ -888,6 +893,30 @@ export default function OfferMatches() {
                 Yes, cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Prompt Window For Capacity Full */}
+      {showCapacityFullModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div style={{ background: '#fff', width: '100%', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', padding: '24px', boxSizing: 'border-box', animation: 'slideUp 0.3s ease-out' }}>
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#ffeee8', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <X size={24} color="#ff0043" />
+              </div>
+              <h2 style={{ margin: '0 0 8px', fontSize: '1.4rem', color: '#111' }}>Ride Capacity Full</h2>
+              <p style={{ margin: 0, color: '#555', fontSize: '0.95rem', lineHeight: '1.5' }}>
+                You cannot accept this request because your vehicle's seat capacity is already fully reached.
+              </p>
+            </div>
+            
+            <button 
+              onClick={() => setShowCapacityFullModal(false)}
+              style={{ width: '100%', padding: '16px', background: '#e0e0e0', color: '#333', border: 'none', borderRadius: '12px', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}
+            >
+              Okay
+            </button>
           </div>
         </div>
       )}
