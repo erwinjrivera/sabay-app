@@ -112,6 +112,8 @@ export default function FindMatches() {
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [isBottomPanelExpanded, setIsBottomPanelExpanded] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [showRetractRequestModal, setShowRetractRequestModal] = useState(false);
+  const [matchToRetract, setMatchToRetract] = useState(null);
 
   // Parse exact passenger coordinates bound intrinsically to real ride payloads
   const passengerFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
@@ -689,7 +691,10 @@ export default function FindMatches() {
                    <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
-                   <button style={{ flex: 1, padding: '16px', background: '#eab308', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'default' }}>
+                   <button 
+                     onClick={() => { setMatchToRetract(match.id); setShowRetractRequestModal(true); }}
+                     style={{ flex: 1, padding: '16px', background: '#eab308', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+                   >
                      Sent Request
                    </button>
                  </>
@@ -798,6 +803,48 @@ export default function FindMatches() {
                       navigate('/my-rides');
                   } catch (e) {
                       console.error("Cancellation error:", e);
+                  }
+                }}
+                style={{ flex: 1, padding: '14px', background: '#ff2744', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 4px 10px rgba(255,39,68,0.3)' }}
+              >
+                Yes, cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM RETRACT JOIN REQUEST MODAL */}
+      {showRetractRequestModal && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fee2e2', color: '#ff2744', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <X size={24} strokeWidth={3} />
+            </div>
+            
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Cancel join request?</h3>
+            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>Are you sure you want to cancel the request to join this driver's matched ride?</p>
+            
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => setShowRetractRequestModal(false)}
+                style={{ flex: 1, padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#444', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
+              >
+                Keep Request
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                      if (matchToRetract) {
+                         // Optimistic fallback mapped into container locally
+                         setMatches(prev => prev.map(m => m.id === matchToRetract ? { ...m, type: 'match' } : m));
+                         await updateDoc(doc(db, 'rideOffers', matchToRetract), { status: 'open', requestedByRideId: null });
+                      }
+                      setShowRetractRequestModal(false);
+                      setMatchToRetract(null);
+                  } catch (e) {
+                      console.error("Join Retraction error:", e);
                   }
                 }}
                 style={{ flex: 1, padding: '14px', background: '#ff2744', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 4px 10px rgba(255,39,68,0.3)' }}

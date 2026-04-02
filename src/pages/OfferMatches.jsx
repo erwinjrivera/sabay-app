@@ -322,6 +322,18 @@ export default function OfferMatches() {
              });
              return changed ? next : prev;
          });
+     } else if (volatileDriverState?.status === 'open' || volatileDriverState?.status === 'cancelled_by_passenger' || !volatileDriverState) {
+         setMatches(prev => {
+             let changed = false;
+             const next = prev.map(m => {
+                 if (m.type === 'request') {
+                     changed = true;
+                     return { ...m, type: 'match' };
+                 }
+                 return m;
+             });
+             return changed ? next : prev;
+         });
      }
   }, [volatileDriverState, matches]);
 
