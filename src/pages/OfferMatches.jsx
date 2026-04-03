@@ -6,7 +6,7 @@ import L from 'leaflet';
 import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
-import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, increment } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, increment, arrayRemove } from 'firebase/firestore';
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371; // km
@@ -117,6 +117,8 @@ export default function OfferMatches() {
   const [matchToRetract, setMatchToRetract] = useState(null);
   const [showCapacityFullModal, setShowCapacityFullModal] = useState(false);
   const [capacityModalText, setCapacityModalText] = useState("");
+  const [showCancelConfirmedModal, setShowCancelConfirmedModal] = useState(false);
+  const [confirmedMatchToCancel, setConfirmedMatchToCancel] = useState(null);
 
   // Parse exact driver coordinates bound intrinsically to real ride payloads
   const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
@@ -660,7 +662,9 @@ export default function OfferMatches() {
                    <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
-                   <button style={{ flex: 1, padding: '16px', background: '#28ec33', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'default' }}>
+                   <button 
+                     onClick={() => { setConfirmedMatchToCancel(match.id); setShowCancelConfirmedModal(true); }}
+                     style={{ flex: 1, padding: '16px', background: '#28ec33', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
                      Confirmed
                    </button>
                  </>
@@ -866,6 +870,58 @@ export default function OfferMatches() {
                       setMatchToRetract(null);
                   } catch (e) {
                       console.error("Retraction error:", e);
+                  }
+                }}
+                style={{ flex: 1, padding: '14px', background: '#ff2744', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 4px 10px rgba(255,39,68,0.3)' }}
+              >
+                Yes, cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Prompt Window For Confirmed Status Cancellation */}
+      {showCancelConfirmedModal && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fee2e2', color: '#ff2744', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <X size={24} strokeWidth={3} />
+            </div>
+            
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Cancel confirmed passenger?</h3>
+            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>Are you sure you want to cancel this passenger's confirmed ride?</p>
+            
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => setShowCancelConfirmedModal(false)}
+                style={{ flex: 1, padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#444', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
+              >
+                Keep Passenger
+              </button>
+              <button 
+                onClick={async () => {
+                  try {
+                      if (confirmedMatchToCancel) {
+                         setMatches(prev => prev.map(m => m.id === confirmedMatchToCancel ? { ...m, type: 'match' } : m));
+                         
+                         // Clear the passenger's direct link structurally
+                         await updateDoc(doc(db, 'rideRequests', confirmedMatchToCancel), { status: 'open', offeredByRideId: null });
+                         
+                         // Extract the passenger natively AND restore driver capacity seamlessly resolving state
+                         const requestedPassenger = matches.find(m => m.id === confirmedMatchToCancel);
+                         const passengerSeatCount = parseInt(requestedPassenger?.seats) || 1;
+                         
+                         await updateDoc(doc(db, 'rideOffers', ride.id), { 
+                           requestedByPassengerIds: arrayRemove(confirmedMatchToCancel),
+                           seatsTaken: increment(-Math.abs(passengerSeatCount))
+                         });
+                      }
+                      setShowCancelConfirmedModal(false);
+                      setConfirmedMatchToCancel(null);
+                  } catch (e) {
+                      console.error("Cancellation error:", e);
                   }
                 }}
                 style={{ flex: 1, padding: '14px', background: '#ff2744', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 4px 10px rgba(255,39,68,0.3)' }}
