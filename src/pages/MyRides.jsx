@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, Clock, User, Car, Search, MoreHorizontal, Check, Edit, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, orderBy, getDoc, doc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, getDoc, doc, onSnapshot } from 'firebase/firestore';
 import dayjs from 'dayjs';
 
 export default function MyRides() {
@@ -57,60 +57,41 @@ export default function MyRides() {
         return (r1MaxLat > r2MinLat && r1MinLat < r2MaxLat) && (r1MaxLon > r2MinLon && r1MinLon < r2MaxLon);
     };
 
-    const fetchRides = async () => {
-      try {
-        setLoading(true);
-        // Query both collections concurrently!
-        const offersRef = collection(db, 'rideOffers');
-        const requestsRef = collection(db, 'rideRequests');
+    let allOffers = [];
+    let allReqs = [];
+    let offersReady = false;
+    let reqsReady = false;
 
-        const qOffers = query(offersRef, where('userId', '==', currentUser.uid));
-        const qRequests = query(requestsRef, where('userId', '==', currentUser.uid));
+    const processRides = () => {
+        if (!offersReady || !reqsReady) return;
+        
+        const myOffers = allOffers.filter(r => r.userId === currentUser.uid);
+        const myReqs = allReqs.filter(r => r.userId === currentUser.uid);
 
-        const [offersSnap, requestsSnap] = await Promise.all([
-          getDocs(qOffers),
-          getDocs(qRequests)
-        ]);
-
-        // Pre-fetch all passenger requests globally to dynamically evaluate true geospatial matches mapping open + active ride interactions securely
-        const allReqsSnap = await getDocs(requestsRef);
-        const allReqs = allReqsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-        const allOffersSnap = await getDocs(offersRef);
-        const allOffers = allOffersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-        const rawOffers = await Promise.all(offersSnap.docs.map(async (docSnap) => {
-             const data = docSnap.data();
-             
-             // Fetch passenger details bidirectionally resolving driver-initiated & passenger-initiated requests
+        const rawOffers = myOffers.map((data) => {
              const passengersMap = new Map();
              
-             // 1. Fetch passengers who manually requested
              if (data.requestedByPassengerIds && data.requestedByPassengerIds.length > 0) {
                  for (let reqId of data.requestedByPassengerIds) {
-                     const reqDoc = await getDoc(doc(db, 'rideRequests', reqId));
-                     if (reqDoc.exists()) {
-                         const reqData = reqDoc.data();
+                     const reqData = allReqs.find(r => r.id === reqId);
+                     if (reqData) {
                          let pStatus = 'Request';
-                         if (reqData.status === 'confirmed' && reqData.offeredByRideId === docSnap.id) {
+                         if (reqData.status === 'confirmed' && reqData.offeredByRideId === data.id) {
                             pStatus = 'Confirmed';
-                         } else if (reqData.status === 'offered' && reqData.offeredByRideId === docSnap.id) {
+                         } else if (reqData.status === 'offered' && reqData.offeredByRideId === data.id) {
                             pStatus = 'Offered';
                          }
-                         passengersMap.set(reqDoc.id, { ...reqData, id: reqDoc.id, pStatus });
+                         passengersMap.set(reqData.id, { ...reqData, pStatus });
                      }
                  }
              }
 
-             // 2. Fetch passengers who were securely offered a ride (but might not have organically 'requested' joining)
-             const linkedPassengerReqsQuery = query(collection(db, 'rideRequests'), where('offeredByRideId', '==', docSnap.id));
-             const linkedDocsSnap = await getDocs(linkedPassengerReqsQuery);
-             linkedDocsSnap.forEach(d => {
-                 if (!passengersMap.has(d.id)) {
-                     const reqData = d.data();
-                     let pStatus = 'Offered'; // Baseline assumption if driver initiated
+             const linkedPassengerReqs = allReqs.filter(r => r.offeredByRideId === data.id);
+             linkedPassengerReqs.forEach(reqData => {
+                 if (!passengersMap.has(reqData.id)) {
+                     let pStatus = 'Offered'; 
                      if (reqData.status === 'confirmed') pStatus = 'Confirmed';
-                     passengersMap.set(d.id, { ...reqData, id: d.id, pStatus });
+                     passengersMap.set(reqData.id, { ...reqData, pStatus });
                  }
              });
 
@@ -120,44 +101,39 @@ export default function MyRides() {
                  return 0;
              });
 
-             // Approximate dynamic matches count applying exact 5KM radius thresholds from OfferMatches bounding constraints natively!
-             // Critically ensure we evaluate requests that are globally available OR explicitly linked to this driver!
              const eligibleReqs = allReqs.filter(r => 
                  r.userId !== currentUser.uid && 
                  r.from?.lat && r.to?.lat && 
-                 (r.status === 'open' || r.offeredByRideId === docSnap.id || (data.requestedByPassengerIds || []).includes(r.id)) &&
+                 (r.status === 'open' || r.offeredByRideId === data.id || (data.requestedByPassengerIds || []).includes(r.id)) &&
                  isValidGeographicProxy(data, r)
              );
              
              let matchesFound = 0;
              if (data.from?.lat && data.to?.lat) {
-                // Return exact length of organically resolved eligible requests (those either globally 'open' or explicitly linked) natively bypassing strict Euclidean false-negatives of overlapping routes!
-                matchesFound = eligibleReqs.length;
+                 matchesFound = eligibleReqs.length;
              }
 
-             return { id: docSnap.id, ...data, collectionType: 'offer', passengers, matchesCount: matchesFound };
-        }));
+             return { ...data, collectionType: 'offer', passengers, matchesCount: matchesFound };
+        });
 
-        const rawRequests = await Promise.all(requestsSnap.docs.map(async (docSnap) => {
-             const data = docSnap.data();
+        const rawRequests = myReqs.map((data) => {
              const passengers = [];
              
              if (data.offeredByRideId && data.status !== 'open') {
-                 const driverDoc = await getDoc(doc(db, 'rideOffers', data.offeredByRideId));
-                 if (driverDoc.exists()) {
-                     const driverData = driverDoc.data();
+                 const driverData = allOffers.find(r => r.id === data.offeredByRideId);
+                 if (driverData) {
                      let pStatus = 'Sent Request';
                      if (data.status === 'confirmed') pStatus = 'Confirmed';
                      else if (data.status === 'offered') pStatus = 'Accept Offer';
                      
-                     passengers.push({ ...driverData, id: driverDoc.id, pStatus, userName: driverData.userName || 'Driver' });
+                     passengers.push({ ...driverData, pStatus, userName: driverData.userName || 'Driver' });
                  }
              }
 
              const eligibleOffers = allOffers.filter(r => 
                  r.userId !== currentUser.uid && 
                  r.from?.lat && r.to?.lat && 
-                 (!r.status || r.status !== 'completed' || data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(docSnap.id)) &&
+                 (!r.status || r.status !== 'completed' || data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(data.id)) &&
                  isValidGeographicProxy(data, r)
              );
              
@@ -166,17 +142,15 @@ export default function MyRides() {
                  matchesFound = eligibleOffers.length;
              }
 
-             return { id: docSnap.id, ...data, collectionType: 'request', passengers, matchesCount: matchesFound };
-        }));
+             return { ...data, collectionType: 'request', passengers, matchesCount: matchesFound };
+        });
 
-        // Merge arrays and sort by createdAt remotely
         const mergedRides = [...rawOffers, ...rawRequests].sort((a, b) => {
            const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
            const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-           return timeB - timeA; // Descending (newest first)
+           return timeB - timeA; 
         });
 
-        // Group by Date immediately
         const groupedRides = [];
         mergedRides.forEach(ride => {
            const dateStr = ride.date ? dayjs(ride.date).format('ddd, MMM D, YYYY') : 'Unknown Date';
@@ -189,14 +163,31 @@ export default function MyRides() {
         });
 
         setRides(groupedRides);
-      } catch (err) {
-        console.error("Error fetching rides:", err);
-      } finally {
         setLoading(false);
-      }
     };
 
-    fetchRides();
+    setLoading(true);
+
+    const offersUnsub = onSnapshot(collection(db, 'rideOffers'), snap => {
+        allOffers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        offersReady = true;
+        processRides();
+    }, (err) => {
+        console.error("Realtime Offers Error: ", err);
+    });
+
+    const requestsUnsub = onSnapshot(collection(db, 'rideRequests'), snap => {
+        allReqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        reqsReady = true;
+        processRides();
+    }, (err) => {
+        console.error("Realtime Reqs Error: ", err);
+    });
+
+    return () => {
+        offersUnsub();
+        requestsUnsub();
+    };
   }, [currentUser, navigate]);
 
   // Format timestamp helper
