@@ -6,7 +6,7 @@ import L from 'leaflet';
 import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
-import { collection, query, getDocs, doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, increment } from 'firebase/firestore';
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371; // km
@@ -116,6 +116,7 @@ export default function OfferMatches() {
   const [showRetractOfferModal, setShowRetractOfferModal] = useState(false);
   const [matchToRetract, setMatchToRetract] = useState(null);
   const [showCapacityFullModal, setShowCapacityFullModal] = useState(false);
+  const [capacityModalText, setCapacityModalText] = useState("");
 
   // Parse exact driver coordinates bound intrinsically to real ride payloads
   const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
@@ -155,7 +156,9 @@ export default function OfferMatches() {
            if (!req.from?.lat || !req.to?.lat) return null;
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
-           const typeStatus = (req.status === 'confirmed' && req.offeredByRideId === ride?.id) ? 'confirmed' : (req.status === 'offered' && req.offeredByRideId === ride?.id) ? 'offered' : 'match';
+           const typeStatus = (req.status === 'confirmed' && req.offeredByRideId === ride?.id) ? 'confirmed' : 
+                              (req.status === 'request' && req.offeredByRideId === ride?.id) ? 'request' : 
+                              (req.status === 'offered' && req.offeredByRideId === ride?.id) ? 'offered' : 'match';
            const nameParams = req.userName || 'Passenger';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
            const ratingParams = req.userRating || '0.0';
@@ -297,59 +300,7 @@ export default function OfferMatches() {
     return () => unsubscribe();
   }, [driverRoute, ride?.userId]);
 
-  const [volatileDriverState, setVolatileDriverState] = useState(null);
 
-  // Real-time bidirectional matching state sync natively updating driver match views instantly if a passenger reacts
-  useEffect(() => {
-    if (!ride?.id) return;
-    const unsub = onSnapshot(doc(db, 'rideOffers', ride.id), (docSnap) => {
-      if (docSnap.exists()) {
-        setVolatileDriverState(docSnap.data());
-      }
-    });
-    return () => unsub();
-  }, [ride?.id]);
-
-  useEffect(() => {
-     if (volatileDriverState?.status === 'request' && volatileDriverState?.requestedByRideId) {
-         setMatches(prev => {
-             let changed = false;
-             const next = prev.map(m => {
-                 if (m.id === volatileDriverState.requestedByRideId && m.type !== 'request') {
-                     changed = true;
-                     return { ...m, type: 'request' };
-                 }
-                 return m;
-             });
-             return changed ? next : prev;
-         });
-     } else if (volatileDriverState?.status === 'confirmed') {
-         // Driver natively accepted a request! Lock UI mapping visually
-         setMatches(prev => {
-             let changed = false;
-             const next = prev.map(m => {
-                 if (m.id === volatileDriverState.requestedByRideId && m.type !== 'confirmed') {
-                     changed = true;
-                     return { ...m, type: 'confirmed' };
-                 }
-                 return m;
-             });
-             return changed ? next : prev;
-         });
-     } else if (volatileDriverState?.status === 'open' || volatileDriverState?.status === 'cancelled_by_passenger' || !volatileDriverState) {
-         setMatches(prev => {
-             let changed = false;
-             const next = prev.map(m => {
-                 if (m.type === 'request') {
-                     changed = true;
-                     return { ...m, type: 'match' };
-                 }
-                 return m;
-             });
-             return changed ? next : prev;
-         });
-     }
-  }, [volatileDriverState, matches]);
 
   // Carousel Scroll Intersection Logic detecting centered card
   const handleScroll = () => {
@@ -366,6 +317,19 @@ export default function OfferMatches() {
   const activePassRoute = activePassenger?.sharedPath || [];
 
   const handleOfferRide = async (matchId) => {
+    const requestedPassenger = matches.find(m => m.id === matchId);
+    if (!requestedPassenger) return;
+
+    const passengerSeats = parseInt(requestedPassenger?.seats) || 1;
+    const currentTakenSeats = confirmedPassengers.reduce((acc, m) => acc + (parseInt(m.seats)||1), 0);
+    const driverMaxSeats = parseInt(ride?.seats) || 4;
+
+    if (currentTakenSeats + passengerSeats > driverMaxSeats) {
+      setCapacityModalText(`You cannot offer a ride to this passenger. You only have ${driverMaxSeats - currentTakenSeats} seat(s) left, but the passenger requested ${passengerSeats} seat(s).`);
+      setShowCapacityFullModal(true);
+      return;
+    }
+
     // Optimistic generic map transition
     setMatches((prev) => 
       prev.map((m) => m.id === matchId ? { ...m, type: 'offered' } : m)
@@ -383,18 +347,33 @@ export default function OfferMatches() {
   };
 
   const handleAcceptRequest = async (matchId) => {
-    if (confirmedPassengers.length >= (ride?.seats || 4)) {
+    const requestedPassenger = matches.find(m => m.id === matchId);
+    const passengerSeats = parseInt(requestedPassenger?.seats) || 1;
+    const currentTakenSeats = confirmedPassengers.reduce((acc, m) => acc + (parseInt(m.seats)||1), 0);
+    const driverMaxSeats = parseInt(ride?.seats) || 4;
+
+    if (currentTakenSeats + passengerSeats > driverMaxSeats) {
+      setCapacityModalText(`You cannot accept this request. You only have ${driverMaxSeats - currentTakenSeats} seat(s) left, but the passenger requested ${passengerSeats} seat(s).`);
       setShowCapacityFullModal(true);
       return;
     }
+    
     setMatches((prev) => 
       prev.map((m) => m.id === matchId ? { ...m, type: 'confirmed' } : m)
     );
     try {
-      // Driver's target document
+      // Safely sync Driver's global seatsTaken incrementally resolving overflow blocks universally
       const matchDocRef = doc(db, 'rideOffers', ride.id);
       await updateDoc(matchDocRef, { 
-        status: 'confirmed'
+        status: 'confirmed',
+        seatsTaken: increment(passengerSeats)
+      });
+      
+      // Crucially synchronize Passenger's specific document confirming their exact identity workflow
+      const passDocRef = doc(db, 'rideRequests', matchId);
+      await updateDoc(passDocRef, {
+        status: 'confirmed',
+        offeredByRideId: ride.id
       });
     } catch (error) {
       console.error("Accept request state synchronization failed:", error);
@@ -900,21 +879,21 @@ export default function OfferMatches() {
 
       {/* Custom Prompt Window For Capacity Full */}
       {showCapacityFullModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', width: '100%', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', padding: '24px', boxSizing: 'border-box', animation: 'slideUp 0.3s ease-out' }}>
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#ffeee8', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                <X size={24} color="#ff0043" />
-              </div>
-              <h2 style={{ margin: '0 0 8px', fontSize: '1.4rem', color: '#111' }}>Ride Capacity Full</h2>
-              <p style={{ margin: 0, color: '#555', fontSize: '0.95rem', lineHeight: '1.5' }}>
-                You cannot accept this request because your vehicle's seat capacity is already fully reached.
-              </p>
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fee2e2', color: '#ff2744', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <X size={24} strokeWidth={3} />
             </div>
+            
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Ride Capacity Full</h3>
+            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>
+               {capacityModalText || "You cannot accept this request because your vehicle's seat capacity is already fully reached."}
+            </p>
             
             <button 
               onClick={() => setShowCapacityFullModal(false)}
-              style={{ width: '100%', padding: '16px', background: '#e0e0e0', color: '#333', border: 'none', borderRadius: '12px', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}
+              style={{ width: '100%', padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#444', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
             >
               Okay
             </button>

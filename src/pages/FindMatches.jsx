@@ -6,7 +6,7 @@ import L from 'leaflet';
 import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
-import { collection, query, getDocs, doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, onSnapshot, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371; // km
@@ -115,6 +115,7 @@ export default function FindMatches() {
   const [showRetractRequestModal, setShowRetractRequestModal] = useState(false);
   const [matchToRetract, setMatchToRetract] = useState(null);
   const [showCapacityFullModal, setShowCapacityFullModal] = useState(false);
+  const [capacityModalText, setCapacityModalText] = useState("");
 
   // Parse exact passenger coordinates bound intrinsically to real ride payloads
   const passengerFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
@@ -154,7 +155,7 @@ export default function FindMatches() {
            if (!req.from?.lat || !req.to?.lat) return null;
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
-           const typeStatus = (req.status === 'confirmed' && req.requestedByRideId === ride?.id) ? 'confirmed' : (req.status === 'request' && req.requestedByRideId === ride?.id) ? 'request' : 'match';
+           const typeStatus = (req.status === 'confirmed' && req.requestedByRideId === ride?.id) ? 'confirmed' : ((req.requestedByPassengerIds || []).includes(ride?.id)) ? 'request' : 'match';
            const nameParams = req.userName || 'Erwin Rivera';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
            const ratingParams = req.userRating || '0.0';
@@ -169,6 +170,7 @@ export default function FindMatches() {
                    rating: ratingParams,
                    reviews: req.userReviews || 0,
                    seats: req.seats || 1,
+                   seatsTaken: req.seatsTaken || 0,
                    profilePic: req.userProfilePic || '',
                    rawRequest: req
                };
@@ -268,6 +270,7 @@ export default function FindMatches() {
                  rating: ratingParams,
                  reviews: req.userReviews || 0,
                  seats: req.seats || 1,
+                 seatsTaken: req.seatsTaken || 0,
                  profilePic: req.userProfilePic || '',
               };
 
@@ -367,16 +370,34 @@ export default function FindMatches() {
     : [];
 
   const handleRequestJoin = async (matchId) => {
+    const match = matches.find(m => m.id === matchId);
+    if (!match) return;
+
+    const passengerSeats = parseInt(ride?.seats) || 1;
+    const driverMaxSeats = parseInt(match.seats) || 4;
+    const driverConfirmedCount = parseInt(match.confirmedCount || match.seatsTaken) || 0;
+
+    if (driverConfirmedCount + passengerSeats > driverMaxSeats) {
+        setCapacityModalText(`This ride is either full or does not have enough seat capacity for your request. The driver only has ${driverMaxSeats - driverConfirmedCount} seat(s) left, but you requested ${passengerSeats} seat(s).`);
+        setShowCapacityFullModal(true);
+        return;
+    }
+
     // Optimistic generic map transition
     setMatches((prev) => 
       prev.map((m) => m.id === matchId ? { ...m, type: 'request' } : m)
     );
-    // Force backend synchronization
     try {
-      const matchDocRef = doc(db, 'rideOffers', matchId);
-      await updateDoc(matchDocRef, { 
+      const passengerDocRef = doc(db, 'rideRequests', ride.id);
+      await updateDoc(passengerDocRef, { 
         status: 'request', 
-        requestedByRideId: ride?.id || 'unknown' 
+        offeredByRideId: matchId 
+      });
+
+      // Maintain Driver's queue dynamically, securing UI permanence
+      const driverDocRef = doc(db, 'rideOffers', matchId);
+      await updateDoc(driverDocRef, {
+        requestedByPassengerIds: arrayUnion(ride.id)
       });
     } catch (error) {
       console.error("Match request state synchronization failed:", error);
@@ -385,7 +406,8 @@ export default function FindMatches() {
 
   const handleAcceptOffer = async (matchId) => {
     const match = matches.find(m => m.id === matchId);
-    if ((match?.confirmedCount || 0) >= (match?.seats || 4)) {
+    if ((match?.confirmedCount || match?.seatsTaken || 0) >= (match?.seats || 4)) {
+      setCapacityModalText("You cannot accept this offer because the driver's vehicle has already reached maximum seating capacity.");
       setShowCapacityFullModal(true);
       return;
     }
@@ -397,6 +419,12 @@ export default function FindMatches() {
       await updateDoc(passengerDocRef, { 
         status: 'confirmed',
         offeredByRideId: matchId 
+      });
+
+      // Synchronize driver global seat vacancy accurately over network
+      const driverDocRef = doc(db, 'rideOffers', matchId);
+      await updateDoc(driverDocRef, {
+        seatsTaken: increment(ride?.seats || 1)
       });
     } catch (error) {
       console.error("Accept offer state synchronization failed:", error);
@@ -865,7 +893,12 @@ export default function FindMatches() {
                       if (matchToRetract) {
                          // Optimistic fallback mapped into container locally
                          setMatches(prev => prev.map(m => m.id === matchToRetract ? { ...m, type: 'match' } : m));
-                         await updateDoc(doc(db, 'rideOffers', matchToRetract), { status: 'open', requestedByRideId: null });
+                         
+                         // Clear the passenger's direct link structurally
+                         await updateDoc(doc(db, 'rideRequests', ride.id), { status: 'open', offeredByRideId: null });
+                         
+                         // Remove the passenger from the Driver's queue natively
+                         await updateDoc(doc(db, 'rideOffers', matchToRetract), { requestedByPassengerIds: arrayRemove(ride.id) });
                       }
                       setShowRetractRequestModal(false);
                       setMatchToRetract(null);
@@ -884,21 +917,21 @@ export default function FindMatches() {
 
       {/* Custom Prompt Window For Capacity Full */}
       {showCapacityFullModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', width: '100%', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', padding: '24px', boxSizing: 'border-box', animation: 'slideUp 0.3s ease-out' }}>
-            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-              <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#ffeee8', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-                <X size={24} color="#ff0043" />
-              </div>
-              <h2 style={{ margin: '0 0 8px', fontSize: '1.4rem', color: '#111' }}>Ride Capacity Full</h2>
-              <p style={{ margin: 0, color: '#555', fontSize: '0.95rem', lineHeight: '1.5' }}>
-                You cannot accept this offer because the driver's vehicle has already reached maximum seating capacity.
-              </p>
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fee2e2', color: '#ff2744', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <X size={24} strokeWidth={3} />
             </div>
+            
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Ride Capacity Full</h3>
+            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>
+               {capacityModalText || "You cannot accept this offer because the driver's vehicle has already reached maximum seating capacity."}
+            </p>
             
             <button 
               onClick={() => setShowCapacityFullModal(false)}
-              style={{ width: '100%', padding: '16px', background: '#e0e0e0', color: '#333', border: 'none', borderRadius: '12px', fontWeight: 600, fontSize: '1rem', cursor: 'pointer' }}
+              style={{ width: '100%', padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#444', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
             >
               Okay
             </button>
