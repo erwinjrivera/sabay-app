@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X } from 'lucide-react';
+import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, updateDoc, onSnapshot, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
@@ -446,6 +446,11 @@ export default function FindMatches() {
     <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
       
       {/* BACKGROUND MAP */}
+      {isLoadingMatches && (
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1000, background: 'white', padding: '15px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex' }}>
+          <Loader2 size={32} color="#00b0f0" style={{ animation: 'spin 1.2s linear infinite' }} />
+        </div>
+      )}
       <MapContainer 
         center={[14.5552, 121.0400]} 
         zoom={14} 

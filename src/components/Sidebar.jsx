@@ -6,12 +6,10 @@ import { useNavigate } from 'react-router-dom';
 export default function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate();
 
-  if (!isOpen) return null;
-
   return (
     <>
-      <div className="sidebar-overlay" onClick={onClose} />
-      <div className="sidebar-content">
+      <div className={`sidebar-overlay ${isOpen ? 'open' : ''}`} onClick={onClose} />
+      <div className={`sidebar-content ${isOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
           <button className="icon-btn" onClick={onClose} style={{marginRight: 'auto', border:'none', background:'none'}}>
             <ChevronLeft size={24} color="#00b0f0"/>
