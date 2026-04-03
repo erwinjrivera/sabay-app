@@ -29,6 +29,34 @@ export default function MyRides() {
       return;
     }
 
+    // High-performance mathematical map proxy mapping vector dot-products securely detecting inverted trips without OSRM intensity!
+    const isValidGeographicProxy = (ride1, ride2) => {
+        if (!ride1.from?.lat || !ride1.to?.lat || !ride2.from?.lat || !ride2.to?.lat) return false;
+
+        const dx1 = ride1.to.lon - ride1.from.lon;
+        const dy1 = ride1.to.lat - ride1.from.lat;
+        const dx2 = ride2.to.lon - ride2.from.lon;
+        const dy2 = ride2.to.lat - ride2.from.lat;
+        
+        // Block explicitly inverted trajectories spanning the identical geographical bounds
+        const dotProduct = (dx1 * dx2) + (dy1 * dy2);
+        if (dotProduct < 0) return false; 
+
+        // 5km spatial bounding-box buffer detecting structural map isolation (e.g., Manila vs Cebu)
+        const buffer = 0.045; 
+        const r1MinLat = Math.min(ride1.from.lat, ride1.to.lat) - buffer;
+        const r1MaxLat = Math.max(ride1.from.lat, ride1.to.lat) + buffer;
+        const r1MinLon = Math.min(ride1.from.lon, ride1.to.lon) - buffer;
+        const r1MaxLon = Math.max(ride1.from.lon, ride1.to.lon) + buffer;
+
+        const r2MinLat = Math.min(ride2.from.lat, ride2.to.lat);
+        const r2MaxLat = Math.max(ride2.from.lat, ride2.to.lat);
+        const r2MinLon = Math.min(ride2.from.lon, ride2.to.lon);
+        const r2MaxLon = Math.max(ride2.from.lon, ride2.to.lon);
+
+        return (r1MaxLat > r2MinLat && r1MinLat < r2MaxLat) && (r1MaxLon > r2MinLon && r1MinLon < r2MaxLon);
+    };
+
     const fetchRides = async () => {
       try {
         setLoading(true);
@@ -97,7 +125,8 @@ export default function MyRides() {
              const eligibleReqs = allReqs.filter(r => 
                  r.userId !== currentUser.uid && 
                  r.from?.lat && r.to?.lat && 
-                 (r.status === 'open' || r.offeredByRideId === docSnap.id || (data.requestedByPassengerIds || []).includes(r.id))
+                 (r.status === 'open' || r.offeredByRideId === docSnap.id || (data.requestedByPassengerIds || []).includes(r.id)) &&
+                 isValidGeographicProxy(data, r)
              );
              
              let matchesFound = 0;
@@ -128,7 +157,8 @@ export default function MyRides() {
              const eligibleOffers = allOffers.filter(r => 
                  r.userId !== currentUser.uid && 
                  r.from?.lat && r.to?.lat && 
-                 (!r.status || r.status !== 'completed' || data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(docSnap.id))
+                 (!r.status || r.status !== 'completed' || data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(docSnap.id)) &&
+                 isValidGeographicProxy(data, r)
              );
              
              let matchesFound = 0;
