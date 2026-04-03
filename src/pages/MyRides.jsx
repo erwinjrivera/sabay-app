@@ -128,7 +128,7 @@ export default function MyRides() {
              const eligibleOffers = allOffers.filter(r => 
                  r.userId !== currentUser.uid && 
                  r.from?.lat && r.to?.lat && 
-                 (r.status === 'open' || data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(docSnap.id))
+                 (!r.status || r.status !== 'completed' || data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(docSnap.id))
              );
              
              let matchesFound = 0;

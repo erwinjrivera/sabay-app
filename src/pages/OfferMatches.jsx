@@ -226,8 +226,14 @@ export default function OfferMatches() {
               });
 
               if (overlaps.length > 0) {
-                 pickupIdx = Math.min(...overlaps.map(o => o.passIdx));
-                 dropIdx = Math.max(...overlaps.map(o => o.passIdx));
+                 const minPassOverlap = overlaps.reduce((min, o) => o.passIdx < min.passIdx ? o : min, overlaps[0]);
+                 const maxPassOverlap = overlaps.reduce((max, o) => o.passIdx > max.passIdx ? o : max, overlaps[0]);
+
+                 // Parity block: If the driver intercepts the passenger's destination BEFORE their origin, the paths run inversely!
+                 if (minPassOverlap.driverIdx > maxPassOverlap.driverIdx) return null;
+
+                 pickupIdx = minPassOverlap.passIdx;
+                 dropIdx = maxPassOverlap.passIdx;
                  
                  meetPickup = passRoute[pickupIdx];
                  meetDropoff = passRoute[dropIdx];

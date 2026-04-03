@@ -224,8 +224,15 @@ export default function FindMatches() {
               });
 
               if (overlaps.length > 0) {
-                 pickupIdx = Math.min(...overlaps.map(o => o.driverIdx));
-                 dropIdx = Math.max(...overlaps.map(o => o.driverIdx));
+                 const minPassOverlap = overlaps.reduce((min, o) => o.driverIdx < min.driverIdx ? o : min, overlaps[0]);
+                 const maxPassOverlap = overlaps.reduce((max, o) => o.driverIdx > max.driverIdx ? o : max, overlaps[0]);
+
+                 // Parity block: In FindMatches, o.passIdx uniquely maps to the Driver route, and o.driverIdx identically maps to the Passenger Route. 
+                 // If the driver intercepts the passenger's drop-off index BEFORE their pick-up index, they are inversely opposing directions!
+                 if (minPassOverlap.passIdx > maxPassOverlap.passIdx) return null;
+
+                 pickupIdx = minPassOverlap.driverIdx;
+                 dropIdx = maxPassOverlap.driverIdx;
                  
                  meetPickup = passengerRoute[pickupIdx];
                  meetDropoff = passengerRoute[dropIdx];
