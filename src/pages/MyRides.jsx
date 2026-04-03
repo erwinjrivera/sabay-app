@@ -48,6 +48,9 @@ export default function MyRides() {
         const allReqsSnap = await getDocs(requestsRef);
         const allReqs = allReqsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+        const allOffersSnap = await getDocs(offersRef);
+        const allOffers = allOffersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
         const rawOffers = await Promise.all(offersSnap.docs.map(async (docSnap) => {
              const data = docSnap.data();
              
@@ -106,7 +109,35 @@ export default function MyRides() {
              return { id: docSnap.id, ...data, collectionType: 'offer', passengers, matchesCount: matchesFound };
         }));
 
-        const rawRequests = requestsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), collectionType: 'request' }));
+        const rawRequests = await Promise.all(requestsSnap.docs.map(async (docSnap) => {
+             const data = docSnap.data();
+             const passengers = [];
+             
+             if (data.offeredByRideId && data.status !== 'open') {
+                 const driverDoc = await getDoc(doc(db, 'rideOffers', data.offeredByRideId));
+                 if (driverDoc.exists()) {
+                     const driverData = driverDoc.data();
+                     let pStatus = 'Sent Request';
+                     if (data.status === 'confirmed') pStatus = 'Confirmed';
+                     else if (data.status === 'offered') pStatus = 'Accept Offer';
+                     
+                     passengers.push({ ...driverData, id: driverDoc.id, pStatus, userName: driverData.userName || 'Driver' });
+                 }
+             }
+
+             const eligibleOffers = allOffers.filter(r => 
+                 r.userId !== currentUser.uid && 
+                 r.from?.lat && r.to?.lat && 
+                 (r.status === 'open' || data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(docSnap.id))
+             );
+             
+             let matchesFound = 0;
+             if (data.from?.lat && data.to?.lat) {
+                 matchesFound = eligibleOffers.length;
+             }
+
+             return { id: docSnap.id, ...data, collectionType: 'request', passengers, matchesCount: matchesFound };
+        }));
 
         // Merge arrays and sort by createdAt remotely
         const mergedRides = [...rawOffers, ...rawRequests].sort((a, b) => {
@@ -186,15 +217,15 @@ export default function MyRides() {
                   {group.items.map(ride => {
                      const isDriver = ride.collectionType === 'offer';
                      const activeColor = '#00b0f0';
-                     const badgeText = isDriver ? 'Offering a ride' : 'Finding a ride';
+                     const badgeText = isDriver ? 'Offer Ride' : 'Find Ride';
                      
                      let ribbonLeftColor = isDriver ? '#1fd954' : '#00b0f0';
                      let ribbonRightColor = isDriver ? '#16b944' : '#0090c0';
 
-                     if (isDriver && ride.passengers) {
+                     if (ride.passengers) {
                         const hasConfirmed = ride.passengers.some(p => p.pStatus === 'Confirmed');
-                        const hasRequest = ride.passengers.some(p => p.pStatus === 'Request');
-                        const hasOffered = ride.passengers.some(p => p.pStatus === 'Offered');
+                        const hasRequest = ride.passengers.some(p => p.pStatus === 'Request' || p.pStatus === 'Accept Offer');
+                        const hasOffered = ride.passengers.some(p => p.pStatus === 'Offered' || p.pStatus === 'Sent Request');
 
                         if (hasConfirmed) {
                            ribbonLeftColor = '#1fd954'; // Green
@@ -248,7 +279,7 @@ export default function MyRides() {
                                     {Array.from({ length: ride.seats || 1 }).map((_, i) => {
                                        const fillStatus = isDriver ? i < (ride.seatsTaken || 0) : true;
                                        return (
-                                          <User key={i} size={18} color={fillStatus ? (isDriver ? '#1fd954' : '#00b0f0') : '#e0e0e0'} fill={fillStatus ? (isDriver ? '#1fd954' : '#00b0f0') : '#e0e0e0'} />
+                                          <User key={i} size={18} color={fillStatus ? ribbonLeftColor : '#e0e0e0'} fill={fillStatus ? ribbonLeftColor : '#e0e0e0'} transition="fill 0.3s, color 0.3s" />
                                        );
                                     })}
                                   </div>
@@ -280,8 +311,8 @@ export default function MyRides() {
                             </div>
                          </div>
       
-                         {/* SECTION 2: PASSENGERS LIST */}
-                         {isDriver && ride.passengers && ride.passengers.length > 0 && (
+                         {/* SECTION 2: PASSENGERS / DRIVER RECORD LIST */}
+                         {ride.passengers && ride.passengers.length > 0 && (
                            <>
                              <div style={{ width: '100%', height: '0px', borderBottom: '2px dashed #ececec' }}></div>
                              <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: '16px', background: '#f8f8f8' }}>
@@ -310,10 +341,21 @@ export default function MyRides() {
                                              <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#ff0043' }}>Accept Request</span>
                                           </div>
                                        )}
+                                       {p.pStatus === 'Accept Offer' && (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#ff0043' }}>Accept Offer</span>
+                                          </div>
+                                       )}
                                        
                                        {p.pStatus === 'Offered' && (
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
                                              <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#eab308' }}>Ride Offered</span>
+                                          </div>
+                                       )}
+
+                                       {p.pStatus === 'Sent Request' && (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#eab308' }}>Sent Request</span>
                                           </div>
                                        )}
                                     </div>
@@ -331,7 +373,7 @@ export default function MyRides() {
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#00b0f0', letterSpacing: '-0.3px', marginBottom: '2px' }}>
-                                  {ride.matchesCount || 0} Passenger Matches
+                                  {ride.matchesCount || 0} Ride Matches
                                </span>
                                <span style={{ fontSize: '0.9rem', color: '#999', fontWeight: 500 }}>
                                   available on your route
