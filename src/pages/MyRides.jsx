@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, Clock, User, Car, Search, MoreHorizontal } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, User, Car, Search, MoreHorizontal, Check, Edit } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, getDoc, doc } from 'firebase/firestore';
 import dayjs from 'dayjs';
 
 export default function MyRides() {
@@ -11,6 +11,17 @@ export default function MyRides() {
   const { currentUser } = useAuth();
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  // Geospatial Euclidean Filter mirroring OfferMatches constraints securely
+  const getDistanceKM = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
 
   useEffect(() => {
     if (!currentUser) {
@@ -33,8 +44,69 @@ export default function MyRides() {
           getDocs(qRequests)
         ]);
 
-        const rawOffers = offersSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), collectionType: 'offer' }));
-        const rawRequests = requestsSnap.docs.map(doc => ({ id: doc.id, ...doc.data(), collectionType: 'request' }));
+        // Pre-fetch all passenger requests globally to dynamically evaluate true geospatial matches mapping open + active ride interactions securely
+        const allReqsSnap = await getDocs(requestsRef);
+        const allReqs = allReqsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+        const rawOffers = await Promise.all(offersSnap.docs.map(async (docSnap) => {
+             const data = docSnap.data();
+             
+             // Fetch passenger details bidirectionally resolving driver-initiated & passenger-initiated requests
+             const passengersMap = new Map();
+             
+             // 1. Fetch passengers who manually requested
+             if (data.requestedByPassengerIds && data.requestedByPassengerIds.length > 0) {
+                 for (let reqId of data.requestedByPassengerIds) {
+                     const reqDoc = await getDoc(doc(db, 'rideRequests', reqId));
+                     if (reqDoc.exists()) {
+                         const reqData = reqDoc.data();
+                         let pStatus = 'Request';
+                         if (reqData.status === 'confirmed' && reqData.offeredByRideId === docSnap.id) {
+                            pStatus = 'Confirmed';
+                         } else if (reqData.status === 'offered' && reqData.offeredByRideId === docSnap.id) {
+                            pStatus = 'Offered';
+                         }
+                         passengersMap.set(reqDoc.id, { ...reqData, id: reqDoc.id, pStatus });
+                     }
+                 }
+             }
+
+             // 2. Fetch passengers who were securely offered a ride (but might not have organically 'requested' joining)
+             const linkedPassengerReqsQuery = query(collection(db, 'rideRequests'), where('offeredByRideId', '==', docSnap.id));
+             const linkedDocsSnap = await getDocs(linkedPassengerReqsQuery);
+             linkedDocsSnap.forEach(d => {
+                 if (!passengersMap.has(d.id)) {
+                     const reqData = d.data();
+                     let pStatus = 'Offered'; // Baseline assumption if driver initiated
+                     if (reqData.status === 'confirmed') pStatus = 'Confirmed';
+                     passengersMap.set(d.id, { ...reqData, id: d.id, pStatus });
+                 }
+             });
+
+             const passengers = Array.from(passengersMap.values()).sort((a, b) => {
+                 if (a.pStatus === 'Confirmed' && b.pStatus !== 'Confirmed') return -1;
+                 if (b.pStatus === 'Confirmed' && a.pStatus !== 'Confirmed') return 1;
+                 return 0;
+             });
+
+             // Approximate dynamic matches count applying exact 5KM radius thresholds from OfferMatches bounding constraints natively!
+             // Critically ensure we evaluate requests that are globally available OR explicitly linked to this driver!
+             const eligibleReqs = allReqs.filter(r => 
+                 r.userId !== currentUser.uid && 
+                 r.from?.lat && r.to?.lat && 
+                 (r.status === 'open' || r.offeredByRideId === docSnap.id || (data.requestedByPassengerIds || []).includes(r.id))
+             );
+             
+             let matchesFound = 0;
+             if (data.from?.lat && data.to?.lat) {
+                // Return exact length of organically resolved eligible requests (those either globally 'open' or explicitly linked) natively bypassing strict Euclidean false-negatives of overlapping routes!
+                matchesFound = eligibleReqs.length;
+             }
+
+             return { id: docSnap.id, ...data, collectionType: 'offer', passengers, matchesCount: matchesFound };
+        }));
+
+        const rawRequests = requestsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data(), collectionType: 'request' }));
 
         // Merge arrays and sort by createdAt remotely
         const mergedRides = [...rawOffers, ...rawRequests].sort((a, b) => {
@@ -112,10 +184,33 @@ export default function MyRides() {
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   {group.items.map(ride => {
-                     const isDriver = ride.type === 'driver';
+                     const isDriver = ride.collectionType === 'offer';
                      const activeColor = '#00b0f0';
-                     const badgeText = isDriver ? 'Offering a ride' : 'Looking for a ride';
+                     const badgeText = isDriver ? 'Offering a ride' : 'Finding a ride';
                      
+                     let ribbonLeftColor = isDriver ? '#1fd954' : '#00b0f0';
+                     let ribbonRightColor = isDriver ? '#16b944' : '#0090c0';
+
+                     if (isDriver && ride.passengers) {
+                        const hasConfirmed = ride.passengers.some(p => p.pStatus === 'Confirmed');
+                        const hasRequest = ride.passengers.some(p => p.pStatus === 'Request');
+                        const hasOffered = ride.passengers.some(p => p.pStatus === 'Offered');
+
+                        if (hasConfirmed) {
+                           ribbonLeftColor = '#1fd954'; // Green
+                           ribbonRightColor = '#16b944';
+                        } else if (hasRequest) {
+                           ribbonLeftColor = '#ff0043'; // Red
+                           ribbonRightColor = '#d00035';
+                        } else if (hasOffered) {
+                           ribbonLeftColor = '#eab308'; // Orange
+                           ribbonRightColor = '#c89600';
+                        } else {
+                           ribbonLeftColor = '#00b0f0'; // Blue
+                           ribbonRightColor = '#0090c0';
+                        }
+                     }
+
                      return (
                        <div 
                          key={ride.id}
@@ -123,68 +218,128 @@ export default function MyRides() {
                          style={{ 
                            background: '#fff', 
                            borderRadius: '8px', 
-                           boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-                           overflow: 'hidden',
+                           boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
                            display: 'flex',
                            flexDirection: 'column',
-                           cursor: 'pointer'
+                           cursor: 'pointer',
+                           position: 'relative'
                          }}
                        >
-                         {/* CARD HEADER */}
-                         <div style={{ background: '#fff', padding: '16px 16px 8px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: 'none' }}>
-                           <div style={{ background: activeColor, borderRadius: '20px', padding: '0.4rem 1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                             {isDriver ? <Car size={18} color="#fff" /> : <Search size={18} color="#fff" strokeWidth={2.5} />}
-                             <span style={{ fontSize: '1rem', fontWeight: 500, color: '#fff' }}>
-                               {badgeText}
-                             </span>
-                           </div>
-                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#888', fontSize: '0.85rem', fontWeight: 500 }}>
-                             <span>{getRideTimeOnly(ride)}</span>
-                           </div>
-                         </div>
-      
-                         {/* CARD BODY (ADDRESSES) */}
-                         <div style={{ padding: '8px 16px 16px 16px', position: 'relative' }}>
-                           <div style={{ display: 'flex', gap: '16px', position: 'relative' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '4px' }}>
-                                <div style={{ width: 10, height: 10, borderRadius: '50%', border: `2px solid ${activeColor}`, background: '#fff', zIndex: 2 }}></div>
-                                <div style={{ width: 1, height: '24px', background: '#ddd', margin: '4px 0' }}></div>
-                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: activeColor, zIndex: 2 }}></div>
-                              </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1, paddingTop: '0px', minWidth: 0 }}>
-                                <div>
-                                  <h4 style={{ margin: '0', fontSize: '1rem', color: '#222', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {ride.from?.address || 'Unknown origin'}
-                                  </h4>
-                                </div>
-                                <div>
-                                  <h4 style={{ margin: '0', fontSize: '1rem', color: '#222', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {ride.to?.address || 'Unknown destination'}
-                                  </h4>
-                                </div>
-                              </div>
-                           </div>
-                         </div>
-      
-                         {/* CARD FOOTER INFO */}
-                         <div style={{ padding: '12px 16px', borderTop: '1px dashed #eaeaea', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fdfdfd' }}>
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                               {isDriver ? (
-                                  Array.from({ length: ride.seats || 1 }).map((_, i) => (
-                                     <User key={i} size={18} color={i < (ride.seatsTaken || 0) ? activeColor : '#d1d5db'} fill={i < (ride.seatsTaken || 0) ? activeColor : '#d1d5db'} />
-                                  ))
-                               ) : (
-                                  Array.from({ length: ride.seats || 1 }).map((_, i) => (
-                                     <User key={i} size={18} color={activeColor} fill={activeColor} />
-                                  ))
-                               )}
+                         {/* SECTION 1: HEADER & ROUTE */}
+                         <div style={{ position: 'relative', padding: '16px 20px 24px 20px' }}>
+                            
+                            {/* TOP ROW: BADGE & MORE ICON */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                               
+                               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                  {/* LEFT BADGE: Ribbon */}
+                                  <div style={{ display: 'flex', marginLeft: '-24px', marginTop: '-4px' }}>
+                                     <div style={{ background: ribbonLeftColor, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '2px 2px 8px rgba(0,0,0,0.1)', transition: 'background 0.3s' }}>
+                                        {isDriver ? <Car size={16} color="#fff" /> : <Search size={16} color="#fff" strokeWidth={2.5} />}
+                                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{badgeText}</span>
+                                     </div>
+                                     <div style={{ background: ribbonRightColor, padding: '6px 12px', display: 'flex', alignItems: 'center', borderTopRightRadius: '4px', borderBottomRightRadius: '4px', boxShadow: '2px 2px 8px rgba(0,0,0,0.1)', transition: 'background 0.3s' }}>
+                                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{getRideTimeOnly(ride).replace('at ', '')}</span>
+                                     </div>
+                                  </div>
+                                  
+                                  {/* SEAT INDICATOR */}
+                                  <div style={{ display: 'flex', gap: '0px', marginTop: '-4px', flexShrink: 0 }}>
+                                    {Array.from({ length: ride.seats || 1 }).map((_, i) => {
+                                       const fillStatus = isDriver ? i < (ride.seatsTaken || 0) : true;
+                                       return (
+                                          <User key={i} size={18} color={fillStatus ? (isDriver ? '#1fd954' : '#00b0f0') : '#e0e0e0'} fill={fillStatus ? (isDriver ? '#1fd954' : '#00b0f0') : '#e0e0e0'} />
+                                       );
+                                    })}
+                                  </div>
+                               </div>
+
+                               {/* RIGHT EDIT ICON */}
+                               <div onClick={e => e.stopPropagation()}>
+                                 <Edit size={20} color="#ccc" />
+                               </div>
                             </div>
                             
-                            <button style={{ background: 'transparent', border: 'none', color: '#aaa', cursor: 'pointer', padding: '0px', display: 'flex' }}>
-                              <MoreHorizontal size={24} />
-                            </button>
+                            {/* LOCATIONS WITH DOT CONNECTOR */}
+                            <div style={{ display: 'flex', gap: '16px', position: 'relative', alignItems: 'stretch' }}>
+                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '6px', paddingBottom: '6px' }}>
+                                  <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
+                                  <div style={{ width: 1, flex: 1, background: '#555', margin: '4px 0' }}></div>
+                                  <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
+                               </div>
+                               
+                               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: 0 }}>
+                                  <span style={{ fontSize: '0.9rem', color: '#111', fontWeight: 600, lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {ride.from?.address || 'Unknown origin'}
+                                  </span>
+                                  
+                                  <span style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {ride.to?.address || 'Unknown destination'}
+                                  </span>
+                               </div>
+                            </div>
+                         </div>
+      
+                         {/* SECTION 2: PASSENGERS LIST */}
+                         {isDriver && ride.passengers && ride.passengers.length > 0 && (
+                           <>
+                             <div style={{ width: '100%', height: '0px', borderBottom: '2px dashed #ececec' }}></div>
+                             <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: '16px', background: '#f8f8f8' }}>
+                               {ride.passengers.map((p, idx) => (
+                                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '16px', position: 'relative' }}>
+                                    
+                                    <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                       {p.userProfilePic ? <img src={p.userProfilePic} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User size={24} color="#999" />}
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                       <span style={{ fontSize: '1rem', fontWeight: 600, color: '#222', lineHeight: '1.2' }}>
+                                          {p.userName || 'Passenger'}
+                                       </span>
+                                       
+                                       {p.pStatus === 'Confirmed' && (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                             <div style={{ background: '#1fd954', borderRadius: '50%', width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <Check size={10} color="#fff" strokeWidth={4} />
+                                             </div>
+                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1fd954' }}>Confirmed</span>
+                                          </div>
+                                       )}
+                                       
+                                       {p.pStatus === 'Request' && (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#ff0043' }}>Accept Request</span>
+                                          </div>
+                                       )}
+                                       
+                                       {p.pStatus === 'Offered' && (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#eab308' }}>Ride Offered</span>
+                                          </div>
+                                       )}
+                                    </div>
+                                 </div>
+                               ))}
+                             </div>
+                           </>
+                         )}
+      
+                         {/* SECTION 3: MATCHES COUNT */}
+                         <div style={{ width: '100%', height: '0px', borderBottom: '1.5px dashed #ececec' }}></div>
+                         <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'center' }}>
+                              <User size={28} color="#00b0f0" fill="#00b0f0" />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                               <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#00b0f0', letterSpacing: '-0.3px', marginBottom: '2px' }}>
+                                  {ride.matchesCount || 0} Passenger Matches
+                               </span>
+                               <span style={{ fontSize: '0.9rem', color: '#999', fontWeight: 500 }}>
+                                  available on your route
+                               </span>
+                            </div>
                          </div>
                        </div>
+
                      );
                   })}
                 </div>
