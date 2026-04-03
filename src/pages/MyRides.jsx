@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, Clock, User, Car, Search, MoreHorizontal, Check, Edit } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, User, Car, Search, MoreHorizontal, Check, Edit, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, orderBy, getDoc, doc } from 'firebase/firestore';
@@ -221,12 +221,13 @@ export default function MyRides() {
       </div>
 
       {/* RIDES LIST */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1rem 1.5rem' }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', marginTop: '2rem', color: '#888' }}>
-            <p>Loading your rides...</p>
-          </div>
-        ) : rides.length === 0 ? (
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', background: '#f8fafc', paddingBottom: '100px' }}>
+      {loading ? (
+        <div style={{ height: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
+          <Loader2 size={40} color="#999" style={{ animation: 'spin 1.2s linear infinite' }} />
+          <h3 style={{ color: '#888', margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Loading your rides...</h3>
+        </div>
+      ) : rides.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: '4rem', color: '#888' }}>
             <div style={{ background: '#eee', width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
                <MapPin size={32} color="#aaa" />
@@ -403,7 +404,7 @@ export default function MyRides() {
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#00b0f0', letterSpacing: '-0.3px', marginBottom: '2px' }}>
-                                  {ride.matchesCount || 0} Ride Matches
+                                  {ride.matchesCount || 0} Ride Match{(ride.matchesCount || 0) > 1 ? 'es' : ''}
                                </span>
                                <span style={{ fontSize: '0.9rem', color: '#999', fontWeight: 500 }}>
                                   available on your route

@@ -442,3 +442,8 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   box-shadow: 0 0 0 2px rgba(0, 176, 240, 0.1);
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
