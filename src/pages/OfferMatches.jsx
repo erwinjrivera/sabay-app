@@ -112,6 +112,7 @@ export default function OfferMatches() {
   const [activePassengerId, setActivePassengerId] = useState(null);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [isBottomPanelExpanded, setIsBottomPanelExpanded] = useState(false);
+  const [rideStatus, setRideStatus] = useState(ride?.status || 'open');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showRetractOfferModal, setShowRetractOfferModal] = useState(false);
   const [matchToRetract, setMatchToRetract] = useState(null);
@@ -119,6 +120,7 @@ export default function OfferMatches() {
   const [capacityModalText, setCapacityModalText] = useState("");
   const [showCancelConfirmedModal, setShowCancelConfirmedModal] = useState(false);
   const [confirmedMatchToCancel, setConfirmedMatchToCancel] = useState(null);
+  const [showStartRideModal, setShowStartRideModal] = useState(false);
 
   // Parse exact driver coordinates bound intrinsically to real ride payloads
   const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
@@ -497,7 +499,7 @@ export default function OfferMatches() {
                 <ArrowLeft size={24} />
               </button>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Offer Ride</h2>
+                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>{rideStatus === 'in_progress' ? 'Offer Ride (Active)' : 'Offer Ride'}</h2>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>{rideTimeStr}, {rideDateStr}</p>
               </div>
             </div>
@@ -807,18 +809,64 @@ export default function OfferMatches() {
            >
              Cancel Ride
            </button>
-           <button 
-             onClick={() => {
-               if (window.confirm("Are you ready to start your ride?")) {
-                 alert("Ride started successfully!");
-               }
-             }}
-             style={{ width: '100%', padding: '16px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
-           >
-             Start Ride
-           </button>
+           {rideStatus === 'in_progress' ? (
+             <button 
+               onClick={() => navigate('/active-ride', { state: { ride: { ...ride, status: 'in_progress' } } })}
+               style={{ width: '100%', padding: '16px', background: '#28ec33', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+             >
+               Active (go to Live Tracking)
+             </button>
+           ) : (
+             <button 
+               onClick={() => setShowStartRideModal(true)}
+               style={{ width: '100%', padding: '16px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+             >
+               Start Ride
+             </button>
+           )}
         </div>
       </div>
+
+      {/* CUSTOM START RIDE MODAL */}
+      {showStartRideModal && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#e0f6ff', color: '#00b0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <Check size={24} strokeWidth={3} />
+            </div>
+            
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Start this ride?</h3>
+            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>Are you ready to begin? You will be transitioned to the live tracking map.</p>
+            
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => setShowStartRideModal(false)}
+                style={{ flex: 1, padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#444', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
+              >
+                Not yet
+              </button>
+              <button 
+                onClick={async () => {
+                   setShowStartRideModal(false);
+                   try {
+                     await updateDoc(doc(db, 'rideOffers', ride.id), { status: 'in_progress' });
+                     setRideStatus('in_progress');
+                     setTimeout(() => {
+                       navigate('/active-ride', { state: { ride: { ...ride, status: 'in_progress' } } });
+                     }, 500);
+                   } catch (err) {
+                     console.error("Failed to start ride", err);
+                     alert("Failed to start ride. Please check network.");
+                   }
+                }}
+                style={{ flex: 1, padding: '14px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
+              >
+                Let's go!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* CUSTOM CANCEL MODAL */}
       {showCancelModal && (

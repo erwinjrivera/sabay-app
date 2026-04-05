@@ -10,6 +10,7 @@ import AddSavedPlace from './pages/AddSavedPlace';
 import OfferMatches from './pages/OfferMatches';
 import FindMatches from './pages/FindMatches';
 import MyRides from './pages/MyRides';
+import ActiveRide from './pages/ActiveRide';
 import { AuthProvider } from './contexts/AuthContext';
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
           <Route path="/add-saved-place" element={<AddSavedPlace />} />
           <Route path="/offer-matches" element={<OfferMatches />} />
           <Route path="/find-matches" element={<FindMatches />} />
+          <Route path="/active-ride" element={<ActiveRide />} />
           <Route path="/my-rides" element={<MyRides />} />
         </Routes>
       </Router>

@@ -11,6 +11,7 @@ export default function MyRides() {
   const { currentUser } = useAuth();
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('Pending');
 
   // Geospatial Euclidean Filter mirroring OfferMatches constraints securely
   const getDistanceKM = (lat1, lon1, lat2, lon2) => {
@@ -151,18 +152,7 @@ export default function MyRides() {
            return timeB - timeA; 
         });
 
-        const groupedRides = [];
-        mergedRides.forEach(ride => {
-           const dateStr = ride.date ? dayjs(ride.date).format('ddd, MMM D, YYYY') : 'Unknown Date';
-           let group = groupedRides.find(g => g.dateStr === dateStr);
-           if (!group) {
-              group = { dateStr, items: [] };
-              groupedRides.push(group);
-           }
-           group.items.push(ride);
-        });
-
-        setRides(groupedRides);
+        setRides(mergedRides);
         setLoading(false);
     };
 
@@ -198,6 +188,25 @@ export default function MyRides() {
     return '';
   };
 
+  const filteredRides = rides.filter(ride => {
+     const status = ride.status || 'open';
+     if (activeTab === 'Pending') return !['in_progress', 'completed', 'cancelled'].includes(status);
+     if (activeTab === 'Active') return status === 'in_progress';
+     if (activeTab === 'History') return ['completed', 'cancelled'].includes(status);
+     return false;
+  });
+
+  const groupedRides = [];
+  filteredRides.forEach(ride => {
+     const dateStr = ride.date ? dayjs(ride.date).format('ddd, MMM D, YYYY') : 'Unknown Date';
+     let group = groupedRides.find(g => g.dateStr === dateStr);
+     if (!group) {
+        group = { dateStr, items: [] };
+        groupedRides.push(group);
+     }
+     group.items.push(ride);
+  });
+
   return (
     <div className="home-container" style={{ display: 'flex', flexDirection: 'column', background: '#eaeaea', height: '100vh', overflow: 'hidden' }}>
       
@@ -211,6 +220,29 @@ export default function MyRides() {
         </div>
       </div>
 
+      {/* Tabs Menu */}
+      <div style={{ display: 'flex', background: '#fff', borderBottom: '1px solid #ddd', zIndex: 5 }}>
+        {['Active', 'Pending', 'History'].map(tab => (
+          <div 
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{ 
+              flex: 1, 
+              textAlign: 'center', 
+              padding: '12px 0', 
+              fontWeight: 600,
+              fontSize: '0.95rem',
+              color: activeTab === tab ? '#00b0f0' : '#888',
+              borderBottom: activeTab === tab ? '3px solid #00b0f0' : '3px solid transparent',
+              cursor: 'pointer',
+              transition: 'all 0.2s'
+            }}
+          >
+            {tab}
+          </div>
+        ))}
+      </div>
+
       {/* RIDES LIST */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', background: '#f8fafc', paddingBottom: '100px' }}>
       {loading ? (
@@ -218,17 +250,17 @@ export default function MyRides() {
           <Loader2 size={40} color="#999" style={{ animation: 'spin 1.2s linear infinite' }} />
           <h3 style={{ color: '#888', margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Loading your rides...</h3>
         </div>
-      ) : rides.length === 0 ? (
+      ) : groupedRides.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: '4rem', color: '#888' }}>
             <div style={{ background: '#eee', width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
                <MapPin size={32} color="#aaa" />
             </div>
-            <h3 style={{ color: '#555', margin: '0 0 8px 0' }}>No active rides</h3>
-            <p style={{ margin: 0, fontSize: '0.9rem' }}>You haven't offered or requested any rides yet.</p>
+            <h3 style={{ color: '#555', margin: '0 0 8px 0' }}>No {activeTab.toLowerCase()} rides</h3>
+            <p style={{ margin: 0, fontSize: '0.9rem' }}>You don't have any {activeTab.toLowerCase()} rides at the moment.</p>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0', paddingBottom: '2rem' }}>
-            {rides.map(group => (
+            {groupedRides.map(group => (
               <div key={group.dateStr} style={{ marginBottom: '2rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', paddingBottom: '1rem', color: '#999', fontSize: '0.9rem', fontWeight: 600 }}>
                   <span style={{ whiteSpace: 'nowrap', color: '#aaa' }}>{group.dateStr}</span>
@@ -267,7 +299,17 @@ export default function MyRides() {
                      return (
                        <div 
                          key={ride.id}
-                         onClick={() => isDriver ? navigate('/offer-matches', { state: { ride } }) : navigate('/find-matches', { state: { ride } })}
+                         onClick={() => {
+                           if (isDriver) {
+                             if (ride.status === 'in_progress') {
+                               navigate('/active-ride', { state: { ride } });
+                             } else {
+                               navigate('/offer-matches', { state: { ride } });
+                             }
+                           } else {
+                             navigate('/find-matches', { state: { ride } });
+                           }
+                         }}
                          style={{ 
                            background: '#fff', 
                            borderRadius: '8px', 
