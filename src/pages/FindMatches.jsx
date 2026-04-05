@@ -142,6 +142,8 @@ export default function FindMatches() {
     fetchPassengerRoute();
   }, []);
 
+  const volatilePassengerStateRef = useRef(ride);
+
   // Matching Engine: Fetch and filter drivers dynamically
   useEffect(() => {
     if (passengerRoute.length === 0) return;
@@ -158,11 +160,18 @@ export default function FindMatches() {
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
            if (req.status === 'completed' || req.status === 'cancelled') {
-               if (geometryCache.current[req.id]) delete geometryCache.current[req.id];
-               return null;
+               if (volatilePassengerStateRef.current?.offeredByRideId !== req.id) {
+                   if (geometryCache.current[req.id]) delete geometryCache.current[req.id];
+                   return null;
+               }
            }
 
-           const typeStatus = (req.status === 'confirmed' && req.requestedByRideId === ride?.id) ? 'confirmed' : ((req.requestedByPassengerIds || []).includes(ride?.id)) ? 'request' : 'match';
+           let typeStatus = (req.status === 'confirmed' && req.requestedByRideId === ride?.id) ? 'confirmed' : ((req.requestedByPassengerIds || []).includes(ride?.id)) ? 'request' : 'match';
+           if (volatilePassengerStateRef.current?.offeredByRideId === req.id) {
+               if (volatilePassengerStateRef.current?.status === 'completed') typeStatus = 'completed';
+               else if (volatilePassengerStateRef.current?.status === 'confirmed') typeStatus = 'confirmed';
+           }
+
            const nameParams = req.userName || 'Erwin Rivera';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
            const ratingParams = req.userRating || '0.0';
@@ -315,14 +324,18 @@ export default function FindMatches() {
   }, [passengerRoute, ride?.userId]);
 
   // Real-time bidirectional matching state sync natively updating passenger match views instantly if a driver reacts
-  const [volatilePassengerState, setVolatilePassengerState] = useState(null);
+  const [volatilePassengerState, setVolatilePassengerState] = useState(ride);
+
+  useEffect(() => {
+    volatilePassengerStateRef.current = volatilePassengerState;
+  }, [volatilePassengerState]);
 
   useEffect(() => {
     if (!ride?.id) return;
     const unsub = onSnapshot(doc(db, 'rideRequests', ride.id), (docSnap) => {
-      if (docSnap.exists()) {
-        setVolatilePassengerState(docSnap.data());
-      }
+        if (docSnap.exists()) {
+            setVolatilePassengerState({ id: docSnap.id, ...docSnap.data() });
+        }
     });
     return () => unsub();
   }, [ride?.id]);

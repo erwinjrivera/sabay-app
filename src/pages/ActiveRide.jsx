@@ -332,6 +332,7 @@ export default function ActiveRide() {
                  reviews: userReviews ? userReviews : parseInt(req.userReviews || 0),
                  completedRides: userCompletedRides,
                  driverRatedPassenger: req.driverRatedPassenger || false,
+                 ratingGivenByDriver: req.ratingGivenByDriver,
                  status: req.status,
                  phaseFlag: req.phase || 0,
                  seats: req.seats || 1,
@@ -570,7 +571,7 @@ export default function ActiveRide() {
         }}
         className="hide-scrollbar"
       >
-        <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; } @keyframes pulseGlow { 0% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(0,176,240,0); } 50% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 4px rgba(0,176,240,0.6); } 100% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(0,176,240,0); } }`}</style>
+        <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; } @keyframes pulseGlow { 0% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(119,119,119,0); } 50% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 8px rgba(119,119,119,0.7); } 100% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(119,119,119,0); } }`}</style>
         
         {isFetchingMatches ? (
           <div style={{ background: '#fff', borderRadius: '12px', padding: '30px 20px', textAlign: 'center', width: '90%', margin: '0 auto', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', flexShrink: 0 }}>
@@ -593,7 +594,7 @@ export default function ActiveRide() {
                   background: '#fff', 
                   borderRadius: '12px', 
                   boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
-                  animation: phase === 1 ? 'pulseGlow 1.2s ease-in-out 3' : 'none',
+                  animation: phase === 1 ? 'pulseGlow 1.2s ease-in-out 1' : (phase === 2 && !showRatingModal && ratingPassenger?.id === match.id) ? 'pulseGlow 1.2s ease-in-out 1' : 'none',
                   scrollSnapAlign: 'center',
                   display: 'flex',
                   flexDirection: 'column',
@@ -645,8 +646,8 @@ export default function ActiveRide() {
                    <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: '0 0 0 12px' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
-                   {phase === 2 && !match.driverRatedPassenger && (
-                      <button onClick={() => { setRatingPassenger(match); setTempRating(4); setShowRatingModal(true); }} style={{ width: '60px', padding: '16px 0', background: '#ffb800', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', transition: 'all 0.3s' }}>
+                   {phase === 2 && (
+                      <button onClick={() => { setRatingPassenger(match); setTempRating(match.driverRatedPassenger ? (match.ratingGivenByDriver !== undefined ? match.ratingGivenByDriver : 5) : 0); setShowRatingModal(true); }} style={{ width: '60px', padding: '16px 0', background: '#ffb800', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', transition: 'all 0.3s' }}>
                         <Star size={20} fill="#fff" color="#fff" />
                       </button>
                    )}
@@ -663,7 +664,7 @@ export default function ActiveRide() {
                        )}
                        {phase === 1 && (
                           <SwipeButton 
-                             text="Complete Ride" 
+                             text="Mark as Complete" 
                              color="#28ec33" 
                              onSwipe={() => handleSwipe(match.id)} 
                              customBorderRadius="0 0 12px 0"
@@ -731,9 +732,9 @@ export default function ActiveRide() {
                          {isGlobalCancelled ? 'Ride Cancelled' : 'Ride Completed'}
                        </h3>
                        <p style={{ margin: '0 0 24px', color: '#888', fontSize: '0.9rem', textAlign: 'center' }}>
-                         {isGlobalCancelled ? 'All active passenger routes have been aborted.' : 'All passengers have been safely dropped off.'}
+                         {isGlobalCancelled ? 'All active passenger routes have been aborted.' : 'All passengers have been dropped off.'}
                        </p>
-                       {passengerAvatars}
+                       {!isGlobalCancelled && passengerAvatars}
                        <button onClick={handleFinishCarpool} style={{ width: '100%', padding: '16px', background: isGlobalCancelled ? '#dbdbdb' : '#00b0f0', border: 'none', borderRadius: '8px', color: isGlobalCancelled ? '#555' : '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', boxShadow: 'none' }}>
                          Finish Carpool
                        </button>
@@ -826,7 +827,7 @@ export default function ActiveRide() {
                How was your carpool with {ratingPassenger.name.split(' ')[0]}?
              </h3>
              
-             <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+             <div style={{ display: 'flex', gap: '8px', marginBottom: ratingPassenger?.driverRatedPassenger ? '8px' : '12px' }}>
                {[1, 2, 3, 4, 5].map((star) => (
                   <Star 
                     key={star} 
@@ -842,7 +843,7 @@ export default function ActiveRide() {
              <div style={{ marginBottom: '32px' }}></div>
              
              <button 
-                onClick={async () => {
+                  onClick={async () => {
                    if (ratingPassenger?.userId) {
                       try {
                          const userRef = doc(db, 'users', ratingPassenger.userId);
@@ -852,18 +853,30 @@ export default function ActiveRide() {
                          const currentTotalRating = userDoc.rating ? parseFloat(userDoc.rating) : 5.0;
                          const currentReviews = userDoc.reviews || 0;
                          
-                         const newReviewsCount = currentReviews + 1;
-                         const newAverageRating = ((currentTotalRating * currentReviews) + tempRating) / newReviewsCount;
+                         let newReviewsCount = currentReviews;
+                         let newAverageRating = currentTotalRating;
+
+                         if (ratingPassenger.driverRatedPassenger && ratingPassenger.ratingGivenByDriver !== undefined) {
+                             const oldTotalRatingSum = currentTotalRating * currentReviews;
+                             const sumWithoutOld = oldTotalRatingSum - ratingPassenger.ratingGivenByDriver;
+                             newAverageRating = currentReviews > 0 ? (sumWithoutOld + tempRating) / currentReviews : tempRating;
+                         } else {
+                             newReviewsCount = currentReviews + 1;
+                             newAverageRating = ((currentTotalRating * currentReviews) + tempRating) / newReviewsCount;
+                         }
                          
                          await setDoc(userRef, { 
                             rating: newAverageRating.toFixed(1), 
                             reviews: newReviewsCount 
                          }, { merge: true });
                          
-                         await updateDoc(doc(db, 'rideRequests', ratingPassenger.id), { driverRatedPassenger: true });
+                         await updateDoc(doc(db, 'rideRequests', ratingPassenger.id), { 
+                            driverRatedPassenger: true,
+                            ratingGivenByDriver: tempRating
+                         });
                          
                          // Update local match state slightly so user sees the new rating instantly without refetching all logic
-                         setMatches(old => old.map(m => m.id === ratingPassenger.id ? { ...m, rating: newAverageRating.toFixed(1), reviews: newReviewsCount, driverRatedPassenger: true } : m));
+                         setMatches(old => old.map(m => m.id === ratingPassenger.id ? { ...m, rating: newAverageRating.toFixed(1), reviews: newReviewsCount, driverRatedPassenger: true, ratingGivenByDriver: tempRating } : m));
                       } catch (err) { console.error("Rating save error", err); }
                    }
                    setShowRatingModal(false);
