@@ -3,10 +3,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { ArrowLeft, User, List, Star, Navigation, MapPin, MessageCircle } from 'lucide-react';
+import { ArrowLeft, User, List, Star, Navigation, MapPin, MessageCircle, X, Check, Loader2 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
-import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, setDoc, increment, deleteField } from 'firebase/firestore';
 import SwipeButton from '../components/SwipeButton';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -120,6 +120,70 @@ export default function ActiveRide() {
   const [activePassengerId, setActivePassengerId] = useState(null);
   const [passengerStates, setPassengerStates] = useState({}); // id -> 0 (arrive), 1 (complete), 2 (completed)
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
+  const [showCancelAllModal, setShowCancelAllModal] = useState(false);
+  const [showCompleteAllModal, setShowCompleteAllModal] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [ratingPassenger, setRatingPassenger] = useState(null);
+  const [tempRating, setTempRating] = useState(4);
+  const [isFetchingMatches, setIsFetchingMatches] = useState(true);
+  const [isGlobalCancelled, setIsGlobalCancelled] = useState(false);
+
+  const handleCancelAllPassengers = async () => {
+    try {
+      const updates = matches.map(async (m) => {
+          const currentPhase = passengerStates[m.id] || 0;
+          if (currentPhase < 2) {
+              await updateDoc(doc(db, 'rideRequests', m.id), { 
+                  status: 'open',
+                  offeredByRideId: deleteField(),
+                  phase: deleteField()
+              });
+          }
+      });
+      await Promise.all(updates);
+
+      if (ride?.id) {
+          await updateDoc(doc(db, 'rideOffers', ride.id), { status: 'cancelled' });
+      }
+      setIsGlobalCancelled(true);
+      setShowCancelAllModal(false);
+      setTimeout(() => setIsDrawerExpanded(true), 300);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleFinishCarpool = async () => {
+    try {
+      if (ride?.id) {
+          await updateDoc(doc(db, 'rideOffers', ride.id), { status: isGlobalCancelled ? 'cancelled' : 'completed' });
+      }
+      navigate('/my-rides');
+    } catch (err) { console.error(err); }
+  };
+
+  const handleCompleteAllPassengers = async () => {
+    try {
+      const updates = matches.map(async (m) => {
+         if ((passengerStates[m.id] || 0) < 2) {
+             await updateDoc(doc(db, 'rideRequests', m.id), { status: 'completed' });
+             if (m.userId) {
+                 await setDoc(doc(db, 'users', m.userId), { completedRides: increment(1) }, { merge: true });
+             }
+         }
+      });
+      await Promise.all(updates);
+
+      // Force local states to 2 instantly
+      setPassengerStates(prev => {
+          let updated = { ...prev };
+          matches.forEach(m => { updated[m.id] = 2; });
+          return updated;
+      });
+      
+      setShowCompleteAllModal(false);
+      setTimeout(() => setIsDrawerExpanded(true), 300);
+    } catch (err) { console.error(err); }
+  };
 
   useEffect(() => {
     if ("geolocation" in navigator) {
@@ -170,8 +234,8 @@ export default function ActiveRide() {
         const matchPromises = reqDocs.map(async (req) => {
            if (!req.from?.lat || !req.to?.lat) return null;
            
-           // ONLY CONFIRMED PASSENGERS
-           if (req.status !== 'confirmed' || req.offeredByRideId !== ride?.id) return null;
+           // SECURELY EVALUATE COMPLETED AND CONFIRMED METRICS IDENTICALLY
+           if (!['confirmed', 'completed'].includes(req.status) || req.offeredByRideId !== ride?.id) return null;
 
            const pLat = req.from.lat; const pLon = req.from.lon;
            const dLat = req.to.lat;   const dLon = req.to.lon;
@@ -245,12 +309,31 @@ export default function ActiveRide() {
               
               const distanceToDriverStart = getDistanceKM(pLat, pLon, driverFrom.lat, driverFrom.lon);
 
+              // Pull realtime dynamic users statistics natively
+              let userCompletedRides = 0;
+              let userRating = 0.0;
+              let userReviews = 0;
+              if (req.userId) {
+                 const uSnap = await getDoc(doc(db, 'users', req.userId));
+                 if (uSnap.exists()) {
+                    const uData = uSnap.data();
+                    if (uData.completedRides) userCompletedRides = uData.completedRides;
+                    if (uData.rating) userRating = uData.rating;
+                    if (uData.reviews) userReviews = uData.reviews;
+                 }
+              }
+
               return {
                  id: req.id,
+                 userId: req.userId,
                  name: req.userName || 'Passenger',
                  time: req.time ? dayjs(req.time).format('h:mma') : 'Any time',
-                 rating: req.userRating || '0.0',
-                 reviews: req.userReviews || 0,
+                 rating: userRating ? parseFloat(userRating).toFixed(1) : (req.userRating || '0.0'),
+                 reviews: userReviews ? userReviews : parseInt(req.userReviews || 0),
+                 completedRides: userCompletedRides,
+                 driverRatedPassenger: req.driverRatedPassenger || false,
+                 status: req.status,
+                 phaseFlag: req.phase || 0,
                  seats: req.seats || 1,
                  profilePic: req.userProfilePic || '',
                  price: '0.00 ₱',
@@ -271,10 +354,27 @@ export default function ActiveRide() {
         const results = await Promise.all(matchPromises);
         let validMatches = results.filter(m => m !== null);
         
+        // Sync local memory phases dynamically preventing DOM dropoffs!
+        setPassengerStates(prev => {
+           let updated = { ...prev };
+           let changed = false;
+           validMatches.forEach(m => {
+              if (m.status === 'completed' && updated[m.id] !== 2) {
+                 updated[m.id] = 2;
+                 changed = true;
+              } else if (m.status !== 'completed' && m.phaseFlag === 1 && updated[m.id] !== 1) {
+                 updated[m.id] = 1;
+                 changed = true;
+              }
+           });
+           return changed ? updated : prev;
+        });
+        
         // Sort by physical distance of passenger pickup to driver origin
         validMatches.sort((a, b) => a.distanceToDriverStart - b.distanceToDriverStart);
         
         setMatches(validMatches);
+        setIsFetchingMatches(false);
         
         setActivePassengerId(currentId => {
            if (validMatches.length > 0 && !validMatches.find(m => m.id === currentId)) {
@@ -298,9 +398,43 @@ export default function ActiveRide() {
     }
   };
 
-  const handleSwipe = (passengerId) => {
+  const handleSwipe = async (passengerId) => {
+    const passenger = matches.find(m => m.id === passengerId);
+    
     setPassengerStates(prev => {
        const currentPhase = prev[passengerId] || 0;
+       
+       if (currentPhase === 1) { 
+          // Phase 1 -> 2 (Complete Ride Slider executed)
+          (async () => {
+             try {
+                await updateDoc(doc(db, 'rideRequests', passengerId), { status: 'completed' });
+                
+                if (passenger?.userId) {
+                    await setDoc(doc(db, 'users', passenger.userId), {
+                        completedRides: increment(1)
+                    }, { merge: true });
+                    
+                    // Visually increment without DOM bounce
+                    setMatches(old => old.map(m => m.id === passengerId ? { ...m, completedRides: (m.completedRides || 0) + passenger.seats } : m));
+                }
+             } catch (err) { console.error("Passenger Complete Error", err); }
+          })();
+          setRatingPassenger(passenger);
+          setTempRating(4);
+          setShowRatingModal(true);
+          return { ...prev, [passengerId]: 2 };
+       }
+
+       if (currentPhase === 0) {
+          (async () => {
+             try {
+                await updateDoc(doc(db, 'rideRequests', passengerId), { phase: 1 });
+             } catch (err) { console.error("Passenger Arrive Error", err); }
+          })();
+          return { ...prev, [passengerId]: 1 };
+       }
+
        if (currentPhase < 2) {
           return { ...prev, [passengerId]: currentPhase + 1 };
        }
@@ -393,15 +527,25 @@ export default function ActiveRide() {
         <MapAdjuster route1={driverRoute} route2={activePassRoute} />
       </MapContainer>
 
+      {/* MAP OVERLAY SPINNER */}
+      {isFetchingMatches && (
+         <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1200, background: 'rgba(255,255,255,0.9)', padding: '16px', borderRadius: '50%', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Loader2 size={32} color="#00b0f0" className="spin" />
+            <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+         </div>
+      )}
+
       {/* TOP HEADER */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
-        <div style={{ background: 'rgba(40,45,50,0.95)', padding: '1rem', display: 'flex', alignItems: 'center', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
-          <button onClick={() => navigate('/my-rides')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, marginRight: '16px' }}>
-            <ArrowLeft size={24} />
-          </button>
-          <div>
-            <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Live Tracking</h2>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>Active Ride</p>
+        <div style={{ background: 'rgba(40,45,50,0.95)', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <button onClick={() => navigate('/my-rides')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, marginRight: '16px' }}>
+              <ArrowLeft size={24} />
+            </button>
+            <div>
+              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Live Tracking</h2>
+              <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>Active Ride</p>
+            </div>
           </div>
         </div>
       </div>
@@ -412,12 +556,12 @@ export default function ActiveRide() {
         onScroll={handleScroll}
         style={{ 
           position: 'absolute', 
-          bottom: '24px', 
+          bottom: '38px', 
           width: '100%', 
           display: 'flex', 
           overflowX: 'auto', 
           scrollSnapType: 'x mandatory',
-          padding: '0 20px',
+          padding: '12px 20px',
           boxSizing: 'border-box',
           gap: '12px',
           zIndex: 1000,
@@ -426,9 +570,13 @@ export default function ActiveRide() {
         }}
         className="hide-scrollbar"
       >
-        <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; }`}</style>
+        <style>{`.hide-scrollbar::-webkit-scrollbar { display: none; } @keyframes pulseGlow { 0% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(0,176,240,0); } 50% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 4px rgba(0,176,240,0.6); } 100% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(0,176,240,0); } }`}</style>
         
-        {matches.length === 0 ? (
+        {isFetchingMatches ? (
+          <div style={{ background: '#fff', borderRadius: '12px', padding: '30px 20px', textAlign: 'center', width: '90%', margin: '0 auto', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', flexShrink: 0 }}>
+             <p style={{ margin: 0, color: '#888', fontWeight: 600 }}>Fetching ride details...</p>
+          </div>
+        ) : matches.length === 0 ? (
           <div style={{ background: '#fff', borderRadius: '12px', padding: '30px 20px', textAlign: 'center', width: '90%', margin: '0 auto', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', flexShrink: 0 }}>
              <p style={{ margin: 0, color: '#888', fontWeight: 600 }}>No active passengers.</p>
           </div>
@@ -445,6 +593,7 @@ export default function ActiveRide() {
                   background: '#fff', 
                   borderRadius: '12px', 
                   boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                  animation: phase === 1 ? 'pulseGlow 1.2s ease-in-out 3' : 'none',
                   scrollSnapAlign: 'center',
                   display: 'flex',
                   flexDirection: 'column',
@@ -472,12 +621,12 @@ export default function ActiveRide() {
                      
                      {/* Rating Line */}
                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                       <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                       <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                       <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                       <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                       <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                       <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px' }}>{match.rating} ({match.reviews})</span>
+                       {[1, 2, 3, 4, 5].map(starNum => {
+                          const ratingVal = parseFloat(match.rating) || 0;
+                          const isFilled = starNum <= Math.round(ratingVal);
+                          return <Star key={starNum} size={12} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />
+                       })}
+                       <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px' }}>{match.rating} ({match.completedRides})</span>
                      </div>
                    </div>
 
@@ -496,8 +645,8 @@ export default function ActiveRide() {
                    <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: '0 0 0 12px' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
-                   {phase === 2 && (
-                      <button onClick={() => alert('Rate passenger functionality coming soon!')} style={{ width: '60px', padding: '16px 0', background: '#ffb800', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', transition: 'all 0.3s' }}>
+                   {phase === 2 && !match.driverRatedPassenger && (
+                      <button onClick={() => { setRatingPassenger(match); setTempRating(4); setShowRatingModal(true); }} style={{ width: '60px', padding: '16px 0', background: '#ffb800', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', borderLeft: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', transition: 'all 0.3s' }}>
                         <Star size={20} fill="#fff" color="#fff" />
                       </button>
                    )}
@@ -534,6 +683,196 @@ export default function ActiveRide() {
               </div>
             );
           })
+        )}
+      </div>
+
+      {/* PULL-UP UI DRAWER FOR GLOBAL ACTIONS */}
+      {/* Grey Background Overlay */}
+      <div 
+        onClick={() => setIsDrawerExpanded(false)}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', zIndex: 1500, opacity: isDrawerExpanded ? 1 : 0, transition: 'opacity 0.3s', pointerEvents: isDrawerExpanded ? 'auto' : 'none' }}
+      ></div>
+      
+      {/* Drawer Surface */}
+      <div 
+        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#f2f4f7', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', boxShadow: '0 -4px 15px rgba(0,0,0,0.1)', padding: '16px 24px 32px 24px', zIndex: 2000, transform: isDrawerExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
+      >
+        <div onClick={() => setIsDrawerExpanded(!isDrawerExpanded)} style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+           <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: isDrawerExpanded ? 0 : 1, transition: 'opacity 0.2s' }}></div>
+           <div style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isDrawerExpanded ? 1 : 0, transition: 'opacity 0.2s' }}>
+             <X size={24} color="#555" strokeWidth={2.5} />
+           </div>
+        </div>
+
+        <div style={{ width: '100%', marginTop: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isDrawerExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isDrawerExpanded ? 'auto' : 'none' }}>
+           {(() => {
+              const allCompleted = matches.length > 0 && matches.every(m => (passengerStates[m.id] || 0) === 2);
+              
+              const passengerAvatars = (
+                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '32px' }}>
+                    {matches.length > 0 ? (
+                       matches.map((cp, idx) => (
+                          <div key={cp.id} style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', marginLeft: idx > 0 ? '-16px' : 0, overflow: 'hidden', background: '#e0e0e0', zIndex: 10 - idx }}>
+                              <img src={cp.profilePic || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"} alt="passenger" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </div>
+                       ))
+                    ) : (
+                       <div style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', background: '#dbdbdb', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <User size={28} color="#fff" strokeWidth={2.5} />
+                       </div>
+                    )}
+                 </div>
+              );
+
+              if (allCompleted || isGlobalCancelled) {
+                 return (
+                    <>
+                       <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
+                         {isGlobalCancelled ? 'Ride Cancelled' : 'Ride Completed'}
+                       </h3>
+                       <p style={{ margin: '0 0 24px', color: '#888', fontSize: '0.9rem', textAlign: 'center' }}>
+                         {isGlobalCancelled ? 'All active passenger routes have been aborted.' : 'All passengers have been safely dropped off.'}
+                       </p>
+                       {passengerAvatars}
+                       <button onClick={handleFinishCarpool} style={{ width: '100%', padding: '16px', background: isGlobalCancelled ? '#dbdbdb' : '#00b0f0', border: 'none', borderRadius: '8px', color: isGlobalCancelled ? '#555' : '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', boxShadow: 'none' }}>
+                         Finish Carpool
+                       </button>
+                    </>
+                 );
+              }
+              return (
+                 <>
+                    <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>Manage Active Ride</h3>
+                    <p style={{ margin: '0 0 24px', color: '#888', fontSize: '0.9rem' }}>You are tracking {matches.length} passenger(s).</p>
+                    {passengerAvatars}
+                    <button onClick={() => { setIsDrawerExpanded(false); setTimeout(() => setShowCancelAllModal(true), 300); }} style={{ width: '100%', padding: '16px', background: '#dbdbdb', border: 'none', borderRadius: '8px', color: '#555', fontWeight: 700, fontSize: '1rem', marginBottom: '16px', cursor: 'pointer' }}>
+                      Cancel Carpool
+                    </button>
+                    <button onClick={() => { setIsDrawerExpanded(false); setTimeout(() => setShowCompleteAllModal(true), 300); }} style={{ width: '100%', padding: '16px', background: '#28ec33', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
+                      Complete Carpool (All Users)
+                    </button>
+                 </>
+              );
+           })()}
+        </div>
+      </div>
+
+      {/* CUSTOM COMPLETE ALL MODAL */}
+      {showCompleteAllModal && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#e0f6ff', color: '#00b0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <Check size={24} strokeWidth={3} />
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Complete Carpool?</h3>
+            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>This will instantly mark all remaining transit legs as completed and apply passenger statistics.</p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={() => setShowCompleteAllModal(false)} style={{ flex: 1, padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#444', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
+                Go Back
+              </button>
+              <button onClick={handleCompleteAllPassengers} style={{ flex: 1, padding: '14px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
+                Complete All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM CANCEL ALL MODAL */}
+      {showCancelAllModal && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fee2e2', color: '#ff2744', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <X size={24} strokeWidth={3} />
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Cancel Carpool?</h3>
+            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>Are you absolutely sure you want to cancel this carpool? Passengers will be severely disrupted.</p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={() => setShowCancelAllModal(false)} style={{ flex: 1, padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#444', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
+                Go Back
+              </button>
+              <button onClick={handleCancelAllPassengers} style={{ flex: 1, padding: '14px', background: '#ff2744', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
+                Yes, Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RATING DRAWER MODAL */}
+      <div 
+        onClick={() => setShowRatingModal(false)}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', zIndex: 10000, opacity: showRatingModal ? 1 : 0, transition: 'opacity 0.3s', pointerEvents: showRatingModal ? 'auto' : 'none' }}
+      ></div>
+      
+      <div 
+        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#fff', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', boxShadow: '0 -4px 20px rgba(0,0,0,0.15)', padding: '16px 24px 32px 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
+      >
+        <div onClick={() => setShowRatingModal(false)} style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+           <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: showRatingModal ? 0 : 1, transition: 'opacity 0.2s' }}></div>
+           <div style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center' }}>
+             <X size={24} color="#555" strokeWidth={2.5} />
+           </div>
+        </div>
+
+        {ratingPassenger && (
+          <div style={{ width: '100%', marginTop: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+             <img 
+               src={ratingPassenger.profilePic || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"} 
+               alt="" 
+               style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', marginBottom: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} 
+             />
+             <h3 style={{ margin: '0 0 24px', fontSize: '1.4rem', fontWeight: 800, color: '#111', textAlign: 'center' }}>
+               How was your carpool with {ratingPassenger.name.split(' ')[0]}?
+             </h3>
+             
+             <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+               {[1, 2, 3, 4, 5].map((star) => (
+                  <Star 
+                    key={star} 
+                    size={40} 
+                    fill={star <= tempRating ? "#ffb800" : "#eaeaea"} 
+                    color={star <= tempRating ? "#ffb800" : "#eaeaea"} 
+                    style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                    onClick={() => setTempRating(star)}
+                  />
+               ))}
+             </div>
+             
+             <div style={{ marginBottom: '32px' }}></div>
+             
+             <button 
+                onClick={async () => {
+                   if (ratingPassenger?.userId) {
+                      try {
+                         const userRef = doc(db, 'users', ratingPassenger.userId);
+                         const uSnap = await getDoc(userRef);
+                         const userDoc = uSnap.exists() ? uSnap.data() : {};
+                         
+                         const currentTotalRating = userDoc.rating ? parseFloat(userDoc.rating) : 5.0;
+                         const currentReviews = userDoc.reviews || 0;
+                         
+                         const newReviewsCount = currentReviews + 1;
+                         const newAverageRating = ((currentTotalRating * currentReviews) + tempRating) / newReviewsCount;
+                         
+                         await setDoc(userRef, { 
+                            rating: newAverageRating.toFixed(1), 
+                            reviews: newReviewsCount 
+                         }, { merge: true });
+                         
+                         await updateDoc(doc(db, 'rideRequests', ratingPassenger.id), { driverRatedPassenger: true });
+                         
+                         // Update local match state slightly so user sees the new rating instantly without refetching all logic
+                         setMatches(old => old.map(m => m.id === ratingPassenger.id ? { ...m, rating: newAverageRating.toFixed(1), reviews: newReviewsCount, driverRatedPassenger: true } : m));
+                      } catch (err) { console.error("Rating save error", err); }
+                   }
+                   setShowRatingModal(false);
+                }}
+                style={{ width: '100%', padding: '16px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+             >
+               Save Rating
+             </button>
+          </div>
         )}
       </div>
     </div>

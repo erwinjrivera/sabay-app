@@ -157,6 +157,11 @@ export default function FindMatches() {
            if (!req.from?.lat || !req.to?.lat) return null;
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
+           if (req.status === 'completed' || req.status === 'cancelled') {
+               if (geometryCache.current[req.id]) delete geometryCache.current[req.id];
+               return null;
+           }
+
            const typeStatus = (req.status === 'confirmed' && req.requestedByRideId === ride?.id) ? 'confirmed' : ((req.requestedByPassengerIds || []).includes(ride?.id)) ? 'request' : 'match';
            const nameParams = req.userName || 'Erwin Rivera';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
@@ -335,6 +340,18 @@ export default function FindMatches() {
              });
              return changed ? next : prev;
          });
+     } else if (volatilePassengerState?.status === 'completed' && volatilePassengerState?.offeredByRideId) {
+         setMatches(prev => {
+             let changed = false;
+             const next = prev.map(m => {
+                 if (m.id === volatilePassengerState.offeredByRideId && m.type !== 'completed') {
+                     changed = true;
+                     return { ...m, type: 'completed' };
+                 }
+                 return m;
+             });
+             return changed ? next : prev;
+         });
      } else if (volatilePassengerState?.status === 'confirmed' && volatilePassengerState?.offeredByRideId) {
          setMatches(prev => {
              let changed = false;
@@ -351,7 +368,7 @@ export default function FindMatches() {
          setMatches(prev => {
              let changed = false;
              const next = prev.map(m => {
-                 if (m.type === 'offered') {
+                 if (m.type === 'offered' || m.type === 'confirmed' || m.type === 'request') {
                      changed = true;
                      return { ...m, type: 'match' };
                  }
@@ -488,13 +505,13 @@ export default function FindMatches() {
             <Marker position={[passengerTo.lat, passengerTo.lon]} icon={getDriverEndIcon(activeDriver.type)} />
 
             {/* Main passenger transit overlap path (solid Color) */}
-            <Polyline positions={activeDriverRoute} pathOptions={{ color: activeDriver.type === 'confirmed' ? '#28ec33' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 6, opacity: 1 }} />
+            <Polyline positions={activeDriverRoute} pathOptions={{ color: activeDriver.type === 'confirmed' || activeDriver.type === 'completed' ? '#28ec33' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 6, opacity: 1 }} />
             
             {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node */}
             {passengerRoute.length > 0 && activeDriver?.meetPickup && (
                <Polyline 
                  positions={activeDriver?.interceptPaths?.pickupPath || [[activeDriver.pickup.lat, activeDriver.pickup.lon], [activeDriver.meetPickup.lat, activeDriver.meetPickup.lon]]} 
-                 pathOptions={{ color: activeDriver.type === 'confirmed' ? '#28ec33' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 pathOptions={{ color: activeDriver.type === 'confirmed' || activeDriver.type === 'completed' ? '#28ec33' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
 
@@ -689,7 +706,7 @@ export default function FindMatches() {
                </div>
                
                <div style={{ flex: 1 }}>
-                 <p style={{ margin: 0, fontSize: '0.8rem', color: match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888', fontWeight: 600 }}>
+                 <p style={{ margin: 0, fontSize: '0.8rem', color: match.type === 'confirmed' || match.type === 'completed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888', fontWeight: 600 }}>
                    {match.time}
                  </p>
                  <h3 style={{ margin: '2px 0', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
@@ -715,10 +732,10 @@ export default function FindMatches() {
                </div>
 
                <div style={{ textAlign: 'right' }}>
-                  {match.type === 'match' || match.type === 'offered' || match.type === 'request' || match.type === 'confirmed' ? (
+                  {match.type === 'match' || match.type === 'offered' || match.type === 'request' || match.type === 'confirmed' || match.type === 'completed' ? (
                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', justifyContent: 'flex-end', marginBottom: '4px' }}>
                         {Array.from({ length: match.seats || 4 }).map((_, i) => (
-                           <User key={i} size={12} fill={match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} color={match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} />
+                           <User key={i} size={12} fill={match.type === 'confirmed' || match.type === 'completed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} color={match.type === 'confirmed' || match.type === 'completed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} />
                         ))}
                      </div>
                   ) : null}
@@ -729,16 +746,16 @@ export default function FindMatches() {
             {/* Bottom Button Row */}
             <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto' }}>
                
-               {/* State 1: Confirmed Match */}
-               {match.type === 'confirmed' && (
+               {/* State 1: Confirmed or Completed Match */}
+               {(match.type === 'confirmed' || match.type === 'completed') && (
                  <>
                    <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    <button 
-                     onClick={() => { setConfirmedMatchToCancel(match.id); setShowCancelConfirmedModal(true); }}
+                     onClick={() => { if(match.type !== 'completed') { setConfirmedMatchToCancel(match.id); setShowCancelConfirmedModal(true); } }}
                      style={{ flex: 1, padding: '16px', background: '#28ec33', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
-                     Confirmed
+                     {match.type === 'completed' ? 'Completed Ride' : 'Confirmed'}
                    </button>
                  </>
                )}
