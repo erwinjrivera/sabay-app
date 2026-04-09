@@ -379,8 +379,10 @@ export default function FindMatches() {
          });
      } else if (volatilePassengerState?.status === 'open' || volatilePassengerState?.status === 'cancelled_by_passenger' || !volatilePassengerState) {
          setMatches(prev => {
-             let changed = false;
-             const next = prev.map(m => {
+             // Sweep out any uniquely purged rides locally that bypassed deletion due to parity locks
+             const filtered = prev.filter(m => m.rawRequest?.status !== 'cancelled' && m.rawRequest?.status !== 'completed');
+             let changed = filtered.length !== prev.length;
+             const next = filtered.map(m => {
                  if (m.type === 'offered' || m.type === 'confirmed' || m.type === 'request') {
                      changed = true;
                      return { ...m, type: 'match' };
@@ -733,14 +735,14 @@ export default function FindMatches() {
                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#ea4335', fontWeight: 600, marginLeft: '6px' }}>Offer Declined</p>
                    </div>
                  ) : (
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                     <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px' }}>{match.rating} ({match.reviews})</span>
-                   </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      {[1, 2, 3, 4, 5].map(starNum => {
+                         const ratingVal = parseFloat(match.rating) || 0;
+                         const isFilled = starNum <= Math.round(ratingVal);
+                         return <Star key={starNum} size={12} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
+                      })}
+                      <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px' }}>{match.rating} ({match.reviews})</span>
+                    </div>
                  )}
                </div>
 

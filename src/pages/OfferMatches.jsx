@@ -165,7 +165,19 @@ export default function OfferMatches() {
                               (req.status === 'offered' && req.offeredByRideId === ride?.id) ? 'offered' : 'match';
            const nameParams = req.userName || 'Passenger';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
-           const ratingParams = req.userRating || '0.0';
+           let userRating = req.userRating || '0.0';
+           let userReviews = req.userReviews || 0;
+
+           if (req.userId) {
+              try {
+                  const uSnap = await getDoc(doc(db, 'users', req.userId));
+                  if (uSnap.exists()) {
+                     const uData = uSnap.data();
+                     if (uData.rating) userRating = parseFloat(uData.rating).toFixed(1);
+                     if (uData.reviews) userReviews = uData.reviews;
+                  }
+              } catch (e) {}
+           }
 
            // PREVENT API SPAM - INSTANT CACHE YIELDING LOCALLY
            if (geometryCache.current[req.id]) {
@@ -174,8 +186,8 @@ export default function OfferMatches() {
                    type: typeStatus,
                    name: nameParams,
                    time: timeParams,
-                   rating: ratingParams,
-                   reviews: req.userReviews || 0,
+                   rating: userRating,
+                   reviews: userReviews,
                    seats: req.seats || 1,
                    profilePic: req.userProfilePic || '',
                    rawRequest: req
@@ -278,8 +290,8 @@ export default function OfferMatches() {
                  type: typeStatus,
                  name: nameParams,
                  time: timeParams,
-                 rating: ratingParams,
-                 reviews: req.userReviews || 0,
+                 rating: userRating,
+                 reviews: userReviews,
                  seats: req.seats || 1,
                  profilePic: req.userProfilePic || '',
               };
@@ -643,14 +655,7 @@ export default function OfferMatches() {
                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#ea4335', fontWeight: 600, marginLeft: '6px' }}>Offer Declined</p>
                    </div>
                  ) : (
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
-                     <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px' }}>{match.rating} ({match.reviews})</span>
-                   </div>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>{[1, 2, 3, 4, 5].map(starNum => {const ratingVal = parseFloat(match.rating) || 0; const isFilled = starNum <= Math.round(ratingVal); return <Star key={starNum} size={12} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;})}<span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px' }}>{match.rating} ({match.reviews})</span></div>
                  )}
                </div>
 
@@ -889,7 +894,24 @@ export default function OfferMatches() {
                 Keep Ride
               </button>
               <button 
-                onClick={() => navigate('/my-rides')}
+                onClick={async () => {
+                   try {
+                     await updateDoc(doc(db, 'rideOffers', ride.id), { status: 'cancelled' });
+
+                     const tiedPassengers = matches.filter(m => m.rawRequest?.offeredByRideId === ride.id);
+                     const promises = tiedPassengers.map(m => 
+                        updateDoc(doc(db, 'rideRequests', m.id), { 
+                           status: 'open', 
+                           offeredByRideId: null 
+                        })
+                     );
+                     await Promise.all(promises);
+
+                     navigate('/my-rides');
+                   } catch (err) {
+                     console.error("Cancellation error:", err);
+                   }
+                }}
                 style={{ flex: 1, padding: '14px', background: '#ff2744', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 4px 10px rgba(255,39,68,0.3)' }}
               >
                 Yes, cancel
@@ -1019,3 +1041,4 @@ export default function OfferMatches() {
     </div>
   );
 }
+

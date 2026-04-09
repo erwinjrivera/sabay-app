@@ -125,9 +125,10 @@ export default function ActiveRide() {
   const [showCompleteAllModal, setShowCompleteAllModal] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [ratingPassenger, setRatingPassenger] = useState(null);
-  const [tempRating, setTempRating] = useState(4);
+  const [tempRating, setTempRating] = useState(0);
   const [isFetchingMatches, setIsFetchingMatches] = useState(true);
   const [isGlobalCancelled, setIsGlobalCancelled] = useState(false);
+  const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
 
   const handleCancelAllPassengers = async () => {
     try {
@@ -422,7 +423,7 @@ export default function ActiveRide() {
              } catch (err) { console.error("Passenger Complete Error", err); }
           })();
           setRatingPassenger(passenger);
-          setTempRating(4);
+          setTempRating(0);
           setShowRatingModal(true);
           return { ...prev, [passengerId]: 2 };
        }
@@ -538,16 +539,60 @@ export default function ActiveRide() {
 
       {/* TOP HEADER */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
-        <div style={{ background: 'rgba(40,45,50,0.95)', padding: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#fff', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <button onClick={() => navigate('/my-rides')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, marginRight: '16px' }}>
-              <ArrowLeft size={24} />
-            </button>
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Live Tracking</h2>
-              <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>Active Ride</p>
+        <div style={{ background: 'rgba(40,45,50,0.95)', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
+          {/* Dark Navbar */}
+          <div style={{ padding: '1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', color: '#fff' }}>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button onClick={() => navigate('/my-rides')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+                <ArrowLeft size={24} />
+              </button>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Live Tracking</h2>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>Active Ride</p>
+              </div>
             </div>
           </div>
+          
+          {/* Address Overlay Strip representing the Target Passenger */}
+          {activePassenger && (
+             <div 
+               onClick={() => setIsHeaderExpanded(!isHeaderExpanded)}
+               style={{ padding: '0 1rem 1rem', display: 'flex', flexDirection: 'column', cursor: 'pointer', color: '#fff' }}
+             >
+               {isHeaderExpanded ? (
+                 <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+                   <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '6px', paddingBottom: '6px' }}>
+                        <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
+                        <div style={{ width: 1, flex: 1, background: '#555', margin: '4px 0' }}></div>
+                        <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
+                        <span style={{ fontSize: '0.9rem', color: '#fff', lineHeight: '1.3' }}>
+                          {activePassenger?.pickup?.address || 'Passenger Origin'}
+                        </span>
+                        <span style={{ fontSize: '0.9rem', color: '#ccc', lineHeight: '1.3' }}>
+                          {activePassenger?.dropoff?.address || 'Passenger Destination'}
+                        </span>
+                      </div>
+                   </div>
+                   <div style={{ display: 'flex', alignItems: 'center', alignSelf: 'center', marginLeft: '8px' }}>
+                      <svg style={{ minWidth: 16, flexShrink: 0, transform: 'rotate(180deg)' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+                   </div>
+                 </div>
+               ) : (
+                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', flex: 1 }}>
+                      <div style={{ minWidth: 8, height: 8, background: '#888', borderRadius: '50%' }}></div>
+                      <span style={{ fontSize: '0.9rem', color: '#ccc', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                        {activePassenger?.dropoff?.address || 'Passenger Destination'}
+                      </span>
+                    </div>
+                    <svg style={{ minWidth: 16, flexShrink: 0, marginLeft: '8px' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
+                 </div>
+               )}
+             </div>
+          )}
         </div>
       </div>
 
