@@ -42,7 +42,7 @@ const driverIcon = new L.DivIcon({
 
 const getPassengerStartIcon = (type) => new L.DivIcon({
   className: 'custom-pass-start-dot',
-  html: `<div style="width:16px;height:16px;background:${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#eab308' : type === 'request' ? '#ff0043' : '#888'};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${type === 'confirmed' ? 'rgba(40,236,51,0.6)' : type === 'match' ? 'rgba(0,176,240,0.6)' : type === 'offered' ? 'rgba(234,179,8,0.6)' : type === 'request' ? 'rgba(255,0,67,0.6)' : 'rgba(136,136,136,0.6)'};"></div>`,
+  html: `<div style="width:16px;height:16px;background:${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#eab308' : type === 'request' ? '#ff0043' : '#888'};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${type === 'completed' ? 'rgba(156,201,58,0.6)' : type === 'confirmed' ? 'rgba(40,236,51,0.6)' : type === 'match' ? 'rgba(0,176,240,0.6)' : type === 'offered' ? 'rgba(234,179,8,0.6)' : type === 'request' ? 'rgba(255,0,67,0.6)' : 'rgba(136,136,136,0.6)'};"></div>`,
   iconSize: [24, 24],
   iconAnchor: [12, 12]
 });
@@ -56,7 +56,7 @@ const driverStartIcon = new L.DivIcon({
 
 const getPassengerEndIcon = (type) => new L.DivIcon({
   className: 'custom-end-pin',
-  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#eab308' : type === 'request' ? '#ff0043' : '#888'}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
+  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#eab308' : type === 'request' ? '#ff0043' : '#888'}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
   iconSize: [34, 34],
   iconAnchor: [17, 34],
 });
@@ -70,14 +70,14 @@ const pickupSpotIcon = new L.DivIcon({
 
 const getMeetSpotIcon = (type) => new L.DivIcon({
   className: 'custom-meet-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#eab308' : type === 'request' ? '#ff0043' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
+  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#eab308' : type === 'request' ? '#ff0043' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
   iconSize: [22, 22],
   iconAnchor: [11, 11]
 });
 
 const getMeetDropSpotIcon = (type) => new L.DivIcon({
   className: 'custom-meet-drop-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#eab308' : type === 'request' ? '#ff0043' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
+  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#eab308' : type === 'request' ? '#ff0043' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
   iconSize: [22, 22],
   iconAnchor: [11, 11]
 });
@@ -160,9 +160,16 @@ export default function OfferMatches() {
            if (!req.from?.lat || !req.to?.lat) return null;
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
-           const typeStatus = (req.status === 'confirmed' && req.offeredByRideId === ride?.id) ? 'confirmed' : 
-                              (req.status === 'request' && req.offeredByRideId === ride?.id) ? 'request' : 
-                              (req.status === 'offered' && req.offeredByRideId === ride?.id) ? 'offered' : 'match';
+           // CRITICAL FIX: Hide passengers who are already locked into other drivers' carpools natively!
+           if (req.status !== 'open' && req.offeredByRideId && req.offeredByRideId !== ride?.id) return null;
+
+           // CRITICAL FIX: If the driver's OWN ride is already historically completed or cancelled, do not evaluate or show any new unrelated open passenger requests!
+           if ((ride?.status === 'completed' || ride?.status === 'cancelled') && req.offeredByRideId !== ride?.id) return null;
+
+           const typeStatus = (req.status === 'completed' && req.offeredByRideId === ride?.id) ? 'completed' :
+                              (req.status === 'confirmed' && req.offeredByRideId === ride?.id) ? 'confirmed' : 
+                              (req.status === 'request'   && req.offeredByRideId === ride?.id) ? 'request' : 
+                              (req.status === 'offered'   && req.offeredByRideId === ride?.id) ? 'offered' : 'match';
            const nameParams = req.userName || 'Passenger';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
            let userRating = req.userRating || '0.0';
@@ -437,13 +444,13 @@ export default function OfferMatches() {
         {activePassRoute.length > 0 && (
           <>
             {/* Main passenger transit path */}
-            <Polyline positions={activePassRoute} pathOptions={{ color: activePassenger.type === 'confirmed' ? '#28ec33' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 6, opacity: 1 }} />
+            <Polyline positions={activePassRoute} pathOptions={{ color: activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#28ec33' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 6, opacity: 1 }} />
             
             {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node */}
             {driverRoute.length > 0 && activePassenger?.meetPickup && (
                <Polyline 
                  positions={activePassenger?.interceptPaths?.pickupPath || [[activePassenger.pickup.lat, activePassenger.pickup.lon], [activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]]} 
-                 pathOptions={{ color: activePassenger.type === 'confirmed' ? '#28ec33' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 pathOptions={{ color: activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#28ec33' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
 
@@ -474,7 +481,7 @@ export default function OfferMatches() {
             {driverRoute.length > 0 && activePassenger?.meetDropoff && (
                <Polyline 
                  positions={activePassenger?.interceptPaths?.dropoffPath || [[activePassenger.meetDropoff.lat, activePassenger.meetDropoff.lon], [activePassenger.dropoff.lat, activePassenger.dropoff.lon]]} 
-                 pathOptions={{ color: activePassenger.type === 'confirmed' ? '#28ec33' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 pathOptions={{ color: activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#28ec33' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
 
@@ -511,7 +518,7 @@ export default function OfferMatches() {
                 <ArrowLeft size={24} />
               </button>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>{rideStatus === 'in_progress' ? 'Offer Ride (Active)' : 'Offer Ride'}</h2>
+                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>{rideStatus === 'completed' ? 'Offer Ride (Completed)' : rideStatus === 'in_progress' ? 'Offer Ride (Active)' : 'Offer Ride'}</h2>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>{rideTimeStr}, {rideDateStr}</p>
               </div>
             </div>
@@ -660,10 +667,10 @@ export default function OfferMatches() {
                </div>
 
                <div style={{ textAlign: 'right' }}>
-                  {match.type === 'confirmed' || match.type === 'match' || match.type === 'offered' || match.type === 'request' ? (
+                  {match.type === 'completed' || match.type === 'confirmed' || match.type === 'match' || match.type === 'offered' || match.type === 'request' ? (
                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', justifyContent: 'flex-end', marginBottom: '4px' }}>
                         {Array.from({ length: match.seats || 4 }).map((_, i) => (
-                           <User key={i} size={12} fill={match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#eab308' : '#ff0043'} color={match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#eab308' : '#ff0043'} />
+                           <User key={i} size={12} fill={match.type === 'completed' ? '#9cc93a' : match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#eab308' : '#ff0043'} color={match.type === 'completed' ? '#9cc93a' : match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#eab308' : '#ff0043'} />
                         ))}
                      </div>
                   ) : null}
@@ -674,16 +681,16 @@ export default function OfferMatches() {
             {/* Bottom Button Row */}
             <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto' }}>
                
-               {/* State 1: Confirmed Match */}
-               {match.type === 'confirmed' && (
+               {/* State 1: Confirmed or Completed Match */}
+               {(match.type === 'confirmed' || match.type === 'completed') && (
                  <>
                    <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    <button 
-                     onClick={() => { setConfirmedMatchToCancel(match.id); setShowCancelConfirmedModal(true); }}
-                     style={{ flex: 1, padding: '16px', background: '#28ec33', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
-                     Confirmed
+                     onClick={() => { if (match.type !== 'completed') { setConfirmedMatchToCancel(match.id); setShowCancelConfirmedModal(true); } }}
+                     style={{ flex: 1, padding: '16px', background: match.type === 'completed' ? '#9cc93a' : '#28ec33', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: match.type === 'completed' ? 'default' : 'pointer' }}>
+                     {match.type === 'completed' ? 'Completed Ride' : 'Confirmed'}
                    </button>
                  </>
                )}

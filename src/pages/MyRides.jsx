@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, Clock, User, Car, Search, MoreHorizontal, Check, Edit, Loader2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, User, Car, Search, MoreHorizontal, Check, Edit, Loader2, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, orderBy, getDoc, doc, onSnapshot } from 'firebase/firestore';
@@ -77,7 +77,9 @@ export default function MyRides() {
                      const reqData = allReqs.find(r => r.id === reqId);
                      if (reqData) {
                          let pStatus = 'Request';
-                         if (reqData.status === 'confirmed' && reqData.offeredByRideId === data.id) {
+                         if (reqData.status === 'completed' && reqData.offeredByRideId === data.id) {
+                            pStatus = 'Completed';
+                         } else if (reqData.status === 'confirmed' && reqData.offeredByRideId === data.id) {
                             pStatus = 'Confirmed';
                          } else if (reqData.status === 'offered' && reqData.offeredByRideId === data.id) {
                             pStatus = 'Offered';
@@ -91,7 +93,8 @@ export default function MyRides() {
              linkedPassengerReqs.forEach(reqData => {
                  if (!passengersMap.has(reqData.id)) {
                      let pStatus = 'Offered'; 
-                     if (reqData.status === 'confirmed') pStatus = 'Confirmed';
+                     if (reqData.status === 'completed') pStatus = 'Completed';
+                     else if (reqData.status === 'confirmed') pStatus = 'Confirmed';
                      passengersMap.set(reqData.id, { ...reqData, pStatus });
                  }
              });
@@ -124,7 +127,8 @@ export default function MyRides() {
                  const driverData = allOffers.find(r => r.id === data.offeredByRideId);
                  if (driverData) {
                      let pStatus = 'Sent Request';
-                     if (data.status === 'confirmed') pStatus = 'Confirmed';
+                     if (data.status === 'completed') pStatus = 'Completed';
+                     else if (data.status === 'confirmed') pStatus = 'Confirmed';
                      else if (data.status === 'offered') pStatus = 'Accept Offer';
                      
                      passengers.push({ ...driverData, pStatus, userName: driverData.userName || 'Driver' });
@@ -268,7 +272,7 @@ export default function MyRides() {
                 </div>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {group.items.map(ride => {
+                   {group.items.map(ride => {
                      const isDriver = ride.collectionType === 'offer';
                      const activeColor = '#00b0f0';
                      const badgeText = isDriver ? 'Offer Ride' : 'Find Ride';
@@ -276,7 +280,15 @@ export default function MyRides() {
                      let ribbonLeftColor = isDriver ? '#1fd954' : '#00b0f0';
                      let ribbonRightColor = isDriver ? '#16b944' : '#0090c0';
 
-                     if (ride.passengers) {
+                     if (activeTab === 'History') {
+                        if (ride.status === 'cancelled') {
+                           ribbonLeftColor = '#888';
+                           ribbonRightColor = '#777';
+                        } else {
+                           ribbonLeftColor = '#9cc93a';
+                           ribbonRightColor = '#8ab528';
+                        }
+                     } else if (ride.passengers) {
                         const hasConfirmed = ride.passengers.some(p => p.pStatus === 'Confirmed');
                         const hasRequest = ride.passengers.some(p => p.pStatus === 'Request' || p.pStatus === 'Accept Offer');
                         const hasOffered = ride.passengers.some(p => p.pStatus === 'Offered' || p.pStatus === 'Sent Request');
@@ -350,9 +362,11 @@ export default function MyRides() {
                                </div>
 
                                {/* RIGHT EDIT ICON */}
-                               <div onClick={e => e.stopPropagation()}>
-                                 <Edit size={20} color="#ccc" />
-                               </div>
+                               {activeTab !== 'History' && (
+                                  <div onClick={e => e.stopPropagation()}>
+                                    <Edit size={20} color="#ccc" />
+                                  </div>
+                               )}
                             </div>
                             
                             {/* LOCATIONS WITH DOT CONNECTOR */}
@@ -376,11 +390,11 @@ export default function MyRides() {
                          </div>
       
                          {/* SECTION 2: PASSENGERS / DRIVER RECORD LIST */}
-                         {ride.passengers && ride.passengers.length > 0 && (
+                         {ride.passengers && ride.passengers.filter(p => activeTab !== 'History' || ['Completed', 'Confirmed'].includes(p.pStatus)).length > 0 && (
                            <>
                              <div style={{ width: '100%', height: '0px', borderBottom: '2px dashed #ececec' }}></div>
                              <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: '16px', background: '#f8f8f8' }}>
-                               {ride.passengers.map((p, idx) => (
+                               {ride.passengers.filter(p => activeTab !== 'History' || ['Completed', 'Confirmed'].includes(p.pStatus)).map((p, idx) => (
                                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '16px', position: 'relative' }}>
                                     
                                     <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -391,12 +405,14 @@ export default function MyRides() {
                                           {p.userName || 'Passenger'}
                                        </span>
                                        
-                                       {p.pStatus === 'Confirmed' && (
+                                       {(p.pStatus === 'Confirmed' || p.pStatus === 'Completed') && (
                                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                                             <div style={{ background: '#1fd954', borderRadius: '50%', width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <Check size={10} color="#fff" strokeWidth={4} />
-                                             </div>
-                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#1fd954' }}>Confirmed</span>
+                                             {activeTab !== 'History' && (
+                                                <div style={{ background: '#1fd954', borderRadius: '50%', width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                   <Check size={10} color="#fff" strokeWidth={4} />
+                                                </div>
+                                             )}
+                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: activeTab === 'History' ? '#9cc93a' : '#1fd954' }}>{p.pStatus}</span>
                                           </div>
                                        )}
                                        
@@ -429,21 +445,39 @@ export default function MyRides() {
                            </>
                          )}
       
-                         {/* SECTION 3: MATCHES COUNT */}
-                         <div style={{ width: '100%', height: '0px', borderBottom: '1.5px dashed #ececec' }}></div>
-                         <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'center' }}>
-                              <User size={28} color="#00b0f0" fill="#00b0f0" />
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                               <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#00b0f0', letterSpacing: '-0.3px', marginBottom: '2px' }}>
-                                  {ride.matchesCount || 0} Ride Match{(ride.matchesCount || 0) > 1 ? 'es' : ''}
-                               </span>
-                               <span style={{ fontSize: '0.9rem', color: '#999', fontWeight: 500 }}>
-                                  available on your route
-                               </span>
-                            </div>
-                         </div>
+                         {/* SECTION 3: MATCHES COUNT / HISTORY STAMP */}
+                         {activeTab !== 'History' ? (
+                           <>
+                             <div style={{ width: '100%', height: '0px', borderBottom: '1.5px dashed #ececec' }}></div>
+                             <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                                  <User size={28} color="#00b0f0" fill="#00b0f0" />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                   <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#00b0f0', letterSpacing: '-0.3px', marginBottom: '2px' }}>
+                                      {ride.matchesCount || 0} Ride Match{(ride.matchesCount || 0) > 1 ? 'es' : ''}
+                                   </span>
+                                   <span style={{ fontSize: '0.9rem', color: '#999', fontWeight: 500 }}>
+                                      available on your route
+                                   </span>
+                                </div>
+                             </div>
+                           </>
+                         ) : (
+                           <>
+                             <div style={{ width: '100%', height: '0px', borderBottom: '1.5px dashed #ececec' }}></div>
+                             <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ride.status === 'cancelled' ? '#f9f9f9' : '#f0fdf4', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                   {ride.status === 'cancelled' && (
+                                      <X size={18} color="#888" strokeWidth={3} />
+                                   )}
+                                   <span style={{ fontSize: '0.9rem', fontWeight: 700, color: ride.status === 'cancelled' ? '#888' : '#9cc93a', letterSpacing: '0.5px' }}>
+                                      {ride.status === 'cancelled' ? 'Ride Cancelled' : 'Ride Completed'}
+                                   </span>
+                                </div>
+                             </div>
+                           </>
+                         )}
                        </div>
 
                      );

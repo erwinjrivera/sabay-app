@@ -42,7 +42,7 @@ const passengerIcon = new L.DivIcon({
 
 const getDriverStartIcon = (type) => new L.DivIcon({
   className: 'custom-pass-start-dot',
-  html: `<div style="width:16px;height:16px;background:${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${type === 'confirmed' ? 'rgba(40,236,51,0.6)' : type === 'match' ? 'rgba(0,176,240,0.6)' : type === 'offered' ? 'rgba(255,0,67,0.6)' : type === 'request' ? 'rgba(234,179,8,0.6)' : 'rgba(136,136,136,0.6)'};"></div>`,
+  html: `<div style="width:16px;height:16px;background:${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${type === 'completed' ? 'rgba(156,201,58,0.6)' : type === 'confirmed' ? 'rgba(40,236,51,0.6)' : type === 'match' ? 'rgba(0,176,240,0.6)' : type === 'offered' ? 'rgba(255,0,67,0.6)' : type === 'request' ? 'rgba(234,179,8,0.6)' : 'rgba(136,136,136,0.6)'};"></div>`,
   iconSize: [24, 24],
   iconAnchor: [12, 12]
 });
@@ -56,7 +56,7 @@ const passengerStartIcon = new L.DivIcon({
 
 const getDriverEndIcon = (type) => new L.DivIcon({
   className: 'custom-end-pin',
-  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
+  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
   iconSize: [34, 34],
   iconAnchor: [17, 34],
 });
@@ -70,14 +70,14 @@ const pickupSpotIcon = new L.DivIcon({
 
 const getMeetSpotIcon = (type) => new L.DivIcon({
   className: 'custom-meet-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
+  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
   iconSize: [22, 22],
   iconAnchor: [11, 11]
 });
 
 const getMeetDropSpotIcon = (type) => new L.DivIcon({
   className: 'custom-meet-drop-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
+  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
   iconSize: [22, 22],
   iconAnchor: [11, 11]
 });
@@ -164,6 +164,11 @@ export default function FindMatches() {
                    if (geometryCache.current[req.id]) delete geometryCache.current[req.id];
                    return null;
                }
+           }
+
+           // CRITICAL FIX: Hide all other unrelated active open drivers entirely if this passenger request historically or actively bound itself to someone else natively!
+           if (volatilePassengerStateRef.current?.status !== 'open' && volatilePassengerStateRef.current?.offeredByRideId && volatilePassengerStateRef.current?.offeredByRideId !== req.id) {
+               return null;
            }
 
            let typeStatus = (req.status === 'confirmed' && req.requestedByRideId === ride?.id) ? 'confirmed' : ((req.requestedByPassengerIds || []).includes(ride?.id)) ? 'request' : 'match';
@@ -520,13 +525,13 @@ export default function FindMatches() {
             <Marker position={[passengerTo.lat, passengerTo.lon]} icon={getDriverEndIcon(activeDriver.type)} />
 
             {/* Main passenger transit overlap path (solid Color) */}
-            <Polyline positions={activeDriverRoute} pathOptions={{ color: activeDriver.type === 'confirmed' || activeDriver.type === 'completed' ? '#28ec33' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 6, opacity: 1 }} />
+            <Polyline positions={activeDriverRoute} pathOptions={{ color: activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#28ec33' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 6, opacity: 1 }} />
             
             {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node */}
             {passengerRoute.length > 0 && activeDriver?.meetPickup && (
                <Polyline 
                  positions={activeDriver?.interceptPaths?.pickupPath || [[activeDriver.pickup.lat, activeDriver.pickup.lon], [activeDriver.meetPickup.lat, activeDriver.meetPickup.lon]]} 
-                 pathOptions={{ color: activeDriver.type === 'confirmed' || activeDriver.type === 'completed' ? '#28ec33' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 pathOptions={{ color: activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#28ec33' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
 
@@ -557,7 +562,7 @@ export default function FindMatches() {
             {passengerRoute.length > 0 && activeDriver?.meetDropoff && (
                <Polyline 
                  positions={activeDriver?.interceptPaths?.dropoffPath || [[activeDriver.meetDropoff.lat, activeDriver.meetDropoff.lon], [activeDriver.dropoff.lat, activeDriver.dropoff.lon]]} 
-                 pathOptions={{ color: activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#ea4335' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 pathOptions={{ color: activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#28ec33' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#ea4335' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
 
@@ -721,7 +726,7 @@ export default function FindMatches() {
                </div>
                
                <div style={{ flex: 1 }}>
-                 <p style={{ margin: 0, fontSize: '0.8rem', color: match.type === 'confirmed' || match.type === 'completed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888', fontWeight: 600 }}>
+                 <p style={{ margin: 0, fontSize: '0.8rem', color: match.type === 'completed' ? '#9cc93a' : match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888', fontWeight: 600 }}>
                    {match.time}
                  </p>
                  <h3 style={{ margin: '2px 0', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
@@ -750,7 +755,7 @@ export default function FindMatches() {
                   {match.type === 'match' || match.type === 'offered' || match.type === 'request' || match.type === 'confirmed' || match.type === 'completed' ? (
                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', justifyContent: 'flex-end', marginBottom: '4px' }}>
                         {Array.from({ length: match.seats || 4 }).map((_, i) => (
-                           <User key={i} size={12} fill={match.type === 'confirmed' || match.type === 'completed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} color={match.type === 'confirmed' || match.type === 'completed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} />
+                           <User key={i} size={12} fill={match.type === 'completed' ? '#9cc93a' : match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} color={match.type === 'completed' ? '#9cc93a' : match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} />
                         ))}
                      </div>
                   ) : null}
@@ -769,7 +774,7 @@ export default function FindMatches() {
                    </button>
                    <button 
                      onClick={() => { if(match.type !== 'completed') { setConfirmedMatchToCancel(match.id); setShowCancelConfirmedModal(true); } }}
-                     style={{ flex: 1, padding: '16px', background: '#28ec33', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
+                     style={{ flex: 1, padding: '16px', background: match.type === 'completed' ? '#9cc93a' : '#28ec33', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: match.type === 'completed' ? 'default' : 'pointer' }}>
                      {match.type === 'completed' ? 'Completed Ride' : 'Confirmed'}
                    </button>
                  </>
