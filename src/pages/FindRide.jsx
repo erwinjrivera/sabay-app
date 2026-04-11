@@ -671,14 +671,18 @@ export default function FindRide() {
                  </div>
                  
                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '6px', fontWeight: 500 }}>Note to driver</label>
-                    <input 
-                       type="text" 
-                       placeholder="e.g. Meet me at the lobby"
-                       value={noteToDriver}
-                       onChange={e => setNoteToDriver(e.target.value)}
-                       className="fr-drawer-input"
-                    />
+                     <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#555', marginBottom: '6px', fontWeight: 500 }}>
+                       <span>Note to driver</span>
+                       <span style={{ color: noteToDriver?.length >= 100 ? '#ff0043' : '#999', fontSize: '0.75rem', alignSelf: 'flex-end' }}>{noteToDriver?.length || 0}/100</span>
+                     </label>
+                     <input 
+                        type="text" 
+                        maxLength={100}
+                        placeholder="e.g. Meet me at the lobby"
+                        value={noteToDriver}
+                        onChange={e => setNoteToDriver(e.target.value)}
+                        className="fr-drawer-input"
+                     />
                  </div>
               </div>
 

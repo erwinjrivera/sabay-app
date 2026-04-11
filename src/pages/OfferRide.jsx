@@ -674,14 +674,18 @@ export default function OfferRide() {
                  </div>
                  
                  <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '6px', fontWeight: 500 }}>Driver's note</label>
-                    <input 
-                       type="text" 
-                       placeholder="e.g. I drive a red sedan"
-                       value={driverNote}
-                       onChange={e => setDriverNote(e.target.value)}
-                       className="fr-drawer-input"
-                    />
+                     <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#555', marginBottom: '6px', fontWeight: 500 }}>
+                       <span>Driver's note</span>
+                       <span style={{ color: driverNote?.length >= 100 ? '#ff0043' : '#999', fontSize: '0.75rem', alignSelf: 'flex-end' }}>{driverNote?.length || 0}/100</span>
+                     </label>
+                     <input 
+                        type="text" 
+                        maxLength={100}
+                        placeholder="e.g. I drive a red sedan"
+                        value={driverNote}
+                        onChange={e => setDriverNote(e.target.value)}
+                        className="fr-drawer-input"
+                     />
                  </div>
               </div>
                
