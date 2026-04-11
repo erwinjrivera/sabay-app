@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, MapPin, Clock, User, Car, Search, MoreHorizontal, Check, Edit, Loader2, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
@@ -8,10 +8,11 @@ import dayjs from 'dayjs';
 
 export default function MyRides() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentUser } = useAuth();
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('Pending');
+  const [activeTab, setActiveTab] = useState(location.state?.initialTab || 'Pending');
 
   // Geospatial Euclidean Filter mirroring OfferMatches constraints securely
   const getDistanceKM = (lat1, lon1, lat2, lon2) => {
@@ -323,16 +324,16 @@ export default function MyRides() {
                          onClick={() => {
                            if (isDriver) {
                              if (ride.status === 'in_progress') {
-                               navigate('/active-ride', { state: { ride } });
+                               navigate('/active-ride', { state: { ride, fromTab: activeTab } });
                              } else {
-                               navigate('/offer-matches', { state: { ride } });
+                               navigate('/offer-matches', { state: { ride, fromTab: activeTab } });
                              }
                            } else {
                              const effStatus = ride.computedStatus || ride.status;
                              if ((effStatus === 'confirmed' || effStatus === 'in_progress') && activeTab !== 'History') {
-                               navigate('/passenger-tracking', { state: { ride } });
+                               navigate('/passenger-tracking', { state: { ride, fromTab: activeTab } });
                              } else {
-                               navigate('/find-matches', { state: { ride } });
+                               navigate('/find-matches', { state: { ride, fromTab: activeTab } });
                              }
                            }
                          }}
@@ -480,7 +481,7 @@ export default function MyRides() {
                          ) : (
                            <>
                              <div style={{ width: '100%', height: '0px', borderBottom: '1.5px dashed #ececec' }}></div>
-                             <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ride.status === 'cancelled' ? '#f9f9f9' : '#f0fdf4', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px' }}>
+                             <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ride.status === 'cancelled' ? '#f9f9f9' : '#fff', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                    {ride.status === 'cancelled' && (
                                       <X size={18} color="#888" strokeWidth={3} />

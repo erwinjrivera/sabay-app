@@ -168,7 +168,7 @@ export default function ActiveRide() {
       if (ride?.id) {
           await updateDoc(doc(db, 'rideOffers', ride.id), { status: isGlobalCancelled ? 'cancelled' : 'completed' });
       }
-      navigate('/my-rides');
+      navigate('/my-rides', { state: { initialTab: 'History' } });
     } catch (err) { console.error(err); }
   };
 

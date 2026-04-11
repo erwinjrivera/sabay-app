@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2, Play } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, increment, arrayRemove } from 'firebase/firestore';
@@ -112,6 +112,7 @@ export default function OfferMatches() {
   const [activePassengerId, setActivePassengerId] = useState(null);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [isBottomPanelExpanded, setIsBottomPanelExpanded] = useState(false);
+  const [drawerMode, setDrawerMode] = useState('passenger');
   const [rideStatus, setRideStatus] = useState(ride?.status || 'open');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showRetractOfferModal, setShowRetractOfferModal] = useState(false);
@@ -409,7 +410,7 @@ export default function OfferMatches() {
     }
   };
 
-  const confirmedPassengers = matches.filter(m => m.type === 'confirmed');
+  const confirmedPassengers = matches.filter(m => m.type === 'confirmed' || m.type === 'completed');
 
   return (
     <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
@@ -514,7 +515,7 @@ export default function OfferMatches() {
           {/* Dark Navbar */}
           <div style={{ padding: '1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', color: '#fff' }}>
             <div style={{ display: 'flex', gap: '1rem' }}>
-              <button onClick={() => navigate('/my-rides')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+              <button onClick={() => navigate('/my-rides', { state: { initialTab: location.state?.fromTab || 'Pending' } })} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
                 <ArrowLeft size={24} />
               </button>
               <div>
@@ -525,17 +526,16 @@ export default function OfferMatches() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <div style={{ display: 'flex', gap: '2px' }}>
                 {Array.from({ length: ride?.seats || 4 }).map((_, i) => {
-                   const absoluteConfirmedCount = matches.filter(m => m.type === 'confirmed').reduce((acc, m) => acc + (parseInt(m.seats) || 1), 0);
+                   const absoluteConfirmedCount = matches.filter(m => m.type === 'confirmed' || m.type === 'completed').reduce((acc, m) => acc + (parseInt(m.seats) || 1), 0);
                    const isTaken = i < absoluteConfirmedCount;
                    return (
                      <User key={i} size={16} color={isTaken ? '#9cc93a' : '#ccc'} fill={isTaken ? '#9cc93a' : '#ccc'} />
                    );
                 })}
               </div>
-              {/* 
-              <MessageCircle size={20} />
-              <MoreHorizontal size={20} /> 
-              */}
+              <button onClick={() => { setDrawerMode('ride'); setIsBottomPanelExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: 4, transition: 'background 0.3s' }}>
+                <Play size={16} fill="#fff" style={{ marginLeft: 2 }} />
+              </button>
             </div>
           </div>
 
@@ -748,6 +748,23 @@ export default function OfferMatches() {
         )))}
       </div>
 
+      {/* DRAWER BACKDROP OVERLAY */}
+      <div 
+        onClick={() => setIsBottomPanelExpanded(false)}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0,0,0,0.5)',
+          zIndex: 1500,
+          opacity: isBottomPanelExpanded ? 1 : 0,
+          pointerEvents: isBottomPanelExpanded ? 'auto' : 'none',
+          transition: 'opacity 0.3s ease-in-out'
+        }}
+      />
+
       {/* BOTTOM ACTION PANEL PULL-UP OVERLAY */}
       <div 
         style={{
@@ -771,70 +788,129 @@ export default function OfferMatches() {
       >
         {/* Drag Handle Top Bar */}
         <div 
-          onClick={() => setIsBottomPanelExpanded(!isBottomPanelExpanded)}
+          onClick={() => { setDrawerMode('passenger'); setIsBottomPanelExpanded(!isBottomPanelExpanded); }}
           style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}
         >
            {/* Center Pill */}
            <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s' }}></div>
            
            {/* Top Right Close Applet */}
-           <div style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s' }}>
+           <div onClick={(e) => { e.stopPropagation(); setIsBottomPanelExpanded(false); }} style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', cursor: 'pointer' }}>
              <X size={24} color="#555" strokeWidth={2.5} />
            </div>
         </div>
 
         {/* Content (only visible fully when expanded) */}
-        <div style={{ width: '100%', marginTop: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
-           <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>Ready to start your ride?</h3>
-           {confirmedPassengers.length === 0 ? (
-             <p style={{ margin: '0 0 24px', color: '#888', fontSize: '0.9rem' }}>You don't have confirmed passengers yet.</p>
-           ) : (
-             <p style={{ margin: '0 0 24px', color: '#888', fontSize: '0.9rem' }}>You have {confirmedPassengers.length} confirmed passenger(s).</p>
-           )}
-           <div style={{ marginBottom: confirmedPassengers.length === 0 ? '0' : '24px' }}></div>
-           
-           {/* Confirmed Passenger Avatars Overlap */}
-           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '32px' }}>
-              {confirmedPassengers.length > 0 ? (
-                 confirmedPassengers.map((cp, idx) => (
-                    <div key={cp.id} style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', marginLeft: idx > 0 ? '-16px' : 0, overflow: 'hidden', background: '#e0e0e0', zIndex: 10 - idx }}>
-                        <img src={cp.profilePic} alt="confirmed user" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    </div>
-                 ))
-              ) : (
-                 // Fallback Mock Display if none confirmed identically matching blue generic avatars precisely
+        <div style={{ width: '100%', marginTop: '24px', display: 'flex', flexDirection: 'column', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
+           <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '24px' }}>
+              {drawerMode === 'ride' ? (
+                 <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                    <h3 style={{ margin: '0 0 16px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
+                      {rideStatus === 'completed' ? 'This ride has gracefully concluded.' : 'Ready to start your ride?'}
+                    </h3>
+                    
+                    {rideStatus === 'completed' ? (
+                       <p style={{ margin: 0, color: '#888', fontSize: '0.9rem' }}>
+                         Your historical records are stored permanently.
+                       </p>
+                    ) : (
+                       <p style={{ margin: '0 0 24px', color: '#888', fontSize: '0.9rem' }}>
+                         {confirmedPassengers.length === 0 
+                           ? "You don't have any confirmed passenger yet."
+                           : `You have ${confirmedPassengers.length} confirmed passenger(s).`}
+                       </p>
+                    )}
+
+                    {rideStatus !== 'completed' && (
+                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px' }}>
+                          {confirmedPassengers.length > 0 ? (
+                             confirmedPassengers.map((cp, idx) => (
+                                <div key={cp.id} style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', marginLeft: idx > 0 ? '-16px' : 0, overflow: 'hidden', background: '#e0e0e0', zIndex: 10 - idx }}>
+                                    <img src={cp.profilePic} alt="confirmed user" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                </div>
+                             ))
+                          ) : (
+                             <>
+                                <div style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', background: '#dbdbdb', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                   <User size={28} color="#fff" strokeWidth={2.5} />
+                                </div>
+                                <div style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', marginLeft: '-20px', background: '#dbdbdb', zIndex: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                   <User size={28} color="#fff" strokeWidth={2.5} />
+                                </div>
+                             </>
+                          )}
+                       </div>
+                    )}
+                 </div>
+              ) : activePassenger ? (
                  <>
-                    <div style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', background: '#dbdbdb', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                       <User size={28} color="#fff" strokeWidth={2.5} />
-                    </div>
-                    <div style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', marginLeft: '-20px', background: '#dbdbdb', zIndex: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                       <User size={28} color="#fff" strokeWidth={2.5} />
-                    </div>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                     <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0 }}>
+                       {activePassenger.profilePic ? (
+                          <img src={activePassenger.profilePic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="pass" />
+                       ) : (
+                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ccc' }}>
+                             <User size={30} color="#fff" />
+                          </div>
+                       )}
+                     </div>
+                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                       <h3 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>{activePassenger.name}</h3>
+                       <p style={{ margin: 0, fontSize: '0.9rem', color: '#555', fontWeight: 600 }}>{activePassenger.rawRequest?.date ? dayjs(activePassenger.rawRequest.date).format('MMM. D') : 'Unknown Date'} • {activePassenger.time} • {activePassenger.seats} Seat{activePassenger.seats > 1 ? 's' : ''}</p>
+                     </div>
+                   </div>
+
+                   <p style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#444', fontStyle: 'italic', background: '#fff', padding: '12px', borderRadius: '8px', borderLeft: `4px solid ${activePassenger.type === 'completed' || activePassenger.type === 'confirmed' ? '#9cc93a' : '#00b0f0'}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                     "{activePassenger.rawRequest?.note || 'No additional note provided.'}"
+                   </p>
+
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', flexShrink: 0 }} />
+                        <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activePassenger.rawRequest?.from?.address || 'Unknown Pickup'}</span>
+                     </div>
+                     <div style={{ borderLeft: '2px dashed #ccc', marginLeft: '4px', paddingLeft: '11px', height: '10px' }}></div>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#888', flexShrink: 0 }} />
+                        <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activePassenger.rawRequest?.to?.address || 'Unknown Dropoff'}</span>
+                     </div>
+                   </div>
                  </>
+              ) : (
+                 <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                    <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
+                      Passenger Overlay
+                    </h3>
+                    <p style={{ margin: 0, color: '#888', fontSize: '0.9rem' }}>No active passenger overlay.</p>
+                 </div>
               )}
            </div>
 
            {/* Buttons */}
-           <button 
-             onClick={() => setShowCancelModal(true)}
-             style={{ width: '100%', padding: '16px', background: '#dbdbdb', border: 'none', borderRadius: '8px', color: '#555', fontWeight: 700, fontSize: '1rem', marginBottom: '16px', cursor: 'pointer' }}
-           >
-             Cancel Ride
-           </button>
-           {rideStatus === 'in_progress' ? (
-             <button 
-               onClick={() => navigate('/active-ride', { state: { ride: { ...ride, status: 'in_progress' } } })}
-               style={{ width: '100%', padding: '16px', background: '#9cc93a', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
-             >
-               Active (go to Live Tracking)
-             </button>
-           ) : (
-             <button 
-               onClick={() => setShowStartRideModal(true)}
-               style={{ width: '100%', padding: '16px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
-             >
-               Start Ride
-             </button>
+           {drawerMode === 'ride' && rideStatus !== 'completed' && (
+             <>
+               <button 
+                 onClick={() => setShowCancelModal(true)}
+                 style={{ width: '100%', padding: '16px', background: '#dbdbdb', border: 'none', borderRadius: '8px', color: '#555', fontWeight: 700, fontSize: '1rem', marginBottom: '16px', cursor: 'pointer' }}
+               >
+                 Cancel Carpool
+               </button>
+               {rideStatus === 'in_progress' ? (
+                 <button 
+                   onClick={() => navigate('/active-ride', { state: { ride: { ...ride, status: 'in_progress' } } })}
+                   style={{ width: '100%', padding: '16px', background: '#9cc93a', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+                 >
+                   Active (go to Live Tracking)
+                 </button>
+               ) : (
+                 <button 
+                   onClick={() => setShowStartRideModal(true)}
+                   style={{ width: '100%', padding: '16px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+                 >
+                   Start Ride
+                 </button>
+               )}
+             </>
            )}
         </div>
       </div>
@@ -890,15 +966,15 @@ export default function OfferMatches() {
               <X size={24} strokeWidth={3} />
             </div>
             
-            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Cancel this ride?</h3>
-            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>Are you sure you want to cancel this ride offer? This action cannot be undone.</p>
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Cancel this Carpool?</h3>
+            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>Are you sure you want to cancel this carpool offer? This action cannot be undone.</p>
             
             <div style={{ display: 'flex', gap: '12px' }}>
               <button 
                 onClick={() => setShowCancelModal(false)}
                 style={{ flex: 1, padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#444', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
               >
-                Keep Ride
+                Keep
               </button>
               <button 
                 onClick={async () => {
