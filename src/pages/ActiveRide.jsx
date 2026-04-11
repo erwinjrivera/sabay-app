@@ -7,6 +7,7 @@ import { ArrowLeft, User, List, Star, Navigation, MapPin, MessageCircle, X, Chec
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, setDoc, increment, deleteField } from 'firebase/firestore';
+import { Geolocation } from '@capacitor/geolocation';
 import SwipeButton from '../components/SwipeButton';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -20,6 +21,15 @@ function getDistanceKM(lat1, lon1, lat2, lon2) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
   return R * c;
 }
+
+const getInitials = (nameStr, defaultChar = 'U') => {
+  if (!nameStr) return defaultChar;
+  const parts = nameStr.trim().split(' ').filter(Boolean);
+  if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return nameStr.substring(0, 2).toUpperCase();
+};
 
 function getBearing(lat1, lon1, lat2, lon2) {
   const toRad = (deg) => (deg * Math.PI) / 180;
@@ -66,7 +76,7 @@ const driverStartIcon = new L.DivIcon({
 
 const getPassengerStartIcon = (color = '#00b0f0') => new L.DivIcon({
   className: 'custom-pass-start-dot',
-  html: `<div style="width:16px;height:16px;background:${color};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${color === '#28ec33' ? 'rgba(40,236,51,0.6)' : 'rgba(0,176,240,0.6)'};"></div>`,
+  html: `<div style="width:16px;height:16px;background:${color};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${color === '#9cc93a' ? 'rgba(156,201,58,0.6)' : 'rgba(0,176,240,0.6)'};"></div>`,
   iconSize: [24, 24],
   iconAnchor: [12, 12]
 });
@@ -187,22 +197,51 @@ export default function ActiveRide() {
   };
 
   useEffect(() => {
-    if ("geolocation" in navigator) {
-      const watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          setCurrentLocation({
-            lat: position.coords.latitude,
-            lon: position.coords.longitude
-          });
-        },
-        (error) => {
-          console.error("Error watching position", error);
-        },
-        { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
-      );
-      return () => navigator.geolocation.clearWatch(watchId);
-    }
-  }, []);
+    let watchId = null;
+
+    const startTracking = async () => {
+      try {
+        const permissions = await Geolocation.checkPermissions();
+        if (permissions.location !== 'granted') {
+           await Geolocation.requestPermissions();
+        }
+
+        watchId = await Geolocation.watchPosition(
+          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
+          async (position, err) => {
+            if (position && !err) {
+              const lat = position.coords.latitude;
+              const lon = position.coords.longitude;
+              const heading = position.coords.heading;
+              
+              setCurrentLocation({ lat, lon, heading });
+
+              // Broadcast Live Location to Firestore
+              if (ride?.id) {
+                 try {
+                    // Debounce or raw push? Firestore pricing allows document writes safely at 1Hz, but let's push directly
+                    await updateDoc(doc(db, 'rideOffers', ride.id), {
+                       currentLat: lat,
+                       currentLon: lon,
+                       currentHeading: heading,
+                       lastLocationUpdate: new Date().toISOString()
+                    });
+                 } catch(err) { console.error("Broadcast failed:", err); }
+              }
+            }
+          }
+        );
+      } catch(err) {
+        console.error("Capacitor Tracking Error:", err);
+      }
+    };
+
+    startTracking();
+
+    return () => {
+      if (watchId) Geolocation.clearWatch({ id: watchId });
+    };
+  }, [ride?.id]);
 
   const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
   const driverTo = ride?.to ? { lat: ride.to.lat, lon: ride.to.lon } : { lat: 14.5547, lon: 121.0244 };
@@ -241,16 +280,17 @@ export default function ActiveRide() {
            const pLat = req.from.lat; const pLon = req.from.lon;
            const dLat = req.to.lat;   const dLon = req.to.lon;
            
-           try {
-              const resPass = await fetch(`https://router.project-osrm.org/route/v1/driving/${pLon},${pLat};${dLon},${dLat}?geometries=geojson&overview=full`);
-              const passData = await resPass.json();
+            try {
+              // 1. Fetch Passenger Route natively
+              const resP = await fetch(`https://router.project-osrm.org/route/v1/driving/${pLon},${pLat};${dLon},${dLat}?geometries=geojson&overview=full`);
+              const passData = await resP.json();
               if (!passData.routes || passData.routes.length === 0) return null;
               
-              const passRoute = passData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-              
-              // Find intersections! Find the points on the passenger route natively mapping overlaps
+              const passengerRoute = passData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+
+              // 2. Compute exact overlaps against Driver Route
               let globalMin = Infinity;
-              const distProfile = passRoute.map((ptP, idxP) => {
+              const distProfile = passengerRoute.map((ptP, idxP) => {
                  let minDist = Infinity;
                  let closestDIdx = -1;
                  driverRoute.forEach((ptD, idxD) => {
@@ -262,52 +302,57 @@ export default function ActiveRide() {
               });
 
               const overlapThreshold = Math.max(0.04, globalMin + 0.02);
-              
               const overlaps = distProfile
                  .filter(pt => pt.minDist <= overlapThreshold)
                  .map(pt => ({ passIdx: pt.passIdx, driverIdx: pt.closestDIdx }));
 
-              // Process match variables
               let pickupIdx = -1, dropIdx = -1, meetPickup = null, meetDropoff = null;
-              let interceptPaths = { pickupPath: [], dropoffPath: [] };
-              
-              // Pre-calculate absolute Euclidean nearest neighbors globally for Disjoint Route Fallbacks
-              let minOriginD = Infinity, euclidPickupIdx = -1;
-              let minDestD = Infinity, euclidDropIdx = -1;
-              passRoute.forEach((pt, idx) => {
-                  const distP = getDistanceKM(pt[0], pt[1], driverFrom.lat, driverFrom.lon);
-                  if (distP < minOriginD) { minOriginD = distP; euclidPickupIdx = idx; }
-                  const distD = getDistanceKM(pt[0], pt[1], driverTo.lat, driverTo.lon);
-                  if (distD < minDestD) { minDestD = distD; euclidDropIdx = idx; }
-              });
+              let reqPickupPath = [], reqDropoffPath = [], dynamicSharedPath = [];
 
               if (overlaps.length > 0) {
                  const minPassOverlap = overlaps.reduce((min, o) => o.passIdx < min.passIdx ? o : min, overlaps[0]);
                  const maxPassOverlap = overlaps.reduce((max, o) => o.passIdx > max.passIdx ? o : max, overlaps[0]);
 
-                 if (minPassOverlap.driverIdx > maxPassOverlap.driverIdx) return null;
+                 if (minPassOverlap.driverIdx > maxPassOverlap.driverIdx) {
+                     pickupIdx = maxPassOverlap.passIdx;
+                     dropIdx = minPassOverlap.passIdx;
+                 } else {
+                     pickupIdx = minPassOverlap.passIdx;
+                     dropIdx = maxPassOverlap.passIdx;
+                 }
 
-                 pickupIdx = minPassOverlap.passIdx;
-                 dropIdx = maxPassOverlap.passIdx;
+                 meetPickup = passengerRoute[pickupIdx];
+                 meetDropoff = passengerRoute[dropIdx];
                  
-                 meetPickup = passRoute[pickupIdx];
-                 meetDropoff = passRoute[dropIdx];
+                 reqPickupPath = passengerRoute.slice(0, pickupIdx + 1);
+                 reqDropoffPath = passengerRoute.slice(dropIdx);
                  
-                 interceptPaths.pickupPath = passRoute.slice(0, pickupIdx + 1);
-                 interceptPaths.dropoffPath = passRoute.slice(dropIdx);
+                 // In driver tracking, the shared path visually is the driver's slice
+                 const dPickIdx = Math.min(minPassOverlap.driverIdx, maxPassOverlap.driverIdx);
+                 const dDropIdx = Math.max(minPassOverlap.driverIdx, maxPassOverlap.driverIdx);
+                 dynamicSharedPath = driverRoute.slice(dPickIdx, dDropIdx + 1);
               } else {
-                 if (minOriginD > 5.0 || minDestD > 5.0) return null; 
+                 let minOriginD = Infinity, driverPickupIdx = 0;
+                 let minDestD = Infinity, driverDropIdx = driverRoute.length - 1;
                  
-                 pickupIdx = euclidPickupIdx;
-                 dropIdx = euclidDropIdx;
-                 if (pickupIdx > dropIdx) dropIdx = pickupIdx;
-                 meetPickup = passRoute[pickupIdx];
-                 meetDropoff = passRoute[dropIdx];
-                 
-                 interceptPaths.pickupPath = passRoute.slice(0, pickupIdx + 1);
-                 interceptPaths.dropoffPath = passRoute.slice(dropIdx);
+                 driverRoute.forEach((pt, idx) => {
+                     const distP = getDistanceKM(pt[0], pt[1], pLat, pLon);
+                     if (distP < minOriginD) { minOriginD = distP; driverPickupIdx = idx; }
+                     const distD = getDistanceKM(pt[0], pt[1], dLat, dLon);
+                     if (distD < minDestD) { minDestD = distD; driverDropIdx = idx; }
+                 });
+
+                 if (driverPickupIdx > driverDropIdx) {
+                     const t = driverPickupIdx; driverPickupIdx = driverDropIdx; driverDropIdx = t;
+                 }
+
+                 meetPickup = driverRoute[driverPickupIdx];
+                 meetDropoff = driverRoute[driverDropIdx];
+                 dynamicSharedPath = driverRoute.slice(driverPickupIdx, driverDropIdx + 1);
+                 reqPickupPath = [ [pLat, pLon], meetPickup ];
+                 reqDropoffPath = [ meetDropoff, [dLat, dLon] ];
               }
-              
+
               const distanceToDriverStart = getDistanceKM(pLat, pLon, driverFrom.lat, driverFrom.lon);
 
               // Pull realtime dynamic users statistics natively
@@ -343,8 +388,8 @@ export default function ActiveRide() {
                  dropoff: { lat: dLat, lon: dLon, address: req.to.address },
                  meetPickup: { lat: meetPickup[0], lon: meetPickup[1] },
                  meetDropoff: { lat: meetDropoff[0], lon: meetDropoff[1] },
-                 interceptPaths,
-                 sharedPath: passRoute.slice(pickupIdx, dropIdx + 1),
+                 interceptPaths: { pickupPath: reqPickupPath, dropoffPath: reqDropoffPath },
+                 sharedPath: dynamicSharedPath,
                  distanceToDriverStart
               };
 
@@ -447,11 +492,12 @@ export default function ActiveRide() {
   const activePassenger = matches.find(m => m.id === activePassengerId);
   const activePassRoute = activePassenger?.sharedPath || [];
   const activePassengerPhase = activePassenger ? (passengerStates[activePassenger.id] || 0) : 0;
-  const activeColor = activePassengerPhase === 2 ? '#28ec33' : '#00b0f0';
+  const activeColor = activePassengerPhase === 2 ? '#9cc93a' : '#00b0f0';
 
   const currentLat = currentLocation ? currentLocation.lat : driverFrom.lat;
   const currentLon = currentLocation ? currentLocation.lon : driverFrom.lon;
-  const currentBearing = getBearing(currentLat, currentLon, driverTo.lat, driverTo.lon);
+  // Fallback to calculated bearing if native heading is null
+  const currentBearing = (currentLocation && currentLocation.heading !== null && currentLocation.heading !== undefined) ? currentLocation.heading : getBearing(currentLat, currentLon, driverTo.lat, driverTo.lon);
 
   return (
     <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
@@ -495,11 +541,21 @@ export default function ActiveRide() {
               <Marker position={[activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]} icon={getMeetSpotIcon(activeColor)}>
                  <Tooltip direction="right" offset={[10, 0]} opacity={1} permanent>
                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                     <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                     <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>
                        {activePassenger.profilePic ? (
-                          <img src={activePassenger.profilePic} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <>
+                             <img 
+                               src={activePassenger.profilePic} 
+                               alt="avatar" 
+                               style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                               onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                             />
+                             <div style={{ display: 'none', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                               {getInitials(activePassenger.name, 'P')}
+                             </div>
+                          </>
                        ) : (
-                          <User size={14} color="#555" />
+                          getInitials(activePassenger.name, 'P')
                        )}
                      </div>
                      <span style={{ fontWeight: 600, color: '#333' }}>Meet around here</span>
@@ -658,7 +714,7 @@ export default function ActiveRide() {
                    </div>
                    
                    <div style={{ flex: 1 }}>
-                     <p style={{ margin: 0, fontSize: '0.8rem', color: phase === 2 ? '#28ec33' : '#00b0f0', fontWeight: 600, transition: 'color 0.3s' }}>
+                     <p style={{ margin: 0, fontSize: '0.8rem', color: phase === 2 ? '#9cc93a' : '#00b0f0', fontWeight: 600, transition: 'color 0.3s' }}>
                        {match.time}
                      </p>
                      <h3 style={{ margin: '2px 0', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
@@ -679,7 +735,7 @@ export default function ActiveRide() {
                    <div style={{ textAlign: 'right' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '2px', justifyContent: 'flex-end', marginBottom: '4px' }}>
                          {Array.from({ length: match.seats || 4 }).map((_, i) => (
-                            <User key={i} size={12} fill={phase === 2 ? '#28ec33' : '#00b0f0'} color={phase === 2 ? '#28ec33' : '#00b0f0'} style={{ transition: 'all 0.3s' }} />
+                            <User key={i} size={12} fill={phase === 2 ? '#9cc93a' : '#00b0f0'} color={phase === 2 ? '#9cc93a' : '#00b0f0'} style={{ transition: 'all 0.3s' }} />
                          ))}
                       </div>
                       <p style={{ margin: 0, fontWeight: 700, fontSize: '1.1rem', color: '#111' }}>{match.price}</p>
@@ -710,7 +766,7 @@ export default function ActiveRide() {
                        {phase === 1 && (
                           <SwipeButton 
                              text="Mark as Complete" 
-                             color="#28ec33" 
+                             color="#9cc93a" 
                              onSwipe={() => handleSwipe(match.id)} 
                              customBorderRadius="0 0 12px 0"
                           />
@@ -718,7 +774,7 @@ export default function ActiveRide() {
                        {phase === 2 && (
                           <SwipeButton 
                              text="Completed Ride" 
-                             color="#28ec33" 
+                             color="#9cc93a" 
                              isCompleted={true}
                              customBorderRadius="0 0 12px 0"
                           />
@@ -852,7 +908,7 @@ export default function ActiveRide() {
       ></div>
       
       <div 
-        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#fff', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', boxShadow: '0 -4px 20px rgba(0,0,0,0.15)', padding: '16px 24px 32px 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
+        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#fff', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', boxShadow: '0 -4px 20px rgba(0,0,0,0.15)', padding: '16px 24px 32px 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
       >
         <div onClick={() => setShowRatingModal(false)} style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
            <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: showRatingModal ? 0 : 1, transition: 'opacity 0.2s' }}></div>

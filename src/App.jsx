@@ -11,6 +11,7 @@ import OfferMatches from './pages/OfferMatches';
 import FindMatches from './pages/FindMatches';
 import MyRides from './pages/MyRides';
 import ActiveRide from './pages/ActiveRide';
+import PassengerTracking from './pages/PassengerTracking';
 import { AuthProvider } from './contexts/AuthContext';
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
           <Route path="/offer-matches" element={<OfferMatches />} />
           <Route path="/find-matches" element={<FindMatches />} />
           <Route path="/active-ride" element={<ActiveRide />} />
+          <Route path="/passenger-tracking" element={<PassengerTracking />} />
           <Route path="/my-rides" element={<MyRides />} />
         </Routes>
       </Router>

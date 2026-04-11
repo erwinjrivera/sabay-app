@@ -147,7 +147,16 @@ export default function MyRides() {
                  matchesFound = eligibleOffers.length;
              }
 
-             return { ...data, collectionType: 'request', passengers, matchesCount: matchesFound };
+             // Compute Active Pass-through: If the driver has actively started the ride, mirror the in_progress status locally to the passenger
+             let computedStatus = data.status;
+             if (data.offeredByRideId && data.status === 'confirmed') {
+                 const linkedDriver = allOffers.find(r => r.id === data.offeredByRideId);
+                 if (linkedDriver && linkedDriver.status === 'in_progress') {
+                     computedStatus = 'in_progress';
+                 }
+             }
+
+             return { ...data, collectionType: 'request', passengers, matchesCount: matchesFound, computedStatus: computedStatus };
         });
 
         const mergedRides = [...rawOffers, ...rawRequests].sort((a, b) => {
@@ -193,7 +202,7 @@ export default function MyRides() {
   };
 
   const filteredRides = rides.filter(ride => {
-     const status = ride.status || 'open';
+     const status = ride.computedStatus || ride.status || 'open';
      if (activeTab === 'Pending') return !['in_progress', 'completed', 'cancelled'].includes(status);
      if (activeTab === 'Active') return status === 'in_progress';
      if (activeTab === 'History') return ['completed', 'cancelled'].includes(status);
@@ -319,7 +328,12 @@ export default function MyRides() {
                                navigate('/offer-matches', { state: { ride } });
                              }
                            } else {
-                             navigate('/find-matches', { state: { ride } });
+                             const effStatus = ride.computedStatus || ride.status;
+                             if ((effStatus === 'confirmed' || effStatus === 'in_progress') && activeTab !== 'History') {
+                               navigate('/passenger-tracking', { state: { ride } });
+                             } else {
+                               navigate('/find-matches', { state: { ride } });
+                             }
                            }
                          }}
                          style={{ 

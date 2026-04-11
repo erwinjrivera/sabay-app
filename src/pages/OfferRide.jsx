@@ -605,6 +605,12 @@ export default function OfferRide() {
             )}
           </div>
 
+          {/* Background Dimmer */}
+          <div 
+            onClick={() => setIsPanelOpen(false)}
+            style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', zIndex: 90, opacity: isPanelOpen ? 1 : 0, transition: 'opacity 0.3s', pointerEvents: isPanelOpen ? 'auto' : 'none' }}
+          ></div>
+
           {/* Bottom Overlay Trigger Area */}
           <div className={"fr-bottom-panel " + (isPanelOpen ? "open" : "")}>
              
