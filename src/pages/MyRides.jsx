@@ -472,9 +472,9 @@ export default function MyRides() {
                            <>
                              <div style={{ width: '100%', height: '0px', borderBottom: '1.5px dashed #ececec' }}></div>
                              <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'center' }}>
-                                  <User size={28} color="#00b0f0" fill="#00b0f0" />
-                                </div>
+                                 <div style={{ display: 'flex', justifyContent: 'center', width: 50, height: 50, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0 }}>
+                                    <img src="/default-avatar.png" alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                                    <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#00b0f0', letterSpacing: '-0.3px', marginBottom: '2px' }}>
                                       {ride.matchesCount || 0} Ride Match{(ride.matchesCount || 0) > 1 ? 'es' : ''}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, MapPin, Navigation, Crosshair, Map, Clock, Calendar, Search, X, MoreHorizontal, Heart } from 'lucide-react';
+import { ArrowLeft, MapPin, Navigation, Crosshair, Map, Clock, Calendar, Search, X, MoreHorizontal, Heart, Users, Minus, Plus } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 /* MUI IMPORTS */
@@ -398,7 +398,7 @@ export default function FindRide() {
                        setActiveField('from');
                        setIsPanelOpen(false);
                     }}
-                    style={{ background: '#f5f5f5', color: '#111', border: activeField === 'from' ? '1px solid #00b0f0' : '1px solid transparent' }}
+                    style={{ background: '#fff', color: '#1e293b', border: activeField === 'from' ? '1px solid #00b0f0' : '1px solid #cbd5e1' }}
                   />
                   {activeField === 'from' && fromLocation && (
                     <button className="fr-clear-btn" onClick={() => setFromLocation('')} style={{ background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
@@ -422,7 +422,7 @@ export default function FindRide() {
                        setActiveField('to');
                        setIsPanelOpen(false);
                     }}
-                    style={{ background: '#f5f5f5', color: '#111', border: activeField === 'to' ? '1px solid #00b0f0' : '1px solid transparent' }}
+                    style={{ background: '#fff', color: '#1e293b', border: activeField === 'to' ? '1px solid #00b0f0' : '1px solid #cbd5e1' }}
                   />
                   {activeField === 'to' && toLocation && (
                     <button className="fr-clear-btn" onClick={() => setToLocation('')} style={{ background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
@@ -629,51 +629,59 @@ export default function FindRide() {
             <div className="fr-panel-content">
               <h3 className="fr-panel-title">Choose date and time</h3>
               
-              <div className="fr-datetime-row">
-                 <MobileDatePicker
-                   label="Date"
-                   value={dateVal}
-                   onChange={(newValue) => setDateVal(newValue)}
-                   disablePast
-                   sx={{ 
-                     background: 'transparent',
-                     '& .MuiOutlinedInput-root': { borderRadius: '16px' } 
-                   }}
-                 />
-                 
-                 <MobileTimePicker
-                   label="Time"
-                   value={timeVal}
-                   onChange={(newValue) => setTimeVal(newValue)}
-                   sx={{ 
-                     background: 'transparent',
-                     '& .MuiOutlinedInput-root': { borderRadius: '16px' } 
-                   }}
-                 />
-              </div>
-
-              <div style={{ marginTop: '1.2rem', marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                 <div>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: '#555', marginBottom: '6px', fontWeight: 500 }}>Number of seats</label>
-                     <input
-                       type="number"
-                       min="1"
-                       max="4"
-                       value={seats} 
-                       onChange={e => {
-                         let val = parseInt(e.target.value, 10);
-                         if (isNaN(val) || val < 1) val = 1;
-                         if (val > 4) val = 4;
-                         setSeats(val);
-                       }}
-                       className="fr-drawer-input"
+              <div className="fr-datetime-row" style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                 <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>Date</label>
+                    <MobileDatePicker
+                      value={dateVal}
+                      onChange={(newValue) => setDateVal(newValue)}
+                      disablePast
+                      slotProps={{
+                         textField: {
+                            sx: {
+                              width: '100%',background: '#fff',borderRadius: '10px',
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: '10px',
+                                '& fieldset': { borderColor: '#cbd5e1 !important', borderWidth: '1px !important', borderRadius: '10px !important' },
+                                '&:hover fieldset': { borderColor: '#cbd5e1 !important' },
+                                '&.Mui-focused fieldset': { borderColor: '#00b0f0 !important', borderWidth: '1px !important' }
+                              },
+                              '& .MuiInputBase-input': { padding: '14px', fontSize: '0.95rem', color: '#1e293b', boxSizing: 'border-box', height: 'auto' }
+                            }
+                         }
+                      }}
                     />
                  </div>
                  
+                 <div style={{ flex: 1 }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>Time</label>
+                    <MobileTimePicker
+                      value={timeVal}
+                      onChange={(newValue) => setTimeVal(newValue)}
+                      slotProps={{
+                         textField: {
+                            sx: {
+                              width: '100%',background: '#fff',borderRadius: '10px',
+                              '& .MuiOutlinedInput-root': {
+                                borderRadius: '10px',
+                                '& fieldset': { borderColor: '#cbd5e1 !important', borderWidth: '1px !important', borderRadius: '10px !important' },
+                                '&:hover fieldset': { borderColor: '#cbd5e1 !important' },
+                                '&.Mui-focused fieldset': { borderColor: '#00b0f0 !important', borderWidth: '1px !important' }
+                              },
+                              '& .MuiInputBase-input': { padding: '14px', fontSize: '0.95rem', color: '#1e293b', boxSizing: 'border-box', height: 'auto' }
+                            }
+                         }
+                      }}
+                    />
+                 </div>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '24px' }}>
+                 
                  <div>
-                     <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', color: '#555', marginBottom: '6px', fontWeight: 500 }}>
+                     <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>
                        <span>Note to driver</span>
-                       <span style={{ color: noteToDriver?.length >= 100 ? '#ff0043' : '#999', fontSize: '0.75rem', alignSelf: 'flex-end' }}>{noteToDriver?.length || 0}/100</span>
+                       <span style={{ color: noteToDriver?.length >= 100 ? '#ff0043' : '#94a3b8', fontSize: '0.75rem', alignSelf: 'flex-end', fontWeight: 500 }}>{noteToDriver?.length || 0}/100</span>
                      </label>
                      <input 
                         type="text" 
@@ -681,9 +689,56 @@ export default function FindRide() {
                         placeholder="e.g. Meet me at the lobby"
                         value={noteToDriver}
                         onChange={e => setNoteToDriver(e.target.value)}
-                        className="fr-drawer-input"
+                        style={{
+                           width: '100%', padding: '14px', borderRadius: '10px',
+                           border: '1px solid #cbd5e1', fontSize: '0.95rem', color: '#1e293b',
+                           outline: 'none', background: '#fff', boxSizing: 'border-box'
+                        }}
                      />
                  </div>
+
+                 <div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', borderRadius: '10px', border: '1px solid #cbd5e1', background: '#fff' }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <Users size={18} color="#94a3b8" />
+                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>Passengers</span>
+                       </div>
+                       
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                          <button 
+                             onClick={() => setSeats(Math.max(1, (parseInt(seats) || 3) - 1).toString())}
+                             disabled={(parseInt(seats) || 3) <= 1}
+                             style={{ 
+                                width: 32, height: 32, borderRadius: '6px', 
+                                background: (parseInt(seats) || 3) <= 1 ? '#e2e8f0' : '#cbd5e1', 
+                                border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                cursor: (parseInt(seats) || 3) <= 1 ? 'not-allowed' : 'pointer',
+                                transition: 'background 0.2s'
+                             }}>
+                             <Minus size={16} color={(parseInt(seats) || 3) <= 1 ? '#fff' : '#475569'} />
+                          </button>
+                          
+                          <span style={{ fontSize: '1.05rem', fontWeight: 500, color: '#1e293b', width: '20px', textAlign: 'center' }}>
+                             {parseInt(seats) || 3}
+                          </span>
+                          
+                          <button 
+                             onClick={() => setSeats((Math.min(4, (parseInt(seats) || 3) + 1)).toString())}
+                             style={{ 
+                                width: 32, height: 32, borderRadius: '6px', 
+                                background: '#334155', border: 'none', display: 'flex', 
+                                alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                                transition: 'background 0.2s'
+                             }}
+                             onMouseOver={(e) => e.currentTarget.style.background = '#0f172a'}
+                             onMouseOut={(e) => e.currentTarget.style.background = '#334155'}
+                          >
+                             <Plus size={16} color="#fff" />
+                          </button>
+                       </div>
+                    </div>
+                 </div>
+
               </div>
 
                <button 

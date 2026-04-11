@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, Search, Car } from 'lucide-react';
+import { Menu, Search, Car, List } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import MapBackground from '../components/MapBackground';
 import Sidebar from '../components/Sidebar';
@@ -18,9 +18,7 @@ export default function Home() {
 
   const handleProfileClick = () => {
     if (currentUser) {
-      if (window.confirm("Do you want to sign out?")) {
-        logout();
-      }
+      navigate('/profile');
     } else {
       navigate('/login');
     }
@@ -31,10 +29,7 @@ export default function Home() {
       <MapBackground />
 
       <div className="top-bar">
-        <button className="icon-btn" onClick={() => setSidebarOpen(true)}>
-          <Menu size={24} color="#555" />
-        </button>
-        <button className="profile-btn" onClick={handleProfileClick}>
+        <button className="profile-btn" onClick={handleProfileClick} style={{ marginLeft: 'auto' }}>
           {currentUser && currentUser.photoURL ? (
             <img src={currentUser.photoURL} alt="Profile" className="profile-img" />
           ) : (
@@ -58,6 +53,30 @@ export default function Home() {
           Offer a Ride
         </button>
       </div>
+
+      <div style={{ position: 'absolute', bottom: '24px', left: 0, width: '100%', textAlign: 'center', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <span style={{ fontSize: '0.80rem', color: '#64748b' }}>
+          By using Sabay, you agree to our 
+        </span>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
+           <button onClick={() => navigate('/terms-of-use')} style={{ background: 'transparent', border: 'none', color: '#00b0f0', fontWeight: 600, fontSize: '0.80rem', cursor: 'pointer', padding: 0 }}>Terms of Use</button>
+           <span style={{ color: '#cbd5e1', fontSize: '0.80rem' }}>|</span>
+           <button onClick={() => navigate('/privacy-policy')} style={{ background: 'transparent', border: 'none', color: '#00b0f0', fontWeight: 600, fontSize: '0.80rem', cursor: 'pointer', padding: 0 }}>Privacy Policy</button>
+        </div>
+      </div>
+
+      {/* FLOATING ACTION BUTTON - BOTTOM RIGHT */}
+      <button 
+        className="icon-btn" 
+        onClick={() => navigate('/my-rides')}
+        style={{ 
+          position: 'absolute', bottom: '80px', right: '20px', zIndex: 20, 
+          background: '#fff', borderRadius: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          width: '48px', height: '48px'
+        }}
+      >
+        <List size={22} color="#1e293b" />
+      </button>
 
       <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
     </div>

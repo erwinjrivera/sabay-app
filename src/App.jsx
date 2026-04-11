@@ -12,6 +12,9 @@ import FindMatches from './pages/FindMatches';
 import MyRides from './pages/MyRides';
 import ActiveRide from './pages/ActiveRide';
 import PassengerTracking from './pages/PassengerTracking';
+import Profile from './pages/Profile';
+import TermsOfUse from './pages/TermsOfUse';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import { AuthProvider } from './contexts/AuthContext';
 
 function App() {
@@ -31,6 +34,9 @@ function App() {
           <Route path="/active-ride" element={<ActiveRide />} />
           <Route path="/passenger-tracking" element={<PassengerTracking />} />
           <Route path="/my-rides" element={<MyRides />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/terms-of-use" element={<TermsOfUse />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
         </Routes>
       </Router>
     </AuthProvider>
