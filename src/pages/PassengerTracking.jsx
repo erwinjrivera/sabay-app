@@ -29,7 +29,7 @@ const getInitials = (nameStr, defaultChar = 'U') => {
 };
 
 // Icons
-const getDriverCarIcon = (bearing, photoURL, name) => {
+const getDriverCarIcon = (bearing, photoURL, name, themeColor = '#00b0f0') => {
   const initials = getInitials(name, 'D');
   const innerContent = photoURL 
     ? `<img src="${photoURL}" onerror="this.onerror=null; this.outerHTML='<div style=\\'width:34px;height:34px;border-radius:50%;background:#ccc;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;color:#fff;border:2px solid #fff;transform:rotate(${ -135 - (bearing || 0) }deg);\\'>${initials}</div>';" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #fff;transform:rotate(${ -135 - (bearing || 0) }deg);background:#ccc;" />` 
@@ -38,7 +38,7 @@ const getDriverCarIcon = (bearing, photoURL, name) => {
   return new L.DivIcon({
     className: 'custom-driver-car',
     html: `<div style="width:50px;height:50px;display:flex;align-items:center;justify-content:center;position:relative; transform: rotate(${bearing || 0}deg); transition: transform 1s ease-out;">
-             <div style="position:absolute;width:40px;height:40px;background:#ff0043;border-radius:50% 50% 50% 0;transform:rotate(135deg);box-shadow:0 4px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
+             <div style="position:absolute;width:40px;height:40px;background:${themeColor};border-radius:50% 50% 50% 0;transform:rotate(135deg);box-shadow:0 4px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
                 ${innerContent}
              </div>
            </div>`,
@@ -117,6 +117,7 @@ export default function PassengerTracking() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [panToCar, setPanToCar] = useState(false);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
+  const [isBottomPanelExpanded, setIsBottomPanelExpanded] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [tempRating, setTempRating] = useState(0);
   const [hasRated, setHasRated] = useState(passengerRequest?.passengerRatedDriver || false);
@@ -147,10 +148,6 @@ export default function PassengerTracking() {
          if (rideDoc.exists()) {
              const data = rideDoc.data();
              setDriverRide({ id: rideDoc.id, ...data });
-             
-             if (data.status === 'cancelled') {
-                 navigate('/my-rides', { replace: true });
-             }
 
              if (!driverProfile && data.userId) {
                  const uSnap = await getDoc(doc(db, 'users', data.userId));
@@ -290,12 +287,13 @@ export default function PassengerTracking() {
   const driverLiveBearing = driverRide.currentHeading || 0;
 
   const isRideCompleted = driverRide?.status === 'completed' || passengerState?.status === 'completed';
-  const activeColor = isRideCompleted ? '#9cc93a' : '#00b0f0';
+  const isRideCancelled = !isRideCompleted && (driverRide?.status === 'cancelled' || passengerState?.status === 'cancelled');
+  const activeColor = isRideCancelled ? '#888' : (isRideCompleted ? '#9cc93a' : '#00b0f0');
 
-  let statusText = isRideCompleted ? "Ride Completed" : "Driver is on their way";
-  let statusSubtext = isRideCompleted ? "You've successfully reached your destination." : "Navigating to your pickup location";
+  let statusText = isRideCancelled ? "Ride Cancelled" : (isRideCompleted ? "Ride Completed" : "Driver is on their way");
+  let statusSubtext = isRideCancelled ? "The driver has aborted the carpool." : (isRideCompleted ? "You've successfully reached your destination." : "Navigating to your pickup location");
   
-  if (passengerState.phase === 1 && !isRideCompleted) {
+  if (passengerState.phase === 1 && !isRideCompleted && !isRideCancelled) {
       statusText = "Heading to Drop-off";
       statusSubtext = "You are in the car.";
   }
@@ -328,16 +326,20 @@ export default function PassengerTracking() {
            <Polyline positions={driverRoute} pathOptions={{ color: '#555', weight: 5, opacity: 0.5 }} />
         )}
 
+        {passengerRoute.length > 0 && (
+           <>
+             <Polyline positions={passengerRoute} pathOptions={{ color: activeColor, weight: 6, opacity: 0.8 }} />
+             <Marker position={[passengerRequest.from.lat, passengerRequest.from.lon]} icon={getPassengerStartIcon(activeColor)} />
+             <Marker position={[passengerRequest.to.lat, passengerRequest.to.lon]} icon={getPassengerEndIcon(activeColor)} />
+           </>
+        )}
+
         {sharedPath.length > 0 && (
            <Polyline positions={sharedPath} pathOptions={{ color: activeColor, weight: 6, opacity: 1 }} />
         )}
 
         {/* Driver End Marker */}
         <Marker position={[driverRide.to.lat, driverRide.to.lon]} icon={getDriverEndIcon()} />
-
-        {/* Passenger Origin/Dest Markers */}
-        <Marker position={[passengerRequest.from.lat, passengerRequest.from.lon]} icon={getPassengerStartIcon(activeColor)} />
-        <Marker position={[passengerRequest.to.lat, passengerRequest.to.lon]} icon={getPassengerEndIcon(activeColor)} />
 
         {/* Meet and Dropoff Intercepts */}
         {intercepts && (
@@ -368,7 +370,7 @@ export default function PassengerTracking() {
         )}
 
         {/* Real-time driver teardrop map marker */}
-        <Marker position={[driverLiveLat, driverLiveLon]} icon={getDriverCarIcon(driverLiveBearing, targetPhotoURL, targetName)} zIndexOffset={100} />
+        <Marker position={[driverLiveLat, driverLiveLon]} icon={getDriverCarIcon(driverLiveBearing, targetPhotoURL, targetName, activeColor)} zIndexOffset={100} />
 
         <MapAdjuster route1={driverRoute} centerOnLoc={panToCar ? { lat: driverLiveLat, lon: driverLiveLon } : null} />
       </MapContainer>
@@ -378,14 +380,14 @@ export default function PassengerTracking() {
         onClick={() => { setPanToCar(true); setTimeout(() => setPanToCar(false), 1000); }} 
         style={{ position: 'absolute', bottom: '260px', right: '20px', background: '#fff', border: 'none', borderRadius: '50%', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000 }}
       >
-         <Navigation size={22} color="#00b0f0" fill="#00b0f0" />
+         <Navigation size={22} color={activeColor} fill={activeColor} />
       </button>
 
       {/* TOP HEADER */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
         <div style={{ background: 'rgba(40,45,50,0.95)', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
           <div style={{ padding: '1rem', display: 'flex', alignItems: 'center', color: '#fff' }}>
-            <button onClick={() => navigate('/my-rides')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, marginRight: '1rem' }}>
+            <button onClick={() => navigate('/my-rides', { state: { initialTab: location.state?.fromTab || location.state?.initialTab || 'Active' } })} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, marginRight: '1rem' }}>
               <ArrowLeft size={24} />
             </button>
             <div>
@@ -437,8 +439,10 @@ export default function PassengerTracking() {
 
       {/* BOTTOM CARD HUD */}
       <div style={{ 
-          position: 'absolute', bottom: '24px', left: 0, width: '100%', 
-          display: 'flex', justifyContent: 'center', zIndex: 1000 
+          position: 'absolute', bottom: '48px', left: 0, width: '100%', 
+          display: 'flex', justifyContent: 'center', zIndex: 1000,
+          opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s',
+          pointerEvents: isBottomPanelExpanded ? 'none' : 'auto'
       }}>
           <div style={{ 
               width: '90vw', maxWidth: '400px',
@@ -462,7 +466,7 @@ export default function PassengerTracking() {
                
                <div style={{ flex: 1 }}>
                  <p style={{ margin: 0, fontSize: '0.8rem', color: activeColor, fontWeight: 600 }}>
-                   {driverRide?.time ? dayjs(driverRide.time).format('h:mm A') : dayjs().format('h:mm A')}
+                   {driverRide?.time ? dayjs(driverRide.time).format('h:mma') : dayjs().format('h:mma')}
                  </p>
                  <h3 style={{ margin: '2px 0', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
                    {targetName}
@@ -476,7 +480,6 @@ export default function PassengerTracking() {
                         {targetRating === '0.0' ? 'New' : `${targetRating} (${targetReviews})`}
                     </span>
                  </div>
-                 {/* Removed vehicle specifics per review request */}
                </div>
 
                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -502,13 +505,102 @@ export default function PassengerTracking() {
                   </button>
                )}
                <button 
-                 style={{ flex: 1, padding: '16px', background: activeColor, border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
+                 style={{ flex: 1, padding: '16px', background: activeColor, border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: isRideCancelled ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                >
-                 {!isRideCompleted && <Phone size={18} fill="#fff" />}
-                 {isRideCompleted ? "Completed Ride" : "Call Driver"}
+                 {isRideCancelled ? "Cancelled" : (isRideCompleted ? "Completed Ride" : "In Transit")}
                </button>
             </div>
           </div>
+      </div>
+
+      {/* DRAWER BACKDROP OVERLAY */}
+      <div 
+        onClick={() => setIsBottomPanelExpanded(false)}
+        style={{
+          position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+          background: 'rgba(0,0,0,0.5)', zIndex: 1500,
+          opacity: isBottomPanelExpanded ? 1 : 0, pointerEvents: isBottomPanelExpanded ? 'auto' : 'none',
+          transition: 'opacity 0.3s ease-in-out'
+        }}
+      />
+
+      {/* BOTTOM ACTION PANEL PULL-UP OVERLAY */}
+      <div 
+        style={{
+          position: 'absolute', bottom: 0, left: 0, width: '100%',
+          background: '#f2f4f7', borderTopLeftRadius: '8px', borderTopRightRadius: '8px',
+          boxShadow: isBottomPanelExpanded ? '0 -4px 15px rgba(0,0,0,0.1)' : 'none', padding: '16px 24px 32px 24px', zIndex: 2000,
+          transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))',
+          transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box'
+        }}
+      >
+        <div 
+          onClick={() => setIsBottomPanelExpanded(!isBottomPanelExpanded)}
+          style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}
+        >
+           <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s' }}></div>
+           <div onClick={(e) => { e.stopPropagation(); setIsBottomPanelExpanded(false); }} style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', cursor: 'pointer' }}>
+             <X size={24} color="#555" strokeWidth={2.5} />
+           </div>
+        </div>
+
+        <div style={{ width: '100%', marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
+             <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                  <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {targetPhotoURL ? (
+                       <img src={targetPhotoURL} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="driver" />
+                    ) : (
+                       <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#888' }}>{getInitials(targetName, 'D')}</span>
+                    )}
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{targetName}</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#555' }}>
+                       <span>{driverRide?.time ? dayjs(driverRide.time).format('h:mma') : dayjs().format('h:mma')}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                      {[1, 2, 3, 4, 5].map(starNum => {
+                         const ratingVal = parseFloat(targetRating) || 0;
+                         const isFilled = starNum <= Math.round(ratingVal);
+                         return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
+                      })}
+                      <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{targetRating === '0.0' ? 'New' : targetRating} <span style={{ fontWeight: 500 }}>({targetReviews})</span></span>
+                    </div>
+                  </div>
+                </div>
+
+                {driverRide?.note && driverRide.note.trim() !== '' && (
+                  <p style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#444', fontStyle: 'italic', background: '#fff', padding: '12px', borderRadius: '8px', borderLeft: `4px solid ${activeColor}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    "{driverRide.note}"
+                  </p>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                           {Array.from({ length: targetSeats || 4 }).map((_, i) => (
+                               <User key={i} size={14} fill={activeColor} color={activeColor} />
+                            ))}
+                        </div>
+                        <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{targetSeats} Seat{targetSeats > 1 ? 's' : ''} offering</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', flexShrink: 0, marginTop: '4px' }} />
+                     <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{driverRide?.from?.address || 'Unknown Pickup Address'}</span>
+                  </div>
+                  <div style={{ borderLeft: '2px dashed #ccc', marginLeft: '4px', paddingLeft: '11px', height: '10px' }}></div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#888', flexShrink: 0, marginTop: '4px' }} />
+                     <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{driverRide?.to?.address || 'Unknown Dropoff Address'}</span>
+                  </div>
+                </div>
+             </div>
+        </div>
       </div>
 
       {/* DRIVER ARRIVED MODAL */}
@@ -546,7 +638,7 @@ export default function PassengerTracking() {
       ></div>
       
       <div 
-        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#fff', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', boxShadow: '0 -4px 20px rgba(0,0,0,0.15)', padding: '16px 24px 32px 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
+        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#fff', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', boxShadow: showRatingModal ? '0 -4px 20px rgba(0,0,0,0.15)' : 'none', padding: '16px 24px 32px 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
       >
         <div onClick={() => {
            setShowRatingModal(false);

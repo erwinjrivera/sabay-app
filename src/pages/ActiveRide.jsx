@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { ArrowLeft, User, List, Star, Navigation, MapPin, MessageCircle, X, Check, Loader2 } from 'lucide-react';
+import { ArrowLeft, User, List, Star, Navigation, MapPin, MessageCircle, X, Check, Loader2, Play } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, setDoc, increment, deleteField } from 'firebase/firestore';
@@ -46,7 +46,7 @@ function getBearing(lat1, lon1, lat2, lon2) {
 const getDriverCarIcon = (bearing, photoURL) => new L.DivIcon({
   className: 'custom-driver-car',
   html: `<div style="width:50px;height:50px;display:flex;align-items:center;justify-content:center;position:relative; transform: rotate(${bearing}deg); transition: transform 0.5s ease-out;">
-           <div style="position:absolute;width:40px;height:40px;background:#ff0043;border-radius:50% 50% 50% 0;transform:rotate(135deg);box-shadow:0 4px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
+           <div style="position:absolute;width:40px;height:40px;background:#00b0f0;border-radius:50% 50% 50% 0;transform:rotate(135deg);box-shadow:0 4px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
               <img src="${photoURL || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E"}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #fff;transform:rotate(${ -135 - bearing }deg);background:#ccc;" />
            </div>
          </div>`,
@@ -131,6 +131,7 @@ export default function ActiveRide() {
   const [passengerStates, setPassengerStates] = useState({}); // id -> 0 (arrive), 1 (complete), 2 (completed)
   const [currentLocation, setCurrentLocation] = useState(null);
   const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
+  const [drawerMode, setDrawerMode] = useState('ride');
   const [showCancelAllModal, setShowCancelAllModal] = useState(false);
   const [showCompleteAllModal, setShowCompleteAllModal] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
@@ -146,9 +147,7 @@ export default function ActiveRide() {
           const currentPhase = passengerStates[m.id] || 0;
           if (currentPhase < 2) {
               await updateDoc(doc(db, 'rideRequests', m.id), { 
-                  status: 'open',
-                  offeredByRideId: deleteField(),
-                  phase: deleteField()
+                  status: 'cancelled'
               });
           }
       });
@@ -599,13 +598,28 @@ export default function ActiveRide() {
           {/* Dark Navbar */}
           <div style={{ padding: '1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', color: '#fff' }}>
             <div style={{ display: 'flex', gap: '1rem' }}>
-              <button onClick={() => navigate('/my-rides')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+              <button onClick={() => navigate('/my-rides', { state: { initialTab: location.state?.fromTab || location.state?.initialTab || 'Active' } })} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
                 <ArrowLeft size={24} />
               </button>
               <div>
                 <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>Live Tracking</h2>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>Active Ride</p>
               </div>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ display: 'flex', gap: '2px' }}>
+                {Array.from({ length: ride?.seats || 4 }).map((_, i) => {
+                   const absoluteConfirmedCount = matches.reduce((acc, m) => acc + (parseInt(m.seats) || 1), 0);
+                   const isTaken = i < absoluteConfirmedCount;
+                   return (
+                     <User key={i} size={16} color={isTaken ? '#00b0f0' : '#ccc'} fill={isTaken ? '#00b0f0' : '#ccc'} />
+                   );
+                })}
+              </div>
+               <button onClick={() => { setDrawerMode('ride'); setIsDrawerExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: 'pointer', transition: 'background 0.3s' }}>
+                  <Play size={16} fill="#fff" style={{ marginLeft: 2 }} />
+               </button>
             </div>
           </div>
           
@@ -625,10 +639,10 @@ export default function ActiveRide() {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
                         <span style={{ fontSize: '0.9rem', color: '#fff', lineHeight: '1.3' }}>
-                          {activePassenger?.pickup?.address || 'Passenger Origin'}
+                          {ride?.from?.address || 'Unknown Origin'}
                         </span>
                         <span style={{ fontSize: '0.9rem', color: '#ccc', lineHeight: '1.3' }}>
-                          {activePassenger?.dropoff?.address || 'Passenger Destination'}
+                          {ride?.to?.address || 'Unknown Destination'}
                         </span>
                       </div>
                    </div>
@@ -641,7 +655,7 @@ export default function ActiveRide() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden', flex: 1 }}>
                       <div style={{ minWidth: 8, height: 8, background: '#888', borderRadius: '50%' }}></div>
                       <span style={{ fontSize: '0.9rem', color: '#ccc', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                        {activePassenger?.dropoff?.address || 'Passenger Destination'}
+                        {ride?.to?.address || 'Unknown Destination'}
                       </span>
                     </div>
                     <svg style={{ minWidth: 16, flexShrink: 0, marginLeft: '8px' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2"><path d="m6 9 6 6 6-6"/></svg>
@@ -658,7 +672,7 @@ export default function ActiveRide() {
         onScroll={handleScroll}
         style={{ 
           position: 'absolute', 
-          bottom: '38px', 
+          bottom: '48px', 
           width: '100%', 
           display: 'flex', 
           overflowX: 'auto', 
@@ -766,7 +780,7 @@ export default function ActiveRide() {
                        {phase === 1 && (
                           <SwipeButton 
                              text="Mark as Complete" 
-                             color="#9cc93a" 
+                             color="#00b0f0" 
                              onSwipe={() => handleSwipe(match.id)} 
                              customBorderRadius="0 0 12px 0"
                           />
@@ -799,15 +813,81 @@ export default function ActiveRide() {
       <div 
         style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#f2f4f7', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', boxShadow: '0 -4px 15px rgba(0,0,0,0.1)', padding: '16px 24px 32px 24px', zIndex: 2000, transform: isDrawerExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
       >
-        <div onClick={() => setIsDrawerExpanded(!isDrawerExpanded)} style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+        <div onClick={() => { setDrawerMode('passenger'); setIsDrawerExpanded(!isDrawerExpanded); }} style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
            <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: isDrawerExpanded ? 0 : 1, transition: 'opacity 0.2s' }}></div>
            <div style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isDrawerExpanded ? 1 : 0, transition: 'opacity 0.2s' }}>
              <X size={24} color="#555" strokeWidth={2.5} />
            </div>
         </div>
 
-        <div style={{ width: '100%', marginTop: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isDrawerExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isDrawerExpanded ? 'auto' : 'none' }}>
+        <div style={{ width: '100%', marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isDrawerExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isDrawerExpanded ? 'auto' : 'none' }}>
            {(() => {
+              if (drawerMode === 'passenger' && activePassenger) {
+                 return (
+                 <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                      <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {activePassenger.profilePic ? (
+                           <img src={activePassenger.profilePic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="passenger" />
+                        ) : (
+                           <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#888' }}>{getInitials(activePassenger.name, 'P')}</span>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activePassenger.name}</h2>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#555' }}>
+                           <span>{activePassenger.rawRequest?.date ? dayjs(activePassenger.rawRequest.date).format('h:mma, MMM. D') : activePassenger.time}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                          {[1, 2, 3, 4, 5].map(starNum => {
+                             const ratingVal = parseFloat(activePassenger.rating || '5.0') || 0;
+                             const isFilled = starNum <= Math.round(ratingVal);
+                             return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
+                          })}
+                          <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{activePassenger.rating || '5.0'} <span style={{ fontWeight: 500 }}>({activePassenger.completedRides || '0'})</span></span>
+                        </div>
+                      </div>
+                    </div>
+
+                   {activePassenger.rawRequest?.note && activePassenger.rawRequest.note.trim() !== '' && (
+                     <p style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#444', fontStyle: 'italic', background: '#fff', padding: '12px', borderRadius: '8px', borderLeft: `4px solid ${(passengerStates[activePassenger.id] || 0) === 2 ? '#9cc93a' : '#00b0f0'}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                       "{activePassenger.rawRequest.note}"
+                     </p>
+                   )}
+
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                           {Array.from({ length: activePassenger.seats || 1 }).map((_, i) => (
+                               <User key={i} size={14} fill={(passengerStates[activePassenger.id] || 0) === 2 ? '#9cc93a' : '#00b0f0'} color={(passengerStates[activePassenger.id] || 0) === 2 ? '#9cc93a' : '#00b0f0'} />
+                            ))}
+                        </div>
+                        <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{activePassenger.seats} Seat{activePassenger.seats > 1 ? 's' : ''} requested</span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', flexShrink: 0, marginTop: '4px' }} />
+                         <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activePassenger.pickup?.address || 'Unknown Pickup Address'}</span>
+                      </div>
+                      <div style={{ borderLeft: '2px dashed #ccc', marginLeft: '4px', paddingLeft: '11px', height: '10px' }}></div>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#888', flexShrink: 0, marginTop: '4px' }} />
+                         <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activePassenger.dropoff?.address || 'Unknown Dropoff Address'}</span>
+                      </div>
+                   </div>
+                 </div>
+                 );
+              } else if (drawerMode === 'passenger') {
+                 return (
+                 <div style={{ textAlign: 'center', padding: '24px 0', width: '100%' }}>
+                    <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
+                      Passenger Overlay
+                    </h3>
+                    <p style={{ margin: 0, color: '#888', fontSize: '0.9rem' }}>No active passenger currently selected.</p>
+                 </div>
+                 );
+              }
+
               const allCompleted = matches.length > 0 && matches.every(m => (passengerStates[m.id] || 0) === 2);
               
               const passengerAvatars = (
@@ -850,7 +930,7 @@ export default function ActiveRide() {
                     <button onClick={() => { setIsDrawerExpanded(false); setTimeout(() => setShowCancelAllModal(true), 300); }} style={{ width: '100%', padding: '16px', background: '#dbdbdb', border: 'none', borderRadius: '8px', color: '#555', fontWeight: 700, fontSize: '1rem', marginBottom: '16px', cursor: 'pointer' }}>
                       Cancel Carpool
                     </button>
-                    <button onClick={() => { setIsDrawerExpanded(false); setTimeout(() => setShowCompleteAllModal(true), 300); }} style={{ width: '100%', padding: '16px', background: '#28ec33', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
+                    <button onClick={() => { setIsDrawerExpanded(false); setTimeout(() => setShowCompleteAllModal(true), 300); }} style={{ width: '100%', padding: '16px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
                       Complete Carpool (All Users)
                     </button>
                  </>

@@ -285,7 +285,14 @@ export default function MyRides() {
                    {group.items.map(ride => {
                      const isDriver = ride.collectionType === 'offer';
                      const activeColor = '#00b0f0';
-                     const badgeText = isDriver ? 'Offer Ride' : 'Find Ride';
+                     let badgeText = isDriver ? 'Offer Ride' : 'Find Ride';
+                     if (activeTab !== 'History') {
+                        if (ride.status === 'cancelled') {
+                           badgeText = `${badgeText} (Cancelled)`;
+                        } else if (ride.status === 'completed') {
+                           badgeText = `${badgeText} (Completed)`;
+                        }
+                     }
                      
                      let ribbonLeftColor = isDriver ? '#1fd954' : '#00b0f0';
                      let ribbonRightColor = isDriver ? '#16b944' : '#0090c0';
@@ -483,9 +490,6 @@ export default function MyRides() {
                              <div style={{ width: '100%', height: '0px', borderBottom: '1.5px dashed #ececec' }}></div>
                              <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ride.status === 'cancelled' ? '#f9f9f9' : '#fff', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                   {ride.status === 'cancelled' && (
-                                      <X size={18} color="#888" strokeWidth={3} />
-                                   )}
                                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: ride.status === 'cancelled' ? '#888' : '#9cc93a', letterSpacing: '0.5px' }}>
                                       {ride.status === 'cancelled' ? 'Ride Cancelled' : 'Ride Completed'}
                                    </span>

@@ -211,7 +211,7 @@ export default function LocationDetails() {
            <button 
               className="fr-submit-btn" 
               onClick={handleSelect}
-              style={{ width: '100%', padding: '14px', background: '#00b0f0', color: 'white', borderRadius: '24px', fontSize: '1.1rem', fontWeight: 600, border: 'none', cursor: 'pointer' }}
+              style={{ width: '100%' }}
            >
               Select Location
            </button>

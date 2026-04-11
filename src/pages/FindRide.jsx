@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, MapPin, Crosshair, Map, Clock, Calendar, Search, X, MoreHorizontal, Heart } from 'lucide-react';
+import { ArrowLeft, MapPin, Navigation, Crosshair, Map, Clock, Calendar, Search, X, MoreHorizontal, Heart } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 /* MUI IMPORTS */
@@ -367,16 +367,19 @@ export default function FindRide() {
         <div className="find-ride-container">
           {/* Header & Inputs */}
           <div className="fr-header" style={{ flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', paddingBottom: '16px', width: '100%' }}>
                <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', cursor: 'pointer', padding: 0 }}>
                  <ArrowLeft size={24} color="#fff" />
                </button>
                <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#fff' }}>Find Ride</h1>
             </div>
+          </div>
+
+          <div style={{ background: '#fff', margin: '0', padding: '16px 16px 0', position: 'relative', zIndex: 10 }}>
             <div className="fr-inputs-wrapper">
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '14px', marginRight: '16px', paddingBottom: '6px' }}>
                 <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
-                <div style={{ width: 1, height: '36px', background: '#555', margin: '4px 0' }}></div>
+                <div style={{ width: 1, height: '36px', background: '#ccc', margin: '4px 0' }}></div>
                 <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
               </div>
               <div className="fr-input-fields">
@@ -395,9 +398,10 @@ export default function FindRide() {
                        setActiveField('from');
                        setIsPanelOpen(false);
                     }}
+                    style={{ background: '#f5f5f5', color: '#111', border: activeField === 'from' ? '1px solid #00b0f0' : '1px solid transparent' }}
                   />
                   {activeField === 'from' && fromLocation && (
-                    <button className="fr-clear-btn" onClick={() => setFromLocation('')} style={{ background: '#999', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
+                    <button className="fr-clear-btn" onClick={() => setFromLocation('')} style={{ background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
                       <X size={12} color="#fff" strokeWidth={3} />
                     </button>
                   )}
@@ -418,33 +422,36 @@ export default function FindRide() {
                        setActiveField('to');
                        setIsPanelOpen(false);
                     }}
+                    style={{ background: '#f5f5f5', color: '#111', border: activeField === 'to' ? '1px solid #00b0f0' : '1px solid transparent' }}
                   />
                   {activeField === 'to' && toLocation && (
-                    <button className="fr-clear-btn" onClick={() => setToLocation('')} style={{ background: '#999', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
+                    <button className="fr-clear-btn" onClick={() => setToLocation('')} style={{ background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
                       <X size={12} color="#fff" strokeWidth={3} />
                     </button>
                   )}
                 </div>
               </div>
             </div>
+
+            <div className="fr-tabs" style={{ background: 'transparent', boxShadow: 'none', padding: '16px 0', gap: '1rem', justifyContent: 'flex-start' }}>
+              <button 
+                className={ "fr-tab-btn " + (activeTab === 'recent' ? 'active' : '') }
+                onClick={() => setActiveTab('recent')}
+                style={activeTab === 'recent' ? { background: '#00b0f0', color: '#fff' } : { color: '#777', background: '#f5f5f5' }}
+              >
+                Recent
+              </button>
+              <button 
+                className={ "fr-tab-btn " + (activeTab === 'saved' ? 'active' : '') }
+                onClick={() => setActiveTab('saved')} 
+                style={activeTab === 'saved' ? { background: '#00b0f0', color: '#fff' } : { color: '#777', background: '#f5f5f5' }}
+              >
+                Saved
+              </button>
+            </div>
           </div>
 
-          <div className="fr-tabs">
-            <button 
-              className={ "fr-tab-btn " + (activeTab === 'recent' ? 'active' : '') }
-              onClick={() => setActiveTab('recent')}
-            >
-              Recent
-            </button>
-            <button 
-              className={ "fr-tab-btn " + (activeTab === 'saved' ? 'active' : '') }
-              onClick={() => setActiveTab('saved')} 
-            >
-              Saved
-            </button>
-          </div>
-
-          <div className="fr-list-container">
+          <div className="fr-list-container" style={{ background: '#fff' }}>
             {activeTab === 'recent' && (
               <div className="fr-list">
                 
@@ -454,7 +461,7 @@ export default function FindRide() {
                     {activeField === 'from' && (
                       <div className="fr-list-item" onClick={handleCurrentLocationclick}>
                         <div className="fr-icon-box fr-blue">
-                          <Crosshair size={24} color="#00b0f0" />
+                          <Navigation size={24} color="#00b0f0" />
                         </div>
                         <div className="fr-item-text">
                           <h4>Current location</h4>
@@ -478,7 +485,7 @@ export default function FindRide() {
                         });
                     }}>
                       <div className="fr-icon-box fr-blue">
-                        <Map size={24} color="#00b0f0" fill="#ccf0ff" strokeWidth={1.5} />
+                        <MapPin size={24} color="#00b0f0" />
                       </div>
                       <div className="fr-item-text">
                         <h4>Choose on map</h4>
@@ -496,9 +503,9 @@ export default function FindRide() {
                           {isPlaceSaved(item.title, item.desc) ? (
                              <Heart size={20} color="#00b0f0" />
                           ) : item.type === 'search' ? (
-                            <Search size={20} color="#00b0f0" />
+                            <Search size={20} color="#888" />
                           ) : (
-                            <Clock size={20} color="#00b0f0" />
+                            <Clock size={20} color="#888" />
                           )}
                         </div>
                         <div className="fr-item-text">
@@ -543,7 +550,7 @@ export default function FindRide() {
                 {!isSearching && suggestions.map((item) => (
                   <div key={item.id} className="fr-list-item" onClick={() => handleSelect(item.title, item.desc, item.lat, item.lon)}>
                     <div className="fr-icon-box fr-teal">
-                      <Search size={20} color="#00b0f0" />
+                      <Search size={20} color="#888" />
                     </div>
                     <div className="fr-item-text">
                       <h4>{item.title}</h4>

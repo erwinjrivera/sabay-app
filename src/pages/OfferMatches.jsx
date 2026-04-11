@@ -6,7 +6,7 @@ import L from 'leaflet';
 import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2, Play } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
-import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, increment, arrayRemove } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, increment, arrayRemove, where } from 'firebase/firestore';
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371; // km
@@ -122,6 +122,7 @@ export default function OfferMatches() {
   const [showCancelConfirmedModal, setShowCancelConfirmedModal] = useState(false);
   const [confirmedMatchToCancel, setConfirmedMatchToCancel] = useState(null);
   const [showStartRideModal, setShowStartRideModal] = useState(false);
+  const [showActiveRideWarningModal, setShowActiveRideWarningModal] = useState(false);
 
   // Parse exact driver coordinates bound intrinsically to real ride payloads
   const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
@@ -163,6 +164,9 @@ export default function OfferMatches() {
            
            // CRITICAL FIX: Hide passengers who are already locked into other drivers' carpools natively!
            if (req.status !== 'open' && req.offeredByRideId && req.offeredByRideId !== ride?.id) return null;
+
+           // CRITICAL FIX: Hide passengers who structurally completely cancelled their own ride requests globally!
+           if (req.status === 'cancelled') return null;
 
            // CRITICAL FIX: If the driver's OWN ride is already historically completed or cancelled, do not evaluate or show any new unrelated open passenger requests!
            if ((ride?.status === 'completed' || ride?.status === 'cancelled') && req.offeredByRideId !== ride?.id) return null;
@@ -515,7 +519,7 @@ export default function OfferMatches() {
           {/* Dark Navbar */}
           <div style={{ padding: '1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', color: '#fff' }}>
             <div style={{ display: 'flex', gap: '1rem' }}>
-              <button onClick={() => navigate('/my-rides', { state: { initialTab: location.state?.fromTab || 'Pending' } })} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+              <button onClick={() => navigate('/my-rides', { state: { initialTab: location.state?.fromTab || location.state?.initialTab || 'Pending' } })} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
                 <ArrowLeft size={24} />
               </button>
               <div>
@@ -533,9 +537,11 @@ export default function OfferMatches() {
                    );
                 })}
               </div>
-              <button onClick={() => { setDrawerMode('ride'); setIsBottomPanelExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: 4, transition: 'background 0.3s' }}>
-                <Play size={16} fill="#fff" style={{ marginLeft: 2 }} />
-              </button>
+              {rideStatus !== 'completed' && rideStatus !== 'cancelled' && (
+                <button onClick={() => { setDrawerMode('ride'); setIsBottomPanelExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: 4, transition: 'background 0.3s' }}>
+                  <Play size={16} fill="#fff" style={{ marginLeft: 2 }} />
+                </button>
+              )}
             </div>
           </div>
 
@@ -778,7 +784,7 @@ export default function OfferMatches() {
           boxShadow: '0 -4px 15px rgba(0,0,0,0.1)',
           padding: '16px 24px 32px 24px',
           zIndex: 2000,
-          transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))',
+          transform: isBottomPanelExpanded ? 'translateY(0)' : (matches.length > 0 ? 'translateY(calc(100% - 40px))' : 'translateY(100%)'),
           transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
           display: 'flex',
           flexDirection: 'column',
@@ -801,7 +807,7 @@ export default function OfferMatches() {
         </div>
 
         {/* Content (only visible fully when expanded) */}
-        <div style={{ width: '100%', marginTop: '24px', display: 'flex', flexDirection: 'column', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
+        <div style={{ width: '100%', marginTop: '16px', display: 'flex', flexDirection: 'column', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
            <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '24px' }}>
               {drawerMode === 'ride' ? (
                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
@@ -843,39 +849,58 @@ export default function OfferMatches() {
                     )}
                  </div>
               ) : activePassenger ? (
-                 <>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
-                     <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0 }}>
-                       {activePassenger.profilePic ? (
-                          <img src={activePassenger.profilePic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="pass" />
-                       ) : (
-                          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#ccc' }}>
-                             <User size={30} color="#fff" />
-                          </div>
-                       )}
-                     </div>
-                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                       <h3 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>{activePassenger.name}</h3>
-                       <p style={{ margin: 0, fontSize: '0.9rem', color: '#555', fontWeight: 600 }}>{activePassenger.rawRequest?.date ? dayjs(activePassenger.rawRequest.date).format('MMM. D') : 'Unknown Date'} • {activePassenger.time} • {activePassenger.seats} Seat{activePassenger.seats > 1 ? 's' : ''}</p>
-                     </div>
-                   </div>
+                 <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                      <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {activePassenger.profilePic ? (
+                           <img src={activePassenger.profilePic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="passenger" />
+                        ) : (
+                           <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#888' }}>{activePassenger.name?.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase()}</span>
+                        )}
+                      </div>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activePassenger.name}</h2>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#555' }}>
+                           <span>{activePassenger.rawRequest?.date ? dayjs(activePassenger.rawRequest.date).format('h:mma, MMM. D') : activePassenger.time}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                          {[1, 2, 3, 4, 5].map(starNum => {
+                             const ratingVal = parseFloat(activePassenger.rating || '5.0') || 0;
+                             const isFilled = starNum <= Math.round(ratingVal);
+                             return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
+                          })}
+                          <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{activePassenger.rating || '5.0'} <span style={{ fontWeight: 500 }}>({activePassenger.reviews || '5'})</span></span>
+                        </div>
+                      </div>
+                    </div>
 
-                   <p style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#444', fontStyle: 'italic', background: '#fff', padding: '12px', borderRadius: '8px', borderLeft: `4px solid ${activePassenger.type === 'completed' || activePassenger.type === 'confirmed' ? '#9cc93a' : '#00b0f0'}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                     "{activePassenger.rawRequest?.note || 'No additional note provided.'}"
-                   </p>
+                   {activePassenger.rawRequest?.note && activePassenger.rawRequest.note.trim() !== '' && (
+                     <p style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#444', fontStyle: 'italic', background: '#fff', padding: '12px', borderRadius: '8px', borderLeft: `4px solid ${activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888'}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                       "{activePassenger.rawRequest.note}"
+                     </p>
+                   )}
 
                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', flexShrink: 0 }} />
-                        <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activePassenger.rawRequest?.from?.address || 'Unknown Pickup'}</span>
-                     </div>
-                     <div style={{ borderLeft: '2px dashed #ccc', marginLeft: '4px', paddingLeft: '11px', height: '10px' }}></div>
-                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#888', flexShrink: 0 }} />
-                        <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activePassenger.rawRequest?.to?.address || 'Unknown Dropoff'}</span>
-                     </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                           {Array.from({ length: activePassenger.seats || 1 }).map((_, i) => (
+                               <User key={i} size={14} fill={activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888'} color={activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888'} />
+                            ))}
+                        </div>
+                        <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{activePassenger.seats} Seat{activePassenger.seats > 1 ? 's' : ''} requested</span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', flexShrink: 0, marginTop: '4px' }} />
+                         <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activePassenger.rawRequest?.from?.address || 'Unknown Pickup Address'}</span>
+                      </div>
+                      <div style={{ borderLeft: '2px dashed #ccc', marginLeft: '4px', paddingLeft: '11px', height: '10px' }}></div>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#888', flexShrink: 0, marginTop: '4px' }} />
+                         <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activePassenger.rawRequest?.to?.address || 'Unknown Dropoff Address'}</span>
+                      </div>
                    </div>
-                 </>
+                 </div>
               ) : (
                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
                     <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
@@ -887,7 +912,7 @@ export default function OfferMatches() {
            </div>
 
            {/* Buttons */}
-           {drawerMode === 'ride' && rideStatus !== 'completed' && (
+           {drawerMode === 'ride' && rideStatus !== 'completed' && rideStatus !== 'cancelled' && (
              <>
                <button 
                  onClick={() => setShowCancelModal(true)}
@@ -904,7 +929,24 @@ export default function OfferMatches() {
                  </button>
                ) : (
                  <button 
-                   onClick={() => setShowStartRideModal(true)}
+                   onClick={async () => {
+                      try {
+                         if (!ride || !ride.userId) {
+                            setShowStartRideModal(true);
+                            return;
+                         }
+                         const q = query(collection(db, 'rideOffers'), where('userId', '==', ride.userId), where('status', '==', 'in_progress'));
+                         const snap = await getDocs(q);
+                         if (!snap.empty) {
+                            setShowActiveRideWarningModal(true);
+                            return;
+                         }
+                         setShowStartRideModal(true);
+                      } catch (err) {
+                         console.error(err);
+                         setShowStartRideModal(true); 
+                      }
+                   }}
                    style={{ width: '100%', padding: '16px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
                  >
                    Start Ride
@@ -914,6 +956,27 @@ export default function OfferMatches() {
            )}
         </div>
       </div>
+
+      {/* ACTIVE RIDE WARNING MODAL */}
+      {showActiveRideWarningModal && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fff3cd', color: '#cca000', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <X size={24} strokeWidth={3} />
+            </div>
+            
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Active Ride Exists</h3>
+            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>You already have a carpool formally marked as active. You must definitively complete or cancel your prior tracked ride before starting a new one.</p>
+            
+            <button 
+              onClick={() => setShowActiveRideWarningModal(false)}
+              style={{ width: '100%', padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#444', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
+            >
+              Okay
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* CUSTOM START RIDE MODAL */}
       {showStartRideModal && (

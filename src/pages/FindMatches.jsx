@@ -6,7 +6,7 @@ import L from 'leaflet';
 import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2 } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
-import { collection, query, getDocs, doc, getDoc, updateDoc, onSnapshot, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, getDocs, doc, getDoc, updateDoc, onSnapshot, increment, arrayUnion, arrayRemove, where } from 'firebase/firestore';
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371; // km
@@ -111,6 +111,7 @@ export default function FindMatches() {
   const [activeDriverId, setActiveDriverId] = useState(null);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [isBottomPanelExpanded, setIsBottomPanelExpanded] = useState(false);
+  const [drawerMode, setDrawerMode] = useState('driver');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showRetractRequestModal, setShowRetractRequestModal] = useState(false);
   const [matchToRetract, setMatchToRetract] = useState(null);
@@ -147,6 +148,11 @@ export default function FindMatches() {
   // Matching Engine: Fetch and filter drivers dynamically
   useEffect(() => {
     if (passengerRoute.length === 0) return;
+    if (volatilePassengerStateRef.current?.status === 'cancelled') {
+        setIsLoadingMatches(false);
+        setMatches([]);
+        return;
+    }
 
     setIsLoadingMatches(true);
     const reqRef = collection(db, 'rideOffers');
@@ -182,6 +188,7 @@ export default function FindMatches() {
            
            let ratingParams = req.userRating || '0.0';
            let reviewsParams = req.userReviews || 0;
+           let completedRidesParams = 0;
 
            if (req.userId) {
                try {
@@ -189,7 +196,9 @@ export default function FindMatches() {
                    if (userDocSnap.exists()) {
                        const userData = userDocSnap.data();
                        if (userData.rating) ratingParams = parseFloat(userData.rating).toFixed(1);
-                       if (userData.reviews) reviewsParams = userData.reviews;
+                       if (userData.reviewsCount !== undefined) reviewsParams = userData.reviewsCount;
+                       else if (userData.reviews !== undefined) reviewsParams = userData.reviews;
+                       if (userData.completedRides) completedRidesParams = userData.completedRides;
                    }
                } catch (e) {
                    console.error("Error fetching user rating", e);
@@ -205,6 +214,7 @@ export default function FindMatches() {
                    time: timeParams,
                    rating: ratingParams,
                    reviews: reviewsParams,
+                   completedRides: completedRidesParams,
                    seats: req.seats || 1,
                    seatsTaken: req.seatsTaken || 0,
                    profilePic: req.userProfilePic || '',
@@ -312,6 +322,7 @@ export default function FindMatches() {
                  time: timeParams,
                  rating: ratingParams,
                  reviews: reviewsParams,
+                 completedRides: completedRidesParams,
                  seats: req.seats || 1,
                  seatsTaken: req.seatsTaken || 0,
                  profilePic: req.userProfilePic || '',
@@ -539,9 +550,9 @@ export default function FindMatches() {
         {/* PASSENGER PERSISTENT ROUTE (Visible if NO matches) */}
         {!activeDriverRoute.length && passengerRoute.length > 0 && (
           <>
-            <Polyline positions={passengerRoute} pathOptions={{ color: '#00b0f0', weight: 6, opacity: 0.8 }} />
-            <Marker position={[passengerFrom.lat, passengerFrom.lon]} icon={getDriverStartIcon('match')} />
-            <Marker position={[passengerTo.lat, passengerTo.lon]} icon={getDriverEndIcon('match')} />
+             <Polyline positions={passengerRoute} pathOptions={{ color: volatilePassengerState?.status === 'cancelled' ? '#888' : '#00b0f0', weight: 6, opacity: 0.8 }} />
+             <Marker position={[passengerFrom.lat, passengerFrom.lon]} icon={getDriverStartIcon(volatilePassengerState?.status === 'cancelled' ? 'cancelled' : 'match')} />
+             <Marker position={[passengerTo.lat, passengerTo.lon]} icon={getDriverEndIcon(volatilePassengerState?.status === 'cancelled' ? 'cancelled' : 'match')} />
           </>
         )}
 
@@ -619,13 +630,13 @@ export default function FindMatches() {
           {/* Dark Navbar */}
           <div style={{ padding: '1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', color: '#fff' }}>
             <div style={{ display: 'flex', gap: '1rem' }}>
-              <button onClick={() => navigate('/my-rides')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+              <button onClick={() => navigate('/my-rides', { state: { initialTab: location.state?.fromTab || location.state?.initialTab || 'Pending' } })} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
                 <ArrowLeft size={24} />
               </button>
               <div>
-                <h1 style={{ margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                   <span style={{ fontWeight: 800, fontSize: '1.25rem' }}>Find Ride</span>
-                </h1>
+                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>
+                  {volatilePassengerState?.status === 'cancelled' ? 'Find Ride (Cancelled)' : 'Find Ride'}
+                </h2>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>{rideTimeStr}, {rideDateStr}</p>
               </div>
             </div>
@@ -638,10 +649,11 @@ export default function FindMatches() {
                    );
                 })}
               </div>
-              {/* 
-              <MessageCircle size={20} />
-              <MoreHorizontal size={20} /> 
-              */}
+              {volatilePassengerState?.status !== 'completed' && volatilePassengerState?.status !== 'cancelled' && (
+                <button onClick={() => { setDrawerMode('request'); setIsBottomPanelExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: 4, transition: 'background 0.3s' }}>
+                  <MoreHorizontal size={16} color="#fff" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -722,8 +734,12 @@ export default function FindMatches() {
           </div>
         ) : matches.length === 0 ? (
           <div style={{ background: '#fff', borderRadius: '12px', padding: '30px 20px', textAlign: 'center', width: '90%', margin: '0 auto', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', flexShrink: 0 }}>
-            <p style={{ margin: 0, color: '#555', fontWeight: 600, fontSize: '1.2rem' }}>No Matches Found 😢</p>
-            <p style={{ margin: '8px 0 0', color: '#888', fontSize: '0.9rem', lineHeight: '1.4' }}>We couldn't find any drivers offering a ride along your planned route right now.</p>
+            <p style={{ margin: 0, color: '#555', fontWeight: 600, fontSize: '1.2rem' }}>
+              {volatilePassengerState?.status === 'cancelled' ? 'Ride Cancelled 🚫' : 'No Matches Found 😢'}
+            </p>
+            <p style={{ margin: '8px 0 0', color: '#888', fontSize: '0.9rem', lineHeight: '1.4' }}>
+              {volatilePassengerState?.status === 'cancelled' ? 'This ride request has been officially cancelled.' : "We couldn't find any drivers offering a ride along your planned route right now."}
+            </p>
           </div>
         ) : (
           matches.map((match) => (
@@ -774,7 +790,7 @@ export default function FindMatches() {
                          const isFilled = starNum <= Math.round(ratingVal);
                          return <Star key={starNum} size={12} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
                       })}
-                      <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px' }}>{match.rating} ({match.reviews})</span>
+                      <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px', fontWeight: 600 }}>{match.rating} <span style={{ fontWeight: 400 }}>({match.reviews})</span></span>
                     </div>
                  )}
                </div>
@@ -861,6 +877,23 @@ export default function FindMatches() {
         )))}
       </div>
 
+      {/* DRAWER BACKDROP OVERLAY */}
+      <div 
+        onClick={() => setIsBottomPanelExpanded(false)}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'rgba(0,0,0,0.5)',
+          zIndex: 1500,
+          opacity: isBottomPanelExpanded ? 1 : 0,
+          pointerEvents: isBottomPanelExpanded ? 'auto' : 'none',
+          transition: 'opacity 0.3s ease-in-out'
+        }}
+      />
+
       {/* BOTTOM ACTION PANEL PULL-UP OVERLAY */}
       <div 
         style={{
@@ -874,7 +907,7 @@ export default function FindMatches() {
           boxShadow: '0 -4px 15px rgba(0,0,0,0.1)',
           padding: '16px 24px 32px 24px',
           zIndex: 2000,
-          transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))',
+          transform: isBottomPanelExpanded ? 'translateY(0)' : (matches.length > 0 ? 'translateY(calc(100% - 40px))' : 'translateY(100%)'),
           transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
           display: 'flex',
           flexDirection: 'column',
@@ -884,28 +917,103 @@ export default function FindMatches() {
       >
         {/* Drag Handle Top Bar */}
         <div 
-          onClick={() => setIsBottomPanelExpanded(!isBottomPanelExpanded)}
+          onClick={() => { setDrawerMode('driver'); setIsBottomPanelExpanded(!isBottomPanelExpanded); }}
           style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}
         >
            {/* Center Pill */}
            <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s' }}></div>
            
            {/* Top Right Close Applet */}
-           <div style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s' }}>
+           <div onClick={(e) => { e.stopPropagation(); setIsBottomPanelExpanded(false); }} style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', cursor: 'pointer' }}>
              <X size={24} color="#555" strokeWidth={2.5} />
            </div>
         </div>
 
         {/* Content (only visible fully when expanded) */}
-        <div style={{ width: '100%', marginTop: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
-           <h3 style={{ margin: '0 0 24px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>Cancel your ride request?</h3>
-           
-           <button 
-             onClick={() => setShowCancelModal(true)}
-             style={{ width: '100%', padding: '16px', background: '#dbdbdb', border: 'none', borderRadius: '8px', color: '#555', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
-           >
-             Cancel Ride
-           </button>
+        <div style={{ width: '100%', marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
+           {drawerMode === 'request' ? (
+             <div style={{ textAlign: 'center', width: '100%' }}>
+               <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
+                 {volatilePassengerState?.status === 'completed' ? 'This ride is completed.' : volatilePassengerState?.status === 'cancelled' ? 'This ride has been cancelled.' : 'Cancel your ride request?'}
+               </h3>
+               <p style={{ margin: '0 0 24px', color: '#888', fontSize: '0.9rem' }}>
+                 {volatilePassengerState?.status === 'completed' ? 'Your historical records are safely stored.' : volatilePassengerState?.status === 'cancelled' ? 'This request is natively archived.' : 'You can retract your active request below.'}
+               </p>
+               
+               {(volatilePassengerState?.status !== 'completed' && volatilePassengerState?.status !== 'cancelled') && (
+                 <button 
+                   onClick={() => setShowCancelModal(true)}
+                   style={{ width: '100%', padding: '16px', background: '#dbdbdb', border: 'none', borderRadius: '8px', color: '#555', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+                 >
+                   Cancel Ride
+                 </button>
+               )}
+             </div>
+           ) : activeDriver ? (
+             <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                  <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {activeDriver.profilePic ? (
+                       <img src={activeDriver.profilePic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="driver" />
+                    ) : (
+                       <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#888' }}>{activeDriver.name?.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                    <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activeDriver.name}</h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#555' }}>
+                       <span>{activeDriver.rawRequest?.date ? dayjs(activeDriver.rawRequest.date).format('h:mma, MMM. D') : activeDriver.time}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                      {[1, 2, 3, 4, 5].map(starNum => {
+                         const ratingVal = parseFloat(activeDriver.rating) || 0;
+                         const isFilled = starNum <= Math.round(ratingVal);
+                         return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
+                      })}
+                      <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{activeDriver.rating} <span style={{ fontWeight: 500 }}>({activeDriver.reviews})</span></span>
+                      <span style={{ fontSize: '0.85rem', color: '#aaa', margin: '0 6px' }}>•</span>
+                      <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700 }}>{activeDriver.completedRides} Rides</span>
+                    </div>
+                  </div>
+                </div>
+
+                {activeDriver.rawRequest?.note && activeDriver.rawRequest.note.trim() !== '' && (
+                  <p style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#444', fontStyle: 'italic', background: '#fff', padding: '12px', borderRadius: '8px', borderLeft: `4px solid ${activeDriver.type === 'completed' || activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888'}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    "{activeDriver.rawRequest.note}"
+                  </p>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                       {Array.from({ length: activeDriver.seats || 4 }).map((_, i) => (
+                           <User key={i} size={14} fill={activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888'} color={activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888'} />
+                        ))}
+                    </div>
+                    <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{activeDriver.seats} Seat{activeDriver.seats > 1 ? 's' : ''} offering</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', flexShrink: 0, marginTop: '4px' }} />
+                     <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activeDriver.rawRequest?.from?.address || 'Unknown Pickup Address'}</span>
+                  </div>
+                  <div style={{ borderLeft: '2px dashed #ccc', marginLeft: '4px', paddingLeft: '11px', height: '10px' }}></div>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#888', flexShrink: 0, marginTop: '4px' }} />
+                     <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activeDriver.rawRequest?.to?.address || 'Unknown Dropoff Address'}</span>
+                  </div>
+                </div>
+             </div>
+           ) : (
+             <div style={{ textAlign: 'center', width: '100%', padding: '24px 0' }}>
+                <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
+                  {volatilePassengerState?.status === 'cancelled' ? 'Ride Cancelled' : 'Driver Overlay'}
+                </h3>
+                <p style={{ margin: 0, color: '#888', fontSize: '0.9rem' }}>
+                  {volatilePassengerState?.status === 'cancelled' ? 'This ride has been cancelled.' : 'No active driver overview.'}
+                </p>
+             </div>
+           )}
         </div>
       </div>
 
@@ -933,9 +1041,23 @@ export default function FindMatches() {
                 onClick={async () => {
                   try {
                       if (ride?.id) {
-                          await updateDoc(doc(db, 'rideRequests', ride.id), { status: 'cancelled_by_passenger' });
+                          await updateDoc(doc(db, 'rideRequests', ride.id), { status: 'cancelled' });
+                          
+                          const matchingOffersRef = query(collection(db, 'rideOffers'), where('requestedByPassengerIds', 'array-contains', ride.id));
+                          const offersSnap = await getDocs(matchingOffersRef);
+                          
+                          for (const offerDoc of offersSnap.docs) {
+                             const data = offerDoc.data();
+                             const updatePayload = { requestedByPassengerIds: arrayRemove(ride.id) };
+                             if (data.status === 'confirmed' && data.requestedByRideId === ride.id) {
+                                updatePayload.seatsTaken = increment(-Math.abs(parseInt(ride.seats) || 1));
+                             }
+                             try {
+                                await updateDoc(doc(db, 'rideOffers', offerDoc.id), updatePayload);
+                             } catch (err) { console.error("clean up fail", err); }
+                          }
                       }
-                      navigate('/my-rides');
+                      navigate('/my-rides', { state: { initialTab: 'History' } });
                   } catch (e) {
                       console.error("Cancellation error:", e);
                   }
