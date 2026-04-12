@@ -35,18 +35,11 @@ export default function Home() {
   return (
     <div className="home-container">
       <MapBackground />
-      {/* VIBRANT AMBIENT BENTO FROST OVERLAY */}
-      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, background: 'rgba(240, 247, 255, 0.65)', backdropFilter: 'blur(20px)' }}></div>
+      {/* VIBRANT AMBIENT BENTO FROST OVERLAY (Maximum Transparency) */}
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, background: 'rgba(255, 255, 255, 0.65)' }}></div>
 
       {/* TOP NAVBAR */}
-      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', zIndex: 100, background: 'linear-gradient(to bottom, rgba(255,255,255,1), rgba(255,255,255,0))' }}>
-         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button onClick={() => setSidebarOpen(true)} style={{ background: '#fff', border: 'none', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', cursor: 'pointer' }}>
-               <Menu size={20} color="#1e293b" />
-            </button>
-            <h1 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800, color: '#1e293b', letterSpacing: '-0.5px' }}>Sabay</h1>
-         </div>
-         
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '16px 20px', zIndex: 100, background: 'linear-gradient(to bottom, rgba(255,255,255,1), rgba(255,255,255,0))' }}>
          <button className="profile-btn" onClick={handleProfileClick} style={{ background: '#fff', border: 'none', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', cursor: 'pointer', overflow: 'hidden', padding: 0 }}>
           {currentUser && currentUser.photoURL && !imgError ? (
             <img 
@@ -126,6 +119,17 @@ export default function Home() {
                <span style={{ fontSize: '1.2rem', color: '#fff' }}>›</span>
             </div>
          </div>
+      </div>
+
+      <div style={{ position: 'absolute', bottom: '24px', left: 0, width: '100%', textAlign: 'center', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <span style={{ fontSize: '0.80rem', color: '#64748b' }}>
+          By using Sabay, you agree to our 
+        </span>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
+           <button onClick={() => navigate('/terms-of-use')} style={{ background: 'transparent', border: 'none', color: '#0ea5e9', fontWeight: 600, fontSize: '0.80rem', cursor: 'pointer', padding: 0 }}>Terms of Use</button>
+           <span style={{ color: '#cbd5e1', fontSize: '0.80rem' }}>|</span>
+           <button onClick={() => navigate('/privacy-policy')} style={{ background: 'transparent', border: 'none', color: '#0ea5e9', fontWeight: 600, fontSize: '0.80rem', cursor: 'pointer', padding: 0 }}>Privacy Policy</button>
+        </div>
       </div>
 
       <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
