@@ -262,20 +262,21 @@ export default function MyRides() {
   });
 
   return (
-    <div className="home-container" style={{ display: 'flex', flexDirection: 'column', background: '#eaeaea', height: '100vh', overflow: 'hidden' }}>
+    <div className="home-container" style={{ display: 'flex', flexDirection: 'column', background: '#fff', height: '100vh', overflow: 'hidden' }}>
       
-      {/* Dark Navbar */}
-      <div style={{ background: 'rgba(40,45,50,0.9)', zIndex: 10, padding: '16px 20px', display: 'flex', alignItems: 'center' }}>
+      {/* Light Navbar Bento Style */}
+      <div style={{ background: '#fff', zIndex: 10, padding: '16px 20px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', width: '100%' }}>
-          <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', cursor: 'pointer', padding: 0 }}>
-            <ArrowLeft size={24} color="#fff" />
+          <button onClick={() => navigate('/')} style={{ background: '#f1f5f9', width: 44, height: 44, borderRadius: '50%', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, transition: 'background 0.2s' }}>
+            <ArrowLeft size={22} color="#0f172a" />
           </button>
-          <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: '#fff' }}>My Rides</h2>
+          <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.3px' }}>Activity Log</h2>
         </div>
       </div>
 
       {/* Tabs Menu */}
-      <div style={{ display: 'flex', background: '#fff', borderBottom: '1px solid #ddd', zIndex: 5 }}>
+      {/* Bento Tabs Menu */}
+      <div style={{ display: 'flex', background: '#fff', padding: '8px 16px', gap: '12px', zIndex: 5, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
         {['Active', 'Pending', 'History'].map(tab => (
           <div 
             key={tab}
@@ -284,26 +285,26 @@ export default function MyRides() {
               flex: 1, 
               textAlign: 'center', 
               padding: '12px 0', 
-              fontWeight: 600,
+              fontWeight: 700,
               fontSize: '0.95rem',
-              color: activeTab === tab ? '#00b0f0' : '#888',
-              borderBottom: activeTab === tab ? '3px solid #00b0f0' : '3px solid transparent',
+              color: activeTab === tab ? '#fff' : '#64748b',
+              background: activeTab === tab ? '#0f172a' : '#f1f5f9',
+              borderRadius: '24px',
               cursor: 'pointer',
-              transition: 'all 0.2s'
+              transition: 'all 0.2s',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
             }}
           >
-            <div style={{ position: 'relative', display: 'inline-block' }}>
-                {tab}
-                {tab === 'Active' && hasActiveRide && (
-                  <span style={{ position: 'absolute', top: '-2px', right: '-12px', width: '8px', height: '8px', background: '#ff0043', borderRadius: '50%', boxShadow: '0 0 0 2px #fff' }}></span>
-                )}
-              </div>
+             {tab}
+             {tab === 'Active' && hasActiveRide && (
+               <span style={{ width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%' }}></span>
+             )}
           </div>
         ))}
       </div>
 
       {/* RIDES LIST */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', background: '#f8fafc', paddingBottom: '100px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', background: '#fff', paddingBottom: '100px' }}>
       {loading ? (
         <div style={{ height: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
           <Loader2 size={40} color="#999" style={{ animation: 'spin 1.2s linear infinite' }} />
@@ -391,8 +392,8 @@ export default function MyRides() {
                          }}
                          style={{ 
                            background: '#fff', 
-                           borderRadius: '8px', 
-                           boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+                           borderRadius: '32px', 
+                           boxShadow: '0 12px 32px rgba(0,0,0,0.06)',
                            display: 'flex',
                            flexDirection: 'column',
                            cursor: 'pointer',
@@ -458,73 +459,72 @@ export default function MyRides() {
       
                          {/* SECTION 2: PASSENGERS / DRIVER RECORD LIST */}
                          {ride.passengers && ride.passengers.filter(p => activeTab !== 'History' || ['Completed', 'Confirmed'].includes(p.pStatus)).length > 0 && (
-                           <>
-                             <div style={{ width: '100%', height: '0px', borderBottom: '2px dashed #ececec' }}></div>
-                             <div style={{ padding: '20px 20px', display: 'flex', flexDirection: 'column', gap: '16px', background: '#f8f8f8' }}>
+                           <div style={{ padding: '0 20px 24px 20px' }}>
+                             <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', background: '#f8fafc', borderRadius: '20px' }}>
                                {ride.passengers.filter(p => activeTab !== 'History' || ['Completed', 'Confirmed'].includes(p.pStatus)).map((p, idx) => (
-                                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '16px', position: 'relative' }}>
+                                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', position: 'relative' }}>
                                     
-                                    <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#f1f5f9', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                       {p.userProfilePic ? <img src={p.userProfilePic} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User size={24} color="#94a3b8" />}
+                                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#e2e8f0', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                       {p.userProfilePic ? <img src={p.userProfilePic} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User size={20} color="#64748b" />}
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                       <span style={{ fontSize: '1rem', fontWeight: 600, color: '#222', lineHeight: '1.2' }}>
+                                       <span style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', lineHeight: '1.2', letterSpacing: '-0.3px' }}>
                                           {p.userName || 'Passenger'}
                                        </span>
                                        
                                        {(p.pStatus === 'Confirmed' || p.pStatus === 'Completed') && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
                                              {activeTab !== 'History' && (
-                                                <div style={{ background: '#1fd954', borderRadius: '50%', width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                <div style={{ background: '#22c55e', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                                    <Check size={10} color="#fff" strokeWidth={4} />
                                                 </div>
                                              )}
-                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: activeTab === 'History' ? '#9cc93a' : '#1fd954' }}>{p.pStatus}</span>
+                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: activeTab === 'History' ? '#84cc16' : '#22c55e' }}>{p.pStatus}</span>
                                           </div>
                                        )}
                                        
                                        {p.pStatus === 'Request' && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#ff0043' }}>Accept Request</span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ef4444' }}>Accept Request</span>
                                           </div>
                                        )}
                                        {p.pStatus === 'Accept Offer' && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#ff0043' }}>Accept Offer</span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ef4444' }}>Accept Offer</span>
                                           </div>
                                        )}
                                        
                                        {p.pStatus === 'Offered' && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#eab308' }}>Ride Offered</span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f59e0b' }}>Ride Offered</span>
                                           </div>
                                        )}
 
                                        {p.pStatus === 'Sent Request' && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
-                                             <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#eab308' }}>Sent Request</span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f59e0b' }}>Sent Request</span>
                                           </div>
                                        )}
                                     </div>
                                  </div>
                                ))}
                              </div>
-                           </>
+                           </div>
                          )}
       
                          {/* SECTION 3: MATCHES COUNT / HISTORY STAMP */}
                          {activeTab !== 'History' ? (
                            <>
-                             <div style={{ width: '100%', height: '0px', borderBottom: '1.5px dashed #ececec' }}></div>
-                             <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 50, height: 50, borderRadius: '50%', background: '#f1f5f9', overflow: 'hidden', flexShrink: 0 }}>
-                                     <User size={24} color="#94a3b8" />
+                             <div style={{ width: '100%', height: '1px', background: '#f1f5f9' }}></div>
+                             <div style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, borderRadius: '50%', background: '#e0f2fe', flexShrink: 0 }}>
+                                     <User size={22} color="#0284c7" />
                                  </div>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                   <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#00b0f0', letterSpacing: '-0.3px', marginBottom: '2px' }}>
+                                   <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0ea5e9', letterSpacing: '-0.3px', marginBottom: '2px' }}>
                                       {ride.matchesCount || 0} Ride Match{(ride.matchesCount || 0) > 1 ? 'es' : ''}
                                    </span>
-                                   <span style={{ fontSize: '0.9rem', color: '#999', fontWeight: 500 }}>
+                                   <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
                                       available on your route
                                    </span>
                                 </div>
@@ -532,10 +532,10 @@ export default function MyRides() {
                            </>
                          ) : (
                            <>
-                             <div style={{ width: '100%', height: '0px', borderBottom: '1.5px dashed #ececec' }}></div>
-                             <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ride.status === 'cancelled' ? '#f9f9f9' : '#fff', borderBottomLeftRadius: '8px', borderBottomRightRadius: '8px' }}>
+                             <div style={{ width: '100%', height: '1px', background: '#f1f5f9' }}></div>
+                             <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ride.status === 'cancelled' ? '#f8fafc' : '#f0fdf4', borderBottomLeftRadius: '32px', borderBottomRightRadius: '32px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                   <span style={{ fontSize: '0.9rem', fontWeight: 700, color: ride.status === 'cancelled' ? '#888' : '#9cc93a', letterSpacing: '0.5px' }}>
+                                   <span style={{ fontSize: '0.95rem', fontWeight: 800, color: ride.status === 'cancelled' ? '#94a3b8' : '#22c55e', letterSpacing: '0.5px' }}>
                                       {ride.status === 'cancelled' ? 'Ride Cancelled' : 'Ride Completed'}
                                    </span>
                                 </div>
