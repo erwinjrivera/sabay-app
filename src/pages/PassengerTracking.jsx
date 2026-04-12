@@ -144,6 +144,25 @@ export default function PassengerTracking() {
   // 2. Subscribe to Driver State
   useEffect(() => {
      if (!passengerState?.offeredByRideId) return;
+
+     const isFinalState = passengerState.status === 'completed' || passengerState.status === 'cancelled';
+
+     if (isFinalState) {
+         // Pull once to guarantee payload but DO NOT hook a live watcher
+         (async () => {
+             const snap = await getDoc(doc(db, 'rideOffers', passengerState.offeredByRideId));
+             if (snap.exists()) {
+                 const data = snap.data();
+                 setDriverRide(prev => prev ? prev : { id: snap.id, ...data });
+                 if (!driverProfile && data.userId) {
+                     const uSnap = await getDoc(doc(db, 'users', data.userId));
+                     if (uSnap.exists()) setDriverProfile(uSnap.data());
+                 }
+             }
+         })();
+         return;
+     }
+
      const unsub = onSnapshot(doc(db, 'rideOffers', passengerState.offeredByRideId), async (rideDoc) => {
          if (rideDoc.exists()) {
              const data = rideDoc.data();
@@ -153,10 +172,14 @@ export default function PassengerTracking() {
                  const uSnap = await getDoc(doc(db, 'users', data.userId));
                  if (uSnap.exists()) setDriverProfile(uSnap.data());
              }
+
+             if (data.status === 'completed' || data.status === 'cancelled') {
+                 unsub();
+             }
          }
      });
      return () => unsub();
-  }, [passengerState?.offeredByRideId, navigate, driverProfile]);
+  }, [passengerState?.offeredByRideId, passengerState?.status, navigate, driverProfile]);
 
   useEffect(() => {
     if ((driverRide?.status === 'completed' || passengerState?.status === 'completed') && !hasRated) {
@@ -376,12 +399,14 @@ export default function PassengerTracking() {
       </MapContainer>
 
       {/* Recenter Button */}
-      <button 
-        onClick={() => { setPanToCar(true); setTimeout(() => setPanToCar(false), 1000); }} 
-        style={{ position: 'absolute', bottom: '260px', right: '20px', background: '#fff', border: 'none', borderRadius: '50%', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000 }}
-      >
-         <Navigation size={22} color={activeColor} fill={activeColor} />
-      </button>
+      {(!isRideCompleted && !isRideCancelled) && (
+        <button 
+          onClick={() => { setPanToCar(true); setTimeout(() => setPanToCar(false), 1000); }} 
+          style={{ position: 'absolute', bottom: '260px', right: '20px', background: '#fff', border: 'none', borderRadius: '50%', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000 }}
+        >
+           <Navigation size={22} color={activeColor} fill={activeColor} />
+        </button>
+      )}
 
       {/* TOP HEADER */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
@@ -480,6 +505,11 @@ export default function PassengerTracking() {
                         {targetRating === '0.0' ? 'New' : `${targetRating} (${targetReviews})`}
                     </span>
                  </div>
+                 {driverProfile?.plateNumber && (
+                    <div style={{ marginTop: '2px', fontSize: '0.75rem', color: '#777' }}>
+                       <span style={{ fontWeight: 600 }}>{driverProfile.plateNumber}</span> | {driverProfile.carMake} {driverProfile.carModel} ({driverProfile.carColor})
+                    </div>
+                 )}
                </div>
 
                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -568,6 +598,11 @@ export default function PassengerTracking() {
                       })}
                       <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{targetRating === '0.0' ? 'New' : targetRating} <span style={{ fontWeight: 500 }}>({targetReviews})</span></span>
                     </div>
+                    {driverProfile?.plateNumber && (
+                       <div style={{ marginTop: '2px', fontSize: '0.85rem', color: '#666' }}>
+                          <span style={{ fontWeight: 700 }}>{driverProfile.plateNumber}</span> | {driverProfile.carMake} {driverProfile.carModel} ({driverProfile.carColor})
+                       </div>
+                    )}
                   </div>
                 </div>
 
@@ -577,7 +612,9 @@ export default function PassengerTracking() {
                   </p>
                 )}
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', marginBottom: '16px' }}>
+                <div style={{ width: '100%', height: '1px', background: '#e5e7eb', marginBottom: '16px' }}></div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
@@ -589,15 +626,21 @@ export default function PassengerTracking() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', flexShrink: 0, marginTop: '4px' }} />
-                     <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{driverRide?.from?.address || 'Unknown Pickup Address'}</span>
-                  </div>
-                  <div style={{ borderLeft: '2px dashed #ccc', marginLeft: '4px', paddingLeft: '11px', height: '10px' }}></div>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#888', flexShrink: 0, marginTop: '4px' }} />
-                     <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{driverRide?.to?.address || 'Unknown Dropoff Address'}</span>
-                  </div>
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '4px', paddingBottom: '4px' }}>
+                     <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
+                     <div style={{ width: 1, flex: 1, background: '#ccc', margin: '4px 0' }}></div>
+                     <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
+                   </div>
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
+                     <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
+                       {driverRide?.from?.address || 'Unknown Pickup Address'}
+                     </div>
+                     <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
+                       {driverRide?.to?.address || 'Unknown Dropoff Address'}
+                     </div>
+                   </div>
+                </div>
                 </div>
              </div>
         </div>

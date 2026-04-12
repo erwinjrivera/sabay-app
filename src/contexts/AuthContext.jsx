@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { auth } from '../firebase';
-import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendEmailVerification } from 'firebase/auth';
+import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendEmailVerification, updateProfile } from 'firebase/auth';
 
 const AuthContext = createContext();
 
@@ -34,6 +34,12 @@ export const AuthProvider = ({ children }) => {
 
   const signupEmail = async (email, password) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    
+    // Leverage the Firebase universally unique ID (UID) chunk instead of Math.random
+    const randomName = `User_${userCredential.user.uid.substring(0, 8)}`;
+    
+    await updateProfile(userCredential.user, { displayName: randomName });
+
     await sendEmailVerification(userCredential.user);
     await signOut(auth);
     return userCredential;

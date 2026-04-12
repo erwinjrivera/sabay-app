@@ -165,6 +165,15 @@ export default function FindMatches() {
            if (!req.from?.lat || !req.to?.lat) return null;
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
+           // TEMPORAL CHECK LAUNCH
+           if (!ride?.date || !req.date || !ride?.time || !req.time) return null;
+           const dRide = dayjs(ride.date).format('YYYY-MM-DD');
+           const dReq = dayjs(req.date).format('YYYY-MM-DD');
+           if (dRide !== dReq) return null;
+           if (dRide < dayjs().format('YYYY-MM-DD')) return null;
+           const mRide = dayjs(ride.time).hour() * 60 + dayjs(ride.time).minute();
+           const mReq = dayjs(req.time).hour() * 60 + dayjs(req.time).minute();
+           if (Math.abs(mRide - mReq) > 90) return null;
            if (req.status === 'completed' || req.status === 'cancelled') {
                if (volatilePassengerStateRef.current?.offeredByRideId !== req.id) {
                    if (geometryCache.current[req.id]) delete geometryCache.current[req.id];
@@ -189,6 +198,10 @@ export default function FindMatches() {
            let ratingParams = req.userRating || '0.0';
            let reviewsParams = req.userReviews || 0;
            let completedRidesParams = 0;
+           let carMakeParams = '';
+           let carModelParams = '';
+           let carColorParams = '';
+           let plateNumberParams = '';
 
            if (req.userId) {
                try {
@@ -199,6 +212,11 @@ export default function FindMatches() {
                        if (userData.reviewsCount !== undefined) reviewsParams = userData.reviewsCount;
                        else if (userData.reviews !== undefined) reviewsParams = userData.reviews;
                        if (userData.completedRides) completedRidesParams = userData.completedRides;
+                        
+                       if (userData.carMake) carMakeParams = userData.carMake;
+                       if (userData.carModel) carModelParams = userData.carModel;
+                       if (userData.carColor) carColorParams = userData.carColor;
+                       if (userData.plateNumber) plateNumberParams = userData.plateNumber;
                    }
                } catch (e) {
                    console.error("Error fetching user rating", e);
@@ -212,12 +230,9 @@ export default function FindMatches() {
                    type: typeStatus,
                    name: nameParams,
                    time: timeParams,
-                   rating: ratingParams,
-                   reviews: reviewsParams,
-                   completedRides: completedRidesParams,
-                   seats: req.seats || 1,
-                   seatsTaken: req.seatsTaken || 0,
-                   profilePic: req.userProfilePic || '',
+                   seats: req.seats || geometryCache.current[req.id].seats || 1,
+                   seatsTaken: req.seatsTaken || geometryCache.current[req.id].seatsTaken || 0,
+                   profilePic: req.userProfilePic || geometryCache.current[req.id].profilePic || '',
                    rawRequest: req
                };
            }
@@ -309,7 +324,14 @@ export default function FindMatches() {
                  meetDropoff: { lat: meetDropoff[0], lon: meetDropoff[1], idx: dropIdx },
                  interceptPaths,
                  driverFullRoute: driverRoute,
-                 rawRequest: req
+                 rawRequest: req,
+                 rating: ratingParams,
+                 reviews: reviewsParams,
+                 completedRides: completedRidesParams,
+                 carMake: carMakeParams,
+                 carModel: carModelParams,
+                 carColor: carColorParams,
+                 plateNumber: plateNumberParams
               };
 
               // Map to local logical memory
@@ -320,9 +342,6 @@ export default function FindMatches() {
                  type: typeStatus,
                  name: nameParams,
                  time: timeParams,
-                 rating: ratingParams,
-                 reviews: reviewsParams,
-                 completedRides: completedRidesParams,
                  seats: req.seats || 1,
                  seatsTaken: req.seatsTaken || 0,
                  profilePic: req.userProfilePic || '',
@@ -758,18 +777,18 @@ export default function FindMatches() {
             }}
           >
             {/* Top Info Row */}
-            <div style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center', position: 'relative' }}>
+            <div style={{ padding: '14px', display: 'flex', gap: '12px', alignItems: 'center', position: 'relative' }}>
                
                <div>
                  <img 
                    src={match.profilePic || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"} 
                    alt="" 
                    onError={(e) => { e.target.onerror = null; e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"; }}
-                   style={{ width: 50, height: 50, borderRadius: '50%', objectFit: 'cover' }} 
+                   style={{ width: 45, height: 45, borderRadius: '50%', objectFit: 'cover' }} 
                  />
                </div>
                
-               <div style={{ flex: 1 }}>
+               <div style={{ flex: 1, minWidth: 0 }}>
                  <p style={{ margin: 0, fontSize: '0.8rem', color: match.type === 'completed' ? '#9cc93a' : match.type === 'confirmed' ? '#9cc93a' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888', fontWeight: 600 }}>
                    {match.time}
                  </p>
@@ -791,6 +810,11 @@ export default function FindMatches() {
                          return <Star key={starNum} size={12} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
                       })}
                       <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px', fontWeight: 600 }}>{match.rating} <span style={{ fontWeight: 400 }}>({match.reviews})</span></span>
+                    </div>
+                 )}
+                 {match.plateNumber && (
+                    <div style={{ marginTop: '2px', fontSize: '0.7rem', color: '#777', whiteSpace: 'nowrap' }}>
+                       <span style={{ fontWeight: 600 }}>{match.plateNumber}</span> | {match.carMake} {match.carModel} ({match.carColor})
                     </div>
                  )}
                </div>
@@ -971,9 +995,12 @@ export default function FindMatches() {
                          return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
                       })}
                       <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{activeDriver.rating} <span style={{ fontWeight: 500 }}>({activeDriver.reviews})</span></span>
-                      <span style={{ fontSize: '0.85rem', color: '#aaa', margin: '0 6px' }}>•</span>
-                      <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700 }}>{activeDriver.completedRides} Rides</span>
                     </div>
+                    {activeDriver.plateNumber && (
+                       <div style={{ marginTop: '2px', fontSize: '0.85rem', color: '#666' }}>
+                          <span style={{ fontWeight: 700 }}>{activeDriver.plateNumber}</span> | {activeDriver.carMake} {activeDriver.carModel} ({activeDriver.carColor})
+                       </div>
+                    )}
                   </div>
                 </div>
 
@@ -983,25 +1010,33 @@ export default function FindMatches() {
                   </p>
                 )}
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <div style={{ width: '100%', height: '1px', background: '#e5e7eb', marginBottom: '16px' }}></div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                       {Array.from({ length: activeDriver.seats || 4 }).map((_, i) => (
+                  {Array.from({ length: activeDriver.seats || 4 }).map((_, i) => (
                            <User key={i} size={14} fill={activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888'} color={activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888'} />
                         ))}
                     </div>
                     <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{activeDriver.seats} Seat{activeDriver.seats > 1 ? 's' : ''} offering</span>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', flexShrink: 0, marginTop: '4px' }} />
-                     <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activeDriver.rawRequest?.from?.address || 'Unknown Pickup Address'}</span>
-                  </div>
-                  <div style={{ borderLeft: '2px dashed #ccc', marginLeft: '4px', paddingLeft: '11px', height: '10px' }}></div>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#888', flexShrink: 0, marginTop: '4px' }} />
-                     <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activeDriver.rawRequest?.to?.address || 'Unknown Dropoff Address'}</span>
-                  </div>
+                  <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '4px', paddingBottom: '4px' }}>
+                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
+                           <div style={{ width: 1, flex: 1, background: '#ccc', margin: '4px 0' }}></div>
+                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
+                         </div>
+                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
+                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
+                             {activeDriver.rawRequest?.from?.address || 'Unknown Pickup Address'}
+                           </div>
+                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
+                             {activeDriver.rawRequest?.to?.address || 'Unknown Dropoff Address'}
+                           </div>
+                         </div>
+                      </div>
                 </div>
              </div>
            ) : (

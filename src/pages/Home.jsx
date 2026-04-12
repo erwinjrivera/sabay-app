@@ -7,8 +7,16 @@ import { useNavigate } from 'react-router-dom';
 
 export default function Home() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
+
+  const getInitials = (nameStr) => {
+    if (!nameStr) return '';
+    const parts = nameStr.trim().split(' ').filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return nameStr.substring(0, 2).toUpperCase();
+  };
 
   useEffect(() => {
     if (!currentUser) {
@@ -30,11 +38,17 @@ export default function Home() {
 
       <div className="top-bar">
         <button className="profile-btn" onClick={handleProfileClick} style={{ marginLeft: 'auto' }}>
-          {currentUser && currentUser.photoURL ? (
-            <img src={currentUser.photoURL} alt="Profile" className="profile-img" />
+          {currentUser && currentUser.photoURL && !imgError ? (
+            <img 
+               src={currentUser.photoURL} 
+               alt="Profile" 
+               className="profile-img" 
+               referrerPolicy="no-referrer"
+               onError={() => setImgError(true)}
+            />
           ) : (
-            <span style={{fontWeight: 'bold', fontSize: '1.2rem'}}>
-              {currentUser ? currentUser.email[0].toUpperCase() : '?'}
+            <span style={{fontWeight: 'bold', fontSize: '1.2rem', color: '#fff'}}>
+              {getInitials(currentUser?.displayName) || (currentUser ? currentUser.email[0].toUpperCase() : '?')}
             </span>
           )}
         </button>

@@ -10,7 +10,7 @@ import dayjs from 'dayjs';
 
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 
 const theme = createTheme({
   palette: {
@@ -110,6 +110,23 @@ export default function OfferRide() {
        navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location.state, navigate, location.pathname]);
+
+  // Map Passengers setting directly from Profile baseline
+  useEffect(() => {
+    if (!currentUser) return;
+    const loadProfileDefaults = async () => {
+      try {
+        const docRef = doc(db, 'users', currentUser.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists() && docSnap.data().seats) {
+          setSeats(Number(docSnap.data().seats));
+        }
+      } catch (err) {
+        console.error("Failed mapped seats", err);
+      }
+    };
+    loadProfileDefaults();
+  }, [currentUser]);
 
   // Search Suggester state
   const [suggestions, setSuggestions] = useState([]);

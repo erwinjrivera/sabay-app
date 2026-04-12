@@ -59,6 +59,24 @@ export default function MyRides() {
         return (r1MaxLat > r2MinLat && r1MinLat < r2MaxLat) && (r1MaxLon > r2MinLon && r1MinLon < r2MaxLon);
     };
 
+    const isValidTemporalProxy = (ride1, ride2) => {
+        if (!ride1.date || !ride2.date || !ride1.time || !ride2.time) return false;
+        const d1 = dayjs(ride1.date).format('YYYY-MM-DD');
+        const d2 = dayjs(ride2.date).format('YYYY-MM-DD');
+        if (d1 !== d2) return false;
+
+        const today = dayjs().format('YYYY-MM-DD');
+        if (d1 < today) return false;
+
+        const time1 = dayjs(ride1.time);
+        const time2 = dayjs(ride2.time);
+        const m1 = time1.hour() * 60 + time1.minute();
+        const m2 = time2.hour() * 60 + time2.minute();
+        if (Math.abs(m1 - m2) > 90) return false;
+
+        return true;
+    };
+
     let allOffers = [];
     let allReqs = [];
     let offersReady = false;
@@ -110,7 +128,8 @@ export default function MyRides() {
                  r.userId !== currentUser.uid && 
                  r.from?.lat && r.to?.lat && 
                  (r.status === 'open' || r.offeredByRideId === data.id || (data.requestedByPassengerIds || []).includes(r.id)) &&
-                 isValidGeographicProxy(data, r)
+                 isValidGeographicProxy(data, r) &&
+                 isValidTemporalProxy(data, r)
              );
              
              let matchesFound = 0;
@@ -140,7 +159,8 @@ export default function MyRides() {
                  r.userId !== currentUser.uid && 
                  r.from?.lat && r.to?.lat && 
                  (!r.status || r.status !== 'completed' || data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(data.id)) &&
-                 isValidGeographicProxy(data, r)
+                 isValidGeographicProxy(data, r) &&
+                 isValidTemporalProxy(data, r)
              );
              
              let matchesFound = 0;
@@ -210,6 +230,21 @@ export default function MyRides() {
      return false;
   });
 
+  if (activeTab === 'Pending') {
+      filteredRides.sort((a, b) => {
+          const dA = a.date ? dayjs(a.date).format('YYYY-MM-DD') : '9999-12-31';
+          const dB = b.date ? dayjs(b.date).format('YYYY-MM-DD') : '9999-12-31';
+          if (dA < dB) return -1;
+          if (dA > dB) return 1;
+
+          const tA = a.time ? dayjs(a.time).format('HH:mm') : '23:59';
+          const tB = b.time ? dayjs(b.time).format('HH:mm') : '23:59';
+          if (tA < tB) return -1;
+          if (tA > tB) return 1;
+          return 0;
+      });
+  }
+
   const groupedRides = [];
   filteredRides.forEach(ride => {
      const dateStr = ride.date ? dayjs(ride.date).format('ddd, MMM D, YYYY') : 'Unknown Date';
@@ -219,6 +254,11 @@ export default function MyRides() {
         groupedRides.push(group);
      }
      group.items.push(ride);
+  });
+
+  const hasActiveRide = rides.some(ride => {
+      const status = ride.computedStatus || ride.status || 'open';
+      return status === 'in_progress';
   });
 
   return (
@@ -252,7 +292,12 @@ export default function MyRides() {
               transition: 'all 0.2s'
             }}
           >
-            {tab}
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+                {tab}
+                {tab === 'Active' && hasActiveRide && (
+                  <span style={{ position: 'absolute', top: '-2px', right: '-12px', width: '8px', height: '8px', background: '#ff0043', borderRadius: '50%', boxShadow: '0 0 0 2px #fff' }}></span>
+                )}
+              </div>
           </div>
         ))}
       </div>
@@ -419,8 +464,8 @@ export default function MyRides() {
                                {ride.passengers.filter(p => activeTab !== 'History' || ['Completed', 'Confirmed'].includes(p.pStatus)).map((p, idx) => (
                                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '16px', position: 'relative' }}>
                                     
-                                    <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                       {p.userProfilePic ? <img src={p.userProfilePic} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User size={24} color="#999" />}
+                                    <div style={{ width: 50, height: 50, borderRadius: '50%', background: '#f1f5f9', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                       {p.userProfilePic ? <img src={p.userProfilePic} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User size={24} color="#94a3b8" />}
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                                        <span style={{ fontSize: '1rem', fontWeight: 600, color: '#222', lineHeight: '1.2' }}>
@@ -472,8 +517,8 @@ export default function MyRides() {
                            <>
                              <div style={{ width: '100%', height: '0px', borderBottom: '1.5px dashed #ececec' }}></div>
                              <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                 <div style={{ display: 'flex', justifyContent: 'center', width: 50, height: 50, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0 }}>
-                                    <img src="/default-avatar.png" alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 50, height: 50, borderRadius: '50%', background: '#f1f5f9', overflow: 'hidden', flexShrink: 0 }}>
+                                     <User size={24} color="#94a3b8" />
                                  </div>
                                 <div style={{ display: 'flex', flexDirection: 'column' }}>
                                    <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#00b0f0', letterSpacing: '-0.3px', marginBottom: '2px' }}>

@@ -195,9 +195,9 @@ export default function ActiveRide() {
     } catch (err) { console.error(err); }
   };
 
-  useEffect(() => {
-    let watchId = null;
+  const watchIdRef = useRef(null);
 
+  useEffect(() => {
     const startTracking = async () => {
       try {
         const permissions = await Geolocation.checkPermissions();
@@ -205,7 +205,7 @@ export default function ActiveRide() {
            await Geolocation.requestPermissions();
         }
 
-        watchId = await Geolocation.watchPosition(
+        watchIdRef.current = await Geolocation.watchPosition(
           { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
           async (position, err) => {
             if (position && !err) {
@@ -218,7 +218,6 @@ export default function ActiveRide() {
               // Broadcast Live Location to Firestore
               if (ride?.id) {
                  try {
-                    // Debounce or raw push? Firestore pricing allows document writes safely at 1Hz, but let's push directly
                     await updateDoc(doc(db, 'rideOffers', ride.id), {
                        currentLat: lat,
                        currentLon: lon,
@@ -238,9 +237,19 @@ export default function ActiveRide() {
     startTracking();
 
     return () => {
-      if (watchId) Geolocation.clearWatch({ id: watchId });
+      if (watchIdRef.current) Geolocation.clearWatch({ id: watchIdRef.current });
     };
   }, [ride?.id]);
+
+  useEffect(() => {
+     const allCompleted = matches.length > 0 && matches.every(m => (passengerStates[m.id] || 0) === 2);
+     if (isGlobalCancelled || allCompleted) {
+        if (watchIdRef.current) {
+           Geolocation.clearWatch({ id: watchIdRef.current });
+           watchIdRef.current = null;
+        }
+     }
+  }, [isGlobalCancelled, matches, passengerStates]);
 
   const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
   const driverTo = ride?.to ? { lat: ride.to.lat, lon: ride.to.lon } : { lat: 14.5547, lon: 121.0244 };
@@ -854,9 +863,11 @@ export default function ActiveRide() {
                        "{activePassenger.rawRequest.note}"
                      </p>
                    )}
+                   
+                   <div style={{ width: '100%', height: '1px', background: '#e5e7eb', marginBottom: '16px' }}></div>
 
-                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
                            {Array.from({ length: activePassenger.seats || 1 }).map((_, i) => (
                                <User key={i} size={14} fill={(passengerStates[activePassenger.id] || 0) === 2 ? '#9cc93a' : '#00b0f0'} color={(passengerStates[activePassenger.id] || 0) === 2 ? '#9cc93a' : '#00b0f0'} />
@@ -865,14 +876,20 @@ export default function ActiveRide() {
                         <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{activePassenger.seats} Seat{activePassenger.seats > 1 ? 's' : ''} requested</span>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', flexShrink: 0, marginTop: '4px' }} />
-                         <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activePassenger.pickup?.address || 'Unknown Pickup Address'}</span>
-                      </div>
-                      <div style={{ borderLeft: '2px dashed #ccc', marginLeft: '4px', paddingLeft: '11px', height: '10px' }}></div>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#888', flexShrink: 0, marginTop: '4px' }} />
-                         <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activePassenger.dropoff?.address || 'Unknown Dropoff Address'}</span>
+                      <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '4px', paddingBottom: '4px' }}>
+                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
+                           <div style={{ width: 1, flex: 1, background: '#ccc', margin: '4px 0' }}></div>
+                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
+                         </div>
+                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
+                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
+                             {activePassenger.pickup?.address || 'Unknown Pickup Address'}
+                           </div>
+                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
+                             {activePassenger.dropoff?.address || 'Unknown Dropoff Address'}
+                           </div>
+                         </div>
                       </div>
                    </div>
                  </div>

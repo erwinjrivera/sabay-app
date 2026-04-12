@@ -32,8 +32,16 @@ export default function Profile() {
   const [plateNumber, setPlateNumber] = useState("");
   const [seats, setSeats] = useState("3");
   const [isSaving, setIsSaving] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const [prompt, setPrompt] = useState(null);
   const [initialState, setInitialState] = useState({});
+
+  const getInitials = (nameStr) => {
+    if (!nameStr) return '';
+    const parts = nameStr.trim().split(' ').filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return nameStr.substring(0, 2).toUpperCase();
+  };
 
   useEffect(() => {
     if (!currentUser) {
@@ -160,11 +168,21 @@ export default function Profile() {
 
       {/* TOP USER RATING CARD (Retained for visual continuity of profile layout) */}
       <div style={{ display: 'flex', alignItems: 'center', padding: '24px 20px', borderBottom: '1px solid #f1f5f9' }}>
-         <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f1f5f9', marginRight: '16px', overflow: 'hidden', flexShrink: 0 }}>
-            {currentUser.photoURL ? (
-              <img src={currentUser.photoURL} alt="Avatar" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
-            ) : <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center'}}><User color="#94a3b8" /></div>}
-         </div>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f1f5f9', marginRight: '16px', overflow: 'hidden', flexShrink: 0 }}>
+             {currentUser.photoURL && !imgError ? (
+               <img 
+                 src={currentUser.photoURL} 
+                 alt="Avatar" 
+                 style={{width: '100%', height: '100%', objectFit: 'cover'}} 
+                 referrerPolicy="no-referrer"
+                 onError={() => setImgError(true)}
+               />
+             ) : (
+               <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize: '1.4rem', fontWeight: 700, color: '#94a3b8'}}>
+                  {getInitials(fullName || currentUser.displayName) || <User color="#94a3b8" />}
+               </div>
+             )}
+          </div>
          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 700, color: '#1e293b' }}>
                {fullName || currentUser.displayName || 'Gabriel Rivera'}
@@ -173,13 +191,13 @@ export default function Profile() {
                {currentUser.email}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-               <Star size={14} color="#ffb800" fill="#ffb800" />
-               <Star size={14} color="#ffb800" fill="#ffb800" />
-               <Star size={14} color="#ffb800" fill="#ffb800" />
-               <Star size={14} color="#e2e8f0" fill="#e2e8f0" />
-               <Star size={14} color="#e2e8f0" fill="#e2e8f0" />
-               <span style={{ marginLeft: '8px', fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>3.2</span>
-               <span style={{ marginLeft: '4px', fontSize: '0.85rem', color: '#94a3b8' }}>(4)</span>
+               {[1, 2, 3, 4, 5].map(starNum => {
+                   const ratingVal = parseFloat(initialState.rating) || 0;
+                   const isFilled = starNum <= Math.round(ratingVal);
+                   return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#e2e8f0"} color={isFilled ? "#ffb800" : "#e2e8f0"} />;
+               })}
+               <span style={{ marginLeft: '8px', fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>{(parseFloat(initialState.rating) || 0).toFixed(1)}</span>
+               <span style={{ marginLeft: '4px', fontSize: '0.85rem', color: '#94a3b8' }}>({initialState.completedRides || 0})</span>
             </div>
          </div>
       </div>

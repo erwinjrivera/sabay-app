@@ -162,6 +162,15 @@ export default function OfferMatches() {
            if (!req.from?.lat || !req.to?.lat) return null;
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
+           // TEMPORAL CHECK LAUNCH
+           if (!ride?.date || !req.date || !ride?.time || !req.time) return null;
+           const dRide = dayjs(ride.date).format('YYYY-MM-DD');
+           const dReq = dayjs(req.date).format('YYYY-MM-DD');
+           if (dRide !== dReq) return null;
+           if (dRide < dayjs().format('YYYY-MM-DD')) return null;
+           const mRide = dayjs(ride.time).hour() * 60 + dayjs(ride.time).minute();
+           const mReq = dayjs(req.time).hour() * 60 + dayjs(req.time).minute();
+           if (Math.abs(mRide - mReq) > 90) return null;
            // CRITICAL FIX: Hide passengers who are already locked into other drivers' carpools natively!
            if (req.status !== 'open' && req.offeredByRideId && req.offeredByRideId !== ride?.id) return null;
 
@@ -880,8 +889,10 @@ export default function OfferMatches() {
                      </p>
                    )}
 
-                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff', padding: '16px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                   <div style={{ width: '100%', height: '1px', background: '#e5e7eb', marginBottom: '16px' }}></div>
+
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
                            {Array.from({ length: activePassenger.seats || 1 }).map((_, i) => (
                                <User key={i} size={14} fill={activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888'} color={activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888'} />
@@ -890,14 +901,20 @@ export default function OfferMatches() {
                         <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{activePassenger.seats} Seat{activePassenger.seats > 1 ? 's' : ''} requested</span>
                       </div>
 
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', flexShrink: 0, marginTop: '4px' }} />
-                         <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activePassenger.rawRequest?.from?.address || 'Unknown Pickup Address'}</span>
-                      </div>
-                      <div style={{ borderLeft: '2px dashed #ccc', marginLeft: '4px', paddingLeft: '11px', height: '10px' }}></div>
-                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                         <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#888', flexShrink: 0, marginTop: '4px' }} />
-                         <span style={{ fontSize: '0.9rem', color: '#222', flex: 1, lineHeight: 1.3 }}>{activePassenger.rawRequest?.to?.address || 'Unknown Dropoff Address'}</span>
+                      <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '4px', paddingBottom: '4px' }}>
+                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
+                           <div style={{ width: 1, flex: 1, background: '#ccc', margin: '4px 0' }}></div>
+                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
+                         </div>
+                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
+                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
+                             {activePassenger.rawRequest?.from?.address || 'Unknown Pickup Address'}
+                           </div>
+                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
+                             {activePassenger.rawRequest?.to?.address || 'Unknown Dropoff Address'}
+                           </div>
+                         </div>
                       </div>
                    </div>
                  </div>
