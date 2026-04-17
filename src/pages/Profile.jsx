@@ -98,15 +98,15 @@ export default function Profile() {
     // VALIDATIONS
     let errorMsg = "";
     if (!fullName || fullName.trim() === "") errorMsg = "Full Name is required.";
-    else if (fullName.length > 30) errorMsg = "Full Name cannot exceed 30 characters.";
+    else if (fullName.trim().length > 30) errorMsg = "Full Name cannot exceed 30 characters.";
     else if (!phoneNumber || phoneNumber.trim() === "") errorMsg = "Phone Number is required.";
     else if (!/^\+?[0-9]+$/.test(phoneNumber)) errorMsg = "Phone Number can only contain numbers and a '+' sign.";
-    else if (phoneNumber.length > 13) errorMsg = "Phone Number cannot exceed 13 characters.";
-    else if (bio.length > 150) errorMsg = "About Me cannot exceed 150 characters.";
-    else if (carMake.length > 20) errorMsg = "Car Make cannot exceed 20 characters.";
-    else if (carModel.length > 30) errorMsg = "Car Model cannot exceed 30 characters.";
-    else if (carColor.length > 15) errorMsg = "Car Color cannot exceed 15 characters.";
-    else if (plateNumber.length > 10) errorMsg = "Plate Number cannot exceed 10 characters.";
+    else if (phoneNumber.trim().length > 13) errorMsg = "Phone Number cannot exceed 13 characters.";
+    else if (bio.trim().length > 150) errorMsg = "About Me cannot exceed 150 characters.";
+    else if (carMake.trim().length > 20) errorMsg = "Car Make cannot exceed 20 characters.";
+    else if (carModel.trim().length > 30) errorMsg = "Car Model cannot exceed 30 characters.";
+    else if (carColor.trim().length > 15) errorMsg = "Car Color cannot exceed 15 characters.";
+    else if (plateNumber.trim().length > 10) errorMsg = "Plate Number cannot exceed 10 characters.";
 
     if (errorMsg) {
        setPrompt({ message: errorMsg, type: "error" });
