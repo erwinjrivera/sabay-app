@@ -17,6 +17,20 @@ L.Icon.Default.mergeOptions({
   shadowUrl,
 });
 
+// Distance Helpers
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; 
+  const dLat = deg2rad(lat2-lat1);  
+  const dLon = deg2rad(lon2-lon1); 
+  const a = 
+    Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+    Math.sin(dLon/2) * Math.sin(dLon/2); 
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+  return R * c; 
+}
+function deg2rad(deg) { return deg * (Math.PI/180); }
+
 const customMapPin = L.divIcon({
   html: `<svg width="40" height="40" viewBox="0 0 24 24" fill="#ea4335" stroke="#ea4335" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.3));"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3" fill="white" stroke="white"></circle></svg>`,
   className: '',
@@ -37,6 +51,20 @@ export default function LocationDetails() {
   const [isFetchingMap, setIsFetchingMap] = useState(!item.lat || !item.lon);
   const [isSaved, setIsSaved] = useState(false);
   const [savedData, setSavedData] = useState(null);
+  const [distanceKm, setDistanceKm] = useState(null);
+
+  // Distance calculator effect
+  useEffect(() => {
+    if (coords.lat && coords.lon && 'geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const d = getDistanceFromLatLonInKm(
+          pos.coords.latitude, pos.coords.longitude, 
+          coords.lat, coords.lon
+        );
+        setDistanceKm(d.toFixed(1));
+      }, () => {});
+    }
+  }, [coords]);
 
   // Check if item is saved
   useEffect(() => {
@@ -103,7 +131,8 @@ export default function LocationDetails() {
          title: item.title,
          desc: item.desc,
          lat: coords.lat,
-         lon: coords.lon
+         lon: coords.lon,
+         type: item.type
        } 
      });
   };
@@ -123,43 +152,69 @@ export default function LocationDetails() {
   };
 
   return (
-    <div style={{ backgroundColor: '#fff', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ backgroundColor: '#f1f5f9', minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
+       {/* Background FULLSCREEN map */}
+       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, background: '#f1f5f9' }}>
+          {isFetchingMap ? (
+             <div style={{ height: 'calc(100vh - 270px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <p style={{ color: '#888' }}>Scanning map coordinates...</p>
+             </div>
+          ) : coords.lat && coords.lon ? (
+             <MapContainer 
+               center={[coords.lat, coords.lon]} 
+               zoom={18} 
+               zoomControl={false}
+               style={{ width: '100%', height: 'calc(100vh - 270px)' }}
+             >
+               <TileLayer
+                 url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                 attribution='&copy; OpenStreetMap'
+               />
+               <Marker position={[coords.lat, coords.lon]} icon={customMapPin} />
+             </MapContainer>
+          ) : (
+             <p style={{ color: '#888' }}>Map area unmappable</p>
+          )}
+       </div>
+
        {/* HEADER */}
-       <div style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(40,45,50,0.9)', zIndex: 10, backdropFilter: 'blur(5px)', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
           <button 
              onClick={() => navigate(-1)}
-             style={{ background: '#757575', border: 'none', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+             style={{ background: 'transparent', border: 'none', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', marginRight: '1rem' }}
           >
             <ArrowLeft size={24} color="#fff" />
           </button>
           
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ flex: 1, overflow: 'hidden' }}>
+             <h1 style={{ fontSize: '1.2rem', color: '#fff', margin: '0 0 0.2rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Location Details
+             </h1>
+             <p style={{ fontSize: '0.85rem', color: '#bbb', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {item.title}
+             </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', marginLeft: '1rem' }}>
             {isSaved && (
               <button 
                  onClick={() => navigate('/add-saved-place', { state: { item, findState, activeField, sourceMode, editMode: true, savedData } })}
-                 style={{ background: '#f5f5f5', border: 'none', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+                 style={{ background: 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '10px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
               >
-                <Pencil size={20} color="#333" />
+                <Pencil size={20} color="#fff" />
               </button>
             )}
             <button 
                onClick={handleHeartClick}
-               style={{ background: isSaved ? '#00b0f0' : '#757575', border: 'none', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+               style={{ background: isSaved ? '#00b0f0' : 'rgba(255,255,255,0.15)', border: 'none', borderRadius: '10px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
             >
               <Heart size={20} color="#fff" fill={isSaved ? '#fff' : 'none'} />
             </button>
           </div>
        </div>
 
-       {/* CONTENT */}
-       <div style={{ padding: '0 1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
-          <h1 style={{ fontSize: '1.4rem', color: '#111', margin: '0 0 0.5rem', fontWeight: 700 }}>
-             {item.title}
-          </h1>
-          <p style={{ fontSize: '0.9rem', color: '#555', margin: '0 0 2rem', lineHeight: 1.4 }}>
-             {item.desc}
-          </p>
-
+       {/* ACTION DRAWER */}
+       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#fff', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', padding: '1.5rem', zIndex: 10, boxShadow: '0 -4px 20px rgba(0,0,0,0.15)' }}>
           {/* Details Circle Icon */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
              <div style={{ width: '60px', height: '60px', background: '#555', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -174,47 +229,34 @@ export default function LocationDetails() {
              <div style={{ flex: 1, height: '1px', background: '#eaeaea' }}></div>
           </div>
           
-          <p style={{ textAlign: 'center', color: '#555', fontSize: '0.9rem', marginBottom: '2rem' }}>
-             residential
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '1.5rem' }}>
+             <p style={{ margin: 0, color: '#555', fontSize: '0.9rem', textTransform: 'capitalize' }}>
+                {item.type ? item.type.replace(/_/g, ' ') : 'Location area'}
+             </p>
+             {distanceKm && (
+               <>
+                 <span style={{ color: '#ccc', fontSize: '0.8rem' }}>•</span>
+                 <p style={{ margin: 0, color: '#00b0f0', fontSize: '0.9rem', fontWeight: 600 }}>
+                    {distanceKm} km away
+                 </p>
+               </>
+             )}
+          </div>
+
+          <h1 style={{ fontSize: '1.4rem', color: '#111', margin: '0 0 0.5rem', fontWeight: 700, textAlign: 'center' }}>
+             {item.title}
+          </h1>
+          <p style={{ fontSize: '0.9rem', color: '#555', margin: '0 0 2rem', lineHeight: 1.4, textAlign: 'center' }}>
+             {item.desc}
           </p>
 
-          {/* MINIMAP */}
-          {isFetchingMap ? (
-             <div style={{ flex: 1, minHeight: '180px', borderRadius: '12px', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem' }}>
-                <p style={{ color: '#888' }}>Scanning map coordinates...</p>
-             </div>
-          ) : coords.lat && coords.lon ? (
-             <div style={{ flex: 1, minHeight: '180px', display: 'flex', flexDirection: 'column', borderRadius: '12px', overflow: 'hidden', marginBottom: '2rem' }}>
-                <MapContainer 
-                  center={[coords.lat, coords.lon]} 
-                  zoom={15} 
-                  zoomControl={false}
-                  style={{ flex: 1, width: '100%' }}
-                >
-                  <TileLayer
-                    url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-                    attribution='&copy; OpenStreetMap'
-                  />
-                  <Marker position={[coords.lat, coords.lon]} icon={customMapPin} />
-                </MapContainer>
-             </div>
-          ) : (
-             <div style={{ flex: 1, minHeight: '180px', borderRadius: '12px', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '2rem' }}>
-                <p style={{ color: '#888' }}>Map area unmappable</p>
-             </div>
-          )}
-
-       </div>
-
-       {/* ACTION BUTTON */}
-       <div style={{ padding: '1.5rem', paddingBottom: '2.5rem', background: '#fff', position: 'sticky', bottom: 0, marginTop: 'auto' }}>
-           <button 
-              className="fr-submit-btn" 
-              onClick={handleSelect}
-              style={{ width: '100%' }}
-           >
-              Select Location
-           </button>
+          <button 
+             className="fr-submit-btn" 
+             onClick={handleSelect}
+             style={{ width: '100%' }}
+          >
+             Select Location
+          </button>
        </div>
     </div>
   );

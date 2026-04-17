@@ -399,8 +399,8 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   display: flex;
   flex-direction: column;
   transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-  /* Make the panel slide mostly off screen. Keeping ~40px handle peek */
-  transform: translateY(calc(100% - 40px)); 
+  /* Make the panel slide mostly off screen. Keeping ~28px handle peek */
+  transform: translateY(calc(100% - 28px)); 
 }
 
 .fr-bottom-panel.open {
@@ -409,12 +409,12 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
 .fr-peek {
   width: 100%;
-  height: 40px;
+  height: 28px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  padding-top: 15px;
+  padding-top: 11px;
   align-items: center;
   position: relative;
 }

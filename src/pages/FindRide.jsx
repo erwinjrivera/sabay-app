@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, MapPin, Navigation, Crosshair, Map, Clock, Calendar, Search, X, MoreHorizontal, Heart, Users, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, MapPin, Navigation, Crosshair, Map, Clock, Calendar, Search, X, MoreHorizontal, Heart, Users, Minus, Plus, Trash2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 /* MUI IMPORTS */
@@ -101,7 +101,7 @@ export default function FindRide() {
        saveRecentPlace(
           location.state.title || location.state.address, 
           location.state.desc || '', 
-          'search',
+          location.state.type || 'Location area',
           location.state.lat,
           location.state.lon
        ); // Automatically save as recent
@@ -145,7 +145,8 @@ export default function FindRide() {
             title: parts[0],
             desc: parts.slice(1).join(', '),
             lat: d.lat,
-            lon: d.lon
+            lon: d.lon,
+            type: d.type
           };
         });
         setSuggestions(mapped);
@@ -225,7 +226,7 @@ export default function FindRide() {
     });
   };
 
-  const handleSelect = (title, desc = '', lat, lon) => {
+  const handleSelect = (title, desc = '', lat, lon, type = 'Location area') => {
     if (title === 'Current location') {
       handleCurrentLocationclick();
       return;
@@ -263,7 +264,7 @@ export default function FindRide() {
     setSuggestions([]);
     
     // Save as a searched item
-    saveRecentPlace(title, desc, 'search', lat, lon);
+    saveRecentPlace(title, desc, type, lat, lon);
   };
 
   const handleFindRideSubmit = async () => {
@@ -364,94 +365,123 @@ export default function FindRide() {
   return (
     <ThemeProvider theme={theme}>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
-        <div className="find-ride-container">
-          {/* Header & Inputs */}
-          <div className="fr-header" style={{ flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', paddingBottom: '16px', width: '100%' }}>
-               <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', cursor: 'pointer', padding: 0 }}>
-                 <ArrowLeft size={24} color="#fff" />
-               </button>
-               <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#fff' }}>Find Ride</h1>
-            </div>
-          </div>
 
-          <div style={{ background: '#fff', margin: '0', padding: '16px 16px 0', position: 'relative', zIndex: 10 }}>
-            <div className="fr-inputs-wrapper">
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '14px', marginRight: '16px', paddingBottom: '6px' }}>
-                <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
-                <div style={{ width: 1, height: '36px', background: '#ccc', margin: '4px 0' }}></div>
-                <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
-              </div>
-              <div className="fr-input-fields">
-                <div className="fr-input-wrapper">
-                  <input 
-                    ref={fromRef}
-                    type="text" 
-                    className={ "fr-input " + (activeField === 'from' ? 'fr-active' : '') }
-                    placeholder="Leaving from..."
-                    value={fromLocation}
-                    onChange={(e) => {
-                       setFromLocation(e.target.value);
-                       setFromCoords(null);
-                    }}
-                    onFocus={() => {
-                       setActiveField('from');
-                       setIsPanelOpen(false);
-                    }}
-                    style={{ background: '#fff', color: '#1e293b', border: activeField === 'from' ? '1px solid #00b0f0' : '1px solid #cbd5e1' }}
-                  />
-                  {activeField === 'from' && fromLocation && (
-                    <button className="fr-clear-btn" onClick={() => setFromLocation('')} style={{ background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
-                      <X size={12} color="#fff" strokeWidth={3} />
-                    </button>
-                  )}
-                </div>
-                
-                <div className="fr-input-wrapper">
-                  <input 
-                    ref={toRef}
-                    type="text" 
-                    className={ "fr-input " + (activeField === 'to' ? 'fr-active' : '') }
-                    placeholder="Going to..."
-                    value={toLocation}
-                    onChange={(e) => {
-                       setToLocation(e.target.value);
-                       setToCoords(null);
-                    }}
-                    onFocus={() => {
-                       setActiveField('to');
-                       setIsPanelOpen(false);
-                    }}
-                    style={{ background: '#fff', color: '#1e293b', border: activeField === 'to' ? '1px solid #00b0f0' : '1px solid #cbd5e1' }}
-                  />
-                  {activeField === 'to' && toLocation && (
-                    <button className="fr-clear-btn" onClick={() => setToLocation('')} style={{ background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, right: '12px' }}>
-                      <X size={12} color="#fff" strokeWidth={3} />
-                    </button>
-                  )}
-                </div>
+        <div className="find-ride-container" style={{ background: '#f8fafc', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+          
+          {/* Dark Header Strip (Matches OfferMatches.jsx style exactly) */}
+          <div style={{ background: 'rgba(40,45,50,0.9)', zIndex: 10 }}>
+            {/* Top Bar Navigation */}
+            <div style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '16px', color: '#fff' }}>
+              <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+                <ArrowLeft size={24} />
+              </button>
+              <div>
+                <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: '#fff' }}>Find Ride</h1>
+                <p style={{ margin: 0, fontSize: '0.85rem', color: '#bbb' }}>Set your pickup and drop-off locations</p>
               </div>
             </div>
 
-            <div className="fr-tabs" style={{ background: 'transparent', boxShadow: 'none', padding: '16px 0', gap: '1rem', justifyContent: 'flex-start' }}>
-              <button 
-                className={ "fr-tab-btn " + (activeTab === 'recent' ? 'active' : '') }
+            {/* Inputs Section */}
+            <div style={{ padding: '0 1rem 1.5rem', display: 'flex', flexDirection: 'column' }}>
+               <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
+                 <div style={{ display: 'flex', gap: '16px', flex: 1 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '10px', paddingBottom: '10px' }}>
+                      <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
+                      <div style={{ width: 1, flex: 1, background: '#555', margin: '4px 0' }}></div>
+                      <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, justifyContent: 'center' }}>
+                      <div style={{ position: 'relative' }}>
+                        <input 
+                          ref={fromRef}
+                          type="text" 
+                          placeholder="Leaving from..."
+                          value={fromLocation}
+                          onChange={(e) => {
+                             setFromLocation(e.target.value);
+                             setFromCoords(null);
+                          }}
+                          onFocus={() => {
+                             setActiveField('from');
+                             setIsPanelOpen(false);
+                          }}
+                          style={{ width: 'calc(100% - 8px)', background: activeField === 'from' ? '#64686a' : 'transparent', color: '#fff', border: '1px solid transparent', padding: '8px 36px 8px 14px', marginLeft: '-4px', borderRadius: '20px', fontSize: '0.9rem', lineHeight: '1.3', boxSizing: 'border-box', outline: 'none', transition: 'all 0.2s' }}
+                        />
+                        {activeField === 'from' && fromLocation && (
+                          <button onClick={() => setFromLocation('')} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', cursor: 'pointer' }}>
+                            <X size={12} color="#555" strokeWidth={3} />
+                          </button>
+                        )}
+                      </div>
+
+                      <div style={{ position: 'relative' }}>
+                        <input 
+                          ref={toRef}
+                          type="text" 
+                          placeholder="Going to..."
+                          value={toLocation}
+                          onChange={(e) => {
+                             setToLocation(e.target.value);
+                             setToCoords(null);
+                          }}
+                          onFocus={() => {
+                             setActiveField('to');
+                             setIsPanelOpen(false);
+                          }}
+                          style={{ width: 'calc(100% - 8px)', background: activeField === 'to' ? '#64686a' : 'transparent', color: activeField === 'to' || toLocation ? '#fff' : '#ccc', border: '1px solid transparent', padding: '8px 36px 8px 14px', marginLeft: '-4px', borderRadius: '20px', fontSize: '0.9rem', lineHeight: '1.3', boxSizing: 'border-box', outline: 'none', transition: 'all 0.2s' }}
+                        />
+                        {activeField === 'to' && toLocation && (
+                          <button onClick={() => setToLocation('')} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', cursor: 'pointer' }}>
+                            <X size={12} color="#555" strokeWidth={3} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                 </div>
+               </div>
+            </div>
+
+            {/* Physical Folder Tabs seamlessly merged to the white box below */}
+            {/* Physical Folder Tabs seamlessly merged to the white box below */}
+            <div style={{ display: 'flex', padding: '0', background: 'rgba(0,0,0,0.15)', paddingTop: '10px' }}>
+              <div 
                 onClick={() => setActiveTab('recent')}
-                style={activeTab === 'recent' ? { background: '#00b0f0', color: '#fff' } : { color: '#777', background: '#f5f5f5' }}
+                style={{ 
+                  position: 'relative',
+                  zIndex: activeTab === 'recent' ? 10 : 1,
+                  flex: 1, textAlign: 'center', padding: '14px 0', fontWeight: 600, fontSize: '0.95rem',
+                  color: activeTab === 'recent' ? '#333' : '#aaa',
+                  background: activeTab === 'recent' ? '#fff' : 'transparent',
+                  borderRadius: '12px 12px 0 0', cursor: 'pointer'
+                }}
               >
                 Recent
-              </button>
-              <button 
-                className={ "fr-tab-btn " + (activeTab === 'saved' ? 'active' : '') }
+                {activeTab === 'recent' && (
+                  <div style={{ position: 'absolute', bottom: 0, right: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top right, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
+                )}
+              </div>
+              <div 
                 onClick={() => setActiveTab('saved')} 
-                style={activeTab === 'saved' ? { background: '#00b0f0', color: '#fff' } : { color: '#777', background: '#f5f5f5' }}
+                style={{ 
+                  position: 'relative',
+                  zIndex: activeTab === 'saved' ? 10 : 1,
+                  flex: 1, textAlign: 'center', padding: '14px 0', fontWeight: 600, fontSize: '0.95rem',
+                  color: activeTab === 'saved' ? '#333' : '#aaa',
+                  background: activeTab === 'saved' ? '#fff' : 'transparent',
+                  borderRadius: '12px 12px 0 0', cursor: 'pointer'
+                }}
               >
                 Saved
-              </button>
+                {activeTab === 'saved' && (
+                  <div style={{ position: 'absolute', bottom: 0, left: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top left, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="fr-list-container" style={{ background: '#fff' }}>
+          {/* Default List Container */}
+          <div className="fr-list-container" style={{ background: '#fff', marginTop: '-1px', position: 'relative', zIndex: 20 }}>
             {activeTab === 'recent' && (
               <div className="fr-list">
                 
@@ -529,14 +559,18 @@ export default function FindRide() {
                     ))}
                     
                     {recentPlaces.length > 0 && (
-                      <div style={{ textAlign: 'center', padding: '1.5rem 0' }}>
-                        <a href="#" style={{ color: '#888', textDecoration: 'underline', fontSize: '0.9rem' }} onClick={(e) => {
-                           e.preventDefault();
-                           setRecentPlaces([]);
-                           localStorage.removeItem('sabay_find_recents');
-                        }}>
-                          Clear recent items
-                        </a>
+                      <div style={{ textAlign: 'center', padding: '1.5rem 0', display: 'flex', justifyContent: 'center' }}>
+                         <button 
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ccc' }} 
+                            onClick={(e) => {
+                               e.preventDefault();
+                               setRecentPlaces([]);
+                               localStorage.removeItem('sabay_find_recents');
+                            }}
+                            title="Clear recent items"
+                         >
+                           <Trash2 size={20} />
+                         </button>
                       </div>
                     )}
                   </>
@@ -548,13 +582,13 @@ export default function FindRide() {
                 )}
 
                 {!isSearching && suggestions.map((item) => (
-                  <div key={item.id} className="fr-list-item" onClick={() => handleSelect(item.title, item.desc, item.lat, item.lon)}>
+                  <div key={item.id} className="fr-list-item" onClick={() => handleSelect(item.title, item.desc, item.lat, item.lon, item.type)}>
                     <div className="fr-icon-box fr-teal">
                       <Search size={20} color="#888" />
                     </div>
                     <div className="fr-item-text">
                       <h4>{item.title}</h4>
-                      <p>{item.desc}</p>
+                      {item.desc && <p>{item.desc}</p>}
                     </div>
                     <div className="fr-icon-more" onClick={(e) => {
                        e.stopPropagation();
@@ -578,7 +612,13 @@ export default function FindRide() {
             {activeTab === 'saved' && (
               <div className="fr-list">
                 {savedPlaces.length === 0 ? (
-                  <p style={{ textAlign: 'center', margin: '2rem 0', color: '#888' }}>You haven't saved any places yet.</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 1rem', textAlign: 'center' }}>
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
+                      <Heart size={32} color="#94a3b8" strokeWidth={1.5} />
+                    </div>
+                    <h3 style={{ margin: '0 0 0.5rem', color: '#1e293b', fontSize: '1.2rem', fontWeight: 600 }}>No saved places</h3>
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>You don't have any saved places at the moment.</p>
+                  </div>
                 ) : (
                   savedPlaces.map((item) => (
                     <div key={item.id} className="fr-list-item" onClick={() => handleSelect(item.title, item.desc, item.lat, item.lon)}>
