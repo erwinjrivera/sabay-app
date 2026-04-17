@@ -180,7 +180,19 @@ export default function LocationDetails() {
        {/* HEADER */}
        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(40,45,50,0.9)', zIndex: 10, backdropFilter: 'blur(5px)', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
           <button 
-             onClick={() => navigate(-1)}
+             onClick={() => {
+                if (findState) {
+                   navigate(`/${sourceMode}`, { 
+                      state: { 
+                         restoreOnly: true, 
+                         originalFindState: findState, 
+                         activeField 
+                      }
+                   });
+                } else {
+                   navigate(-1);
+                }
+             }}
              style={{ background: 'transparent', border: 'none', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', marginRight: '1rem' }}
           >
             <ArrowLeft size={24} color="#fff" />

@@ -77,34 +77,40 @@ export default function FindRide() {
        if (location.state.originalFindState.dateVal) setDateVal(dayjs(location.state.originalFindState.dateVal));
        if (location.state.originalFindState.timeVal) setTimeVal(dayjs(location.state.originalFindState.timeVal));
        
-       if (location.state.updatedField === 'from') {
-          setFromLocation(location.state.address);
-          setFromCoords(location.state.lat && location.state.lon ? { lat: location.state.lat, lon: location.state.lon } : null);
-          if (!location.state.originalFindState.toLocation) {
-             setActiveField('to');
-             setTimeout(() => toRef.current?.focus(), 100);
-          } else {
-             setIsPanelOpen(true);
+       if (location.state.restoreOnly) {
+          if (location.state.activeField) {
+             setActiveField(location.state.activeField);
           }
-       } else if (location.state.updatedField === 'to') {
-          setToLocation(location.state.address);
-          setToCoords(location.state.lat && location.state.lon ? { lat: location.state.lat, lon: location.state.lon } : null);
-          if (!location.state.originalFindState.fromLocation) {
-             setActiveField('from');
-             setTimeout(() => fromRef.current?.focus(), 100);
-          } else {
-             setActiveField('to');
-             setIsPanelOpen(true);
-          }
+       } else {
+           if (location.state.updatedField === 'from') {
+              setFromLocation(location.state.address);
+              setFromCoords(location.state.lat && location.state.lon ? { lat: location.state.lat, lon: location.state.lon } : null);
+              if (!location.state.originalFindState.toLocation) {
+                 setActiveField('to');
+                 setTimeout(() => toRef.current?.focus(), 100);
+              } else {
+                 setIsPanelOpen(true);
+              }
+           } else if (location.state.updatedField === 'to') {
+              setToLocation(location.state.address);
+              setToCoords(location.state.lat && location.state.lon ? { lat: location.state.lat, lon: location.state.lon } : null);
+              if (!location.state.originalFindState.fromLocation) {
+                 setActiveField('from');
+                 setTimeout(() => fromRef.current?.focus(), 100);
+              } else {
+                 setActiveField('to');
+                 setIsPanelOpen(true);
+              }
+           }
+           
+           saveRecentPlace(
+              location.state.title || location.state.address, 
+              location.state.desc || '', 
+              location.state.type || 'Location area',
+              location.state.lat,
+              location.state.lon
+           ); // Automatically save as recent
        }
-       
-       saveRecentPlace(
-          location.state.title || location.state.address, 
-          location.state.desc || '', 
-          location.state.type || 'Location area',
-          location.state.lat,
-          location.state.lon
-       ); // Automatically save as recent
        
        // Clear state instantly to prevent infinite refresh cycles
        navigate(location.pathname, { replace: true, state: {} });
@@ -274,12 +280,22 @@ export default function FindRide() {
        return;
     }
 
+    if (fromLocation.trim().toLowerCase() === toLocation.trim().toLowerCase()) {
+       setErrorMsg("Sorry, we cannot calculate a route since your origin and destination are the exact same location.");
+       return;
+    }
+
     if (dateVal && timeVal) {
        const selectedDateTime = dateVal.hour(timeVal.hour()).minute(timeVal.minute()).second(0);
        if (selectedDateTime.isBefore(dayjs().subtract(2, 'minute'))) {
           setErrorMsg("The selected departure time has already passed. Please choose a valid future time.");
           return;
        }
+    }
+
+    if (noteToDriver && noteToDriver.trim().length > 100) {
+      setErrorMsg("Note must not exceed 100 characters.");
+      return;
     }
     
     setIsSubmitting(true);
@@ -528,7 +544,7 @@ export default function FindRide() {
                 {(!currentQuery || currentQuery.length < 3) && (
                   <>
                     {recentPlaces.map((item) => (
-                      <div key={item.id} className="fr-list-item" onClick={() => handleSelect(item.title, item.desc, item.lat, item.lon)}>
+                      <div key={item.id} className="fr-list-item" onClick={() => handleSelect(item.title, item.desc, item.lat, item.lon, item.type)}>
                         <div className="fr-icon-box fr-teal">
                           {isPlaceSaved(item.title, item.desc) ? (
                              <Heart size={20} color="#00b0f0" />
@@ -621,7 +637,7 @@ export default function FindRide() {
                   </div>
                 ) : (
                   savedPlaces.map((item) => (
-                    <div key={item.id} className="fr-list-item" onClick={() => handleSelect(item.title, item.desc, item.lat, item.lon)}>
+                    <div key={item.id} className="fr-list-item" onClick={() => handleSelect(item.title, item.desc, item.lat, item.lon, item.type)}>
                       <div className="fr-icon-box fr-teal">
                         <Heart size={20} color="#00b0f0" />
                       </div>

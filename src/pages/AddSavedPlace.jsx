@@ -27,6 +27,16 @@ export default function AddSavedPlace() {
       setErrorMsg('Please enter a name for this place.');
       return;
     }
+    
+    if (name.trim().length > 60) {
+      setErrorMsg('Name must not exceed 60 characters.');
+      return;
+    }
+    
+    if (details.trim().length > 150) {
+      setErrorMsg('Address details must not exceed 150 characters.');
+      return;
+    }
 
     // Check uniqueness natively against the correct pool
     const savedString = localStorage.getItem(`sabay_${sourceMode}_saved`);
@@ -63,7 +73,7 @@ export default function AddSavedPlace() {
     localStorage.setItem(`sabay_${sourceMode}_saved`, JSON.stringify(updated));
 
     // Bounce exactly backwards
-    navigate(`/${sourceMode}`, { state: { activeTab: 'saved' } });
+    navigate(-1);
   };
 
   const wrapperStyle = {
@@ -124,6 +134,7 @@ export default function AddSavedPlace() {
                style={inputStyle}
                placeholder="e.g. Home, Work, etc..."
                value={name}
+               maxLength={60}
                onChange={(e) => {
                   setName(e.target.value);
                   setErrorMsg('');
@@ -147,6 +158,7 @@ export default function AddSavedPlace() {
                style={inputStyle}
                placeholder="e.g. Floor, unit number"
                value={details}
+               maxLength={150}
                onChange={(e) => setDetails(e.target.value)}
             />
             {details && (
@@ -182,7 +194,7 @@ export default function AddSavedPlace() {
            <button 
               className="fr-submit-btn" 
               onClick={handleSave}
-              style={{ width: '100%', padding: '14px', background: '#00b0f0', color: 'white', borderRadius: '24px', fontSize: '1.1rem', fontWeight: 600, border: 'none', cursor: 'pointer' }}
+              style={{ width: '100%' }}
            >
               {editMode ? 'Update Address' : 'Save Address'}
            </button>
