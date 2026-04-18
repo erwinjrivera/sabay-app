@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
@@ -248,75 +248,36 @@ export default function FindMatches() {
               
               const driverRoute = driverData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
               
-              // Sub-function to find the true road-network driving distance optimal point on D
-              const findBestNetworkNode = async (targetPos) => {
-                 const candidates = driverRoute.map((pt, idx) => ({ pt, idx, dist: getDistanceKM(pt[0], pt[1], targetPos.lat, targetPos.lon) }))
-                                               .filter(c => c.dist <= 5.0);
-                 if (candidates.length === 0) return null;
+              // 1. Constrain the Passenger to the Driver's Route (Project P onto D)
+              let minOriginD = Infinity, pickupIdx = -1;
+              let minDestD = Infinity, dropIdx = -1;
+              
+              driverRoute.forEach((ptD, idx) => {
+                  const distToPo = getDistanceKM(ptD[0], ptD[1], passengerFrom.lat, passengerFrom.lon);
+                  if (distToPo < minOriginD) { minOriginD = distToPo; pickupIdx = idx; }
+                  
+                  const distToPd = getDistanceKM(ptD[0], ptD[1], passengerTo.lat, passengerTo.lon);
+                  if (distToPd < minDestD) { minDestD = distToPd; dropIdx = idx; }
+              });
 
-                 // Downsample to max 50 coordinates to fit OSRM public table limit
-                 let sampleSize = Math.max(1, Math.ceil(candidates.length / 50));
-                 let sampled = [];
-                 for (let i = 0; i < candidates.length; i += sampleSize) {
-                      sampled.push(candidates[i]);
-                 }
-                 if (sampled.length > 90) sampled = sampled.slice(0, 90);
+              // Apply Constraints:
+              // Distance between Po and D is within X meters (e.g. 5.0 km pickup threshold)
+              // Distance between Pd and D is within Y meters (e.g. 5.0 km drop-off threshold)
+              // Ensure continuity along the driver's path (pickup must be before dropoff chronologically)
+              if (minOriginD > 5.0 || minDestD > 5.0 || pickupIdx >= dropIdx) return null;
 
-                 let coords = `${targetPos.lon},${targetPos.lat}`;
-                 sampled.forEach(c => { coords += `;${c.pt[1]},${c.pt[0]}`; });
-
-                 try {
-                     const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`);
-                     const data = await res.json();
-                     if (data.code !== 'Ok' || !data.durations || !data.durations[0]) throw new Error("Table API failed");
-
-                     let minDur = Infinity;
-                     let bestCandidate = null;
-                     for (let i = 0; i < sampled.length; i++) {
-                         const dur = data.durations[0][i + 1];
-                         if (dur !== null && dur < minDur) { minDur = dur; bestCandidate = sampled[i]; }
-                     }
-                     return bestCandidate || sampled.reduce((min, c) => c.dist < min.dist ? c : min, sampled[0]);
-                 } catch(e) {
-                     return sampled.reduce((min, c) => c.dist < min.dist ? c : min, sampled[0]);
-                 }
-              };
-
-              // 1. Constrain Passenger to Driver's Route via actual Road Network Proximity!
-              const bestPickup = await findBestNetworkNode(passengerFrom);
-              const bestDropoff = await findBestNetworkNode(passengerTo);
-
-              if (!bestPickup || !bestDropoff || bestPickup.idx >= bestDropoff.idx) return null;
-
-              let pickupIdx = bestPickup.idx;
-              let dropIdx = bestDropoff.idx;
               let meetPickup = driverRoute[pickupIdx];
               let meetDropoff = driverRoute[dropIdx];
               
+              // Straight line fallbacks (until dynamic map hook replaces them visually)
               let interceptPaths = {
                  pickupPath: [[passengerFrom.lat, passengerFrom.lon], [meetPickup[0], meetPickup[1]]],
                  dropoffPath: [[meetDropoff[0], meetDropoff[1]], [passengerTo.lat, passengerTo.lon]]
               };
-              
-              // Segment 1 & 3: Connector routes mapped natively to exactly the OSRM geometric paths!
-              try {
-                  const pFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFrom.lon},${passengerFrom.lat};${meetPickup[1]},${meetPickup[0]}?geometries=geojson`);
-                  const dFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${meetDropoff[1]},${meetDropoff[0]};${passengerTo.lon},${passengerTo.lat}?geometries=geojson`);
-                  const [pRes, dRes] = await Promise.all([pFetch, dFetch]);
-                  const pData = await pRes.json();
-                  const dData = await dRes.json();
-                  if (pData.routes?.length > 0) interceptPaths.pickupPath = pData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-                  if (dData.routes?.length > 0) interceptPaths.dropoffPath = dData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-              } catch (e) {
-                  console.error("OSRM Connector routing failed natively", e);
-              }
-
-              // Final sequential sanity check
-              if (pickupIdx >= dropIdx) return null;
 
               const geometricPayload = {
                  id: req.id,
-                 price: '0.00 ₱', 
+                 price: '0.00 â‚±', 
                  pickup: { lat: pLat, lon: pLon, address: req.from.address },
                  dropoff: { lat: dLat, lon: dLon, address: req.to.address },
                  meetPickup: { lat: meetPickup[0], lon: meetPickup[1], idx: pickupIdx },
@@ -768,7 +729,7 @@ export default function FindMatches() {
         ) : matches.length === 0 ? (
           <div style={{ background: '#fff', borderRadius: '12px', padding: '30px 20px', textAlign: 'center', width: '90%', margin: '0 auto', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', flexShrink: 0 }}>
             <p style={{ margin: 0, color: '#555', fontWeight: 600, fontSize: '1.2rem' }}>
-              {volatilePassengerState?.status === 'cancelled' ? 'Ride Cancelled 🚫' : 'No Matches Found 😢'}
+              {volatilePassengerState?.status === 'cancelled' ? 'Ride Cancelled ðŸš«' : 'No Matches Found ðŸ˜¢'}
             </p>
             <p style={{ margin: '8px 0 0', color: '#888', fontSize: '0.9rem', lineHeight: '1.4' }}>
               {volatilePassengerState?.status === 'cancelled' ? 'This ride request has been officially cancelled.' : "We couldn't find any drivers offering a ride along your planned route right now."}
@@ -1030,7 +991,7 @@ export default function FindMatches() {
                     {activeDriver.plateNumber && (
                        <div style={{ marginTop: '2px', fontSize: '0.85rem', color: '#666', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <Car size={14} color="#666" />
-                          <span><span style={{ fontWeight: 700 }}>{activeDriver.plateNumber}</span> • {activeDriver.carMake} {activeDriver.carModel} ({activeDriver.carColor})</span>
+                          <span><span style={{ fontWeight: 700 }}>{activeDriver.plateNumber}</span> â€¢ {activeDriver.carMake} {activeDriver.carModel} ({activeDriver.carColor})</span>
                        </div>
                     )}
                   </div>

@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2, Car } from 'lucide-react';
+import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
-import { collection, query, getDocs, doc, getDoc, updateDoc, onSnapshot, increment, arrayUnion, arrayRemove, where } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, onSnapshot, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371; // km
@@ -42,7 +42,7 @@ const passengerIcon = new L.DivIcon({
 
 const getDriverStartIcon = (type) => new L.DivIcon({
   className: 'custom-pass-start-dot',
-  html: `<div style="width:16px;height:16px;background:${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#9cc93a' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${type === 'completed' ? 'rgba(156,201,58,0.6)' : type === 'confirmed' ? 'rgba(156,201,58,0.6)' : type === 'match' ? 'rgba(0,176,240,0.6)' : type === 'offered' ? 'rgba(255,0,67,0.6)' : type === 'request' ? 'rgba(234,179,8,0.6)' : 'rgba(136,136,136,0.6)'};"></div>`,
+  html: `<div style="width:16px;height:16px;background:${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${type === 'confirmed' ? 'rgba(40,236,51,0.6)' : type === 'match' ? 'rgba(0,176,240,0.6)' : type === 'offered' ? 'rgba(255,0,67,0.6)' : type === 'request' ? 'rgba(234,179,8,0.6)' : 'rgba(136,136,136,0.6)'};"></div>`,
   iconSize: [24, 24],
   iconAnchor: [12, 12]
 });
@@ -56,7 +56,7 @@ const passengerStartIcon = new L.DivIcon({
 
 const getDriverEndIcon = (type) => new L.DivIcon({
   className: 'custom-end-pin',
-  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#9cc93a' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
+  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
   iconSize: [34, 34],
   iconAnchor: [17, 34],
 });
@@ -70,14 +70,14 @@ const pickupSpotIcon = new L.DivIcon({
 
 const getMeetSpotIcon = (type) => new L.DivIcon({
   className: 'custom-meet-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#9cc93a' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
+  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
   iconSize: [22, 22],
   iconAnchor: [11, 11]
 });
 
 const getMeetDropSpotIcon = (type) => new L.DivIcon({
   className: 'custom-meet-drop-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#9cc93a' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
+  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${type === 'confirmed' ? '#28ec33' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
   iconSize: [22, 22],
   iconAnchor: [11, 11]
 });
@@ -111,7 +111,6 @@ export default function FindMatches() {
   const [activeDriverId, setActiveDriverId] = useState(null);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [isBottomPanelExpanded, setIsBottomPanelExpanded] = useState(false);
-  const [drawerMode, setDrawerMode] = useState('driver');
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showRetractRequestModal, setShowRetractRequestModal] = useState(false);
   const [matchToRetract, setMatchToRetract] = useState(null);
@@ -143,16 +142,9 @@ export default function FindMatches() {
     fetchPassengerRoute();
   }, []);
 
-  const volatilePassengerStateRef = useRef(ride);
-
   // Matching Engine: Fetch and filter drivers dynamically
   useEffect(() => {
     if (passengerRoute.length === 0) return;
-    if (volatilePassengerStateRef.current?.status === 'cancelled') {
-        setIsLoadingMatches(false);
-        setMatches([]);
-        return;
-    }
 
     setIsLoadingMatches(true);
     const reqRef = collection(db, 'rideOffers');
@@ -165,63 +157,10 @@ export default function FindMatches() {
            if (!req.from?.lat || !req.to?.lat) return null;
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
-           // TEMPORAL CHECK LAUNCH
-           if (!ride?.date || !req.date || !ride?.time || !req.time) return null;
-           const dRide = dayjs(ride.date).format('YYYY-MM-DD');
-           const dReq = dayjs(req.date).format('YYYY-MM-DD');
-           if (dRide !== dReq) return null;
-           if (dRide < dayjs().format('YYYY-MM-DD')) return null;
-           const mRide = dayjs(ride.time).hour() * 60 + dayjs(ride.time).minute();
-           const mReq = dayjs(req.time).hour() * 60 + dayjs(req.time).minute();
-           if (Math.abs(mRide - mReq) > 90) return null;
-           if (req.status === 'completed' || req.status === 'cancelled') {
-               if (volatilePassengerStateRef.current?.offeredByRideId !== req.id) {
-                   if (geometryCache.current[req.id]) delete geometryCache.current[req.id];
-                   return null;
-               }
-           }
-
-           // CRITICAL FIX: Hide all other unrelated active open drivers entirely if this passenger request historically or actively bound itself to someone else natively!
-           if (volatilePassengerStateRef.current?.status !== 'open' && volatilePassengerStateRef.current?.offeredByRideId && volatilePassengerStateRef.current?.offeredByRideId !== req.id) {
-               return null;
-           }
-
-           let typeStatus = (req.status === 'confirmed' && req.requestedByRideId === ride?.id) ? 'confirmed' : ((req.requestedByPassengerIds || []).includes(ride?.id)) ? 'request' : 'match';
-           if (volatilePassengerStateRef.current?.offeredByRideId === req.id) {
-               if (volatilePassengerStateRef.current?.status === 'completed') typeStatus = 'completed';
-               else if (volatilePassengerStateRef.current?.status === 'confirmed') typeStatus = 'confirmed';
-           }
-
+           const typeStatus = (req.status === 'confirmed' && req.requestedByRideId === ride?.id) ? 'confirmed' : ((req.requestedByPassengerIds || []).includes(ride?.id)) ? 'request' : 'match';
            const nameParams = req.userName || 'Erwin Rivera';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
-           
-           let ratingParams = req.userRating || '0.0';
-           let reviewsParams = req.userReviews || 0;
-           let completedRidesParams = 0;
-           let carMakeParams = '';
-           let carModelParams = '';
-           let carColorParams = '';
-           let plateNumberParams = '';
-
-           if (req.userId) {
-               try {
-                   const userDocSnap = await getDoc(doc(db, 'users', req.userId));
-                   if (userDocSnap.exists()) {
-                       const userData = userDocSnap.data();
-                       if (userData.rating) ratingParams = parseFloat(userData.rating).toFixed(1);
-                       if (userData.reviewsCount !== undefined) reviewsParams = userData.reviewsCount;
-                       else if (userData.reviews !== undefined) reviewsParams = userData.reviews;
-                       if (userData.completedRides) completedRidesParams = userData.completedRides;
-                        
-                       if (userData.carMake) carMakeParams = userData.carMake;
-                       if (userData.carModel) carModelParams = userData.carModel;
-                       if (userData.carColor) carColorParams = userData.carColor;
-                       if (userData.plateNumber) plateNumberParams = userData.plateNumber;
-                   }
-               } catch (e) {
-                   console.error("Error fetching user rating", e);
-               }
-           }
+           const ratingParams = req.userRating || '0.0';
 
            // PREVENT API SPAM - INSTANT CACHE YIELDING LOCALLY
            if (geometryCache.current[req.id]) {
@@ -230,9 +169,11 @@ export default function FindMatches() {
                    type: typeStatus,
                    name: nameParams,
                    time: timeParams,
-                   seats: req.seats || geometryCache.current[req.id].seats || 1,
-                   seatsTaken: req.seatsTaken || geometryCache.current[req.id].seatsTaken || 0,
-                   profilePic: req.userProfilePic || geometryCache.current[req.id].profilePic || '',
+                   rating: ratingParams,
+                   reviews: req.userReviews || 0,
+                   seats: req.seats || 1,
+                   seatsTaken: req.seatsTaken || 0,
+                   profilePic: req.userProfilePic || '',
                    rawRequest: req
                };
            }
@@ -248,89 +189,83 @@ export default function FindMatches() {
               
               const driverRoute = driverData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
               
-              // Sub-function to find the true road-network driving distance optimal point on D
-              const findBestNetworkNode = async (targetPos) => {
-                 const candidates = driverRoute.map((pt, idx) => ({ pt, idx, dist: getDistanceKM(pt[0], pt[1], targetPos.lat, targetPos.lon) }))
-                                               .filter(c => c.dist <= 5.0);
-                 if (candidates.length === 0) return null;
+              // Find intersections! Find the points on the passenger route natively mapping overlaps
+              let globalMin = Infinity;
+              const distProfile = driverRoute.map((ptP, idxP) => {
+                 let minDist = Infinity;
+                 let closestDIdx = -1;
+                 passengerRoute.forEach((ptD, idxD) => {
+                    const dist = getDistanceKM(ptP[0], ptP[1], ptD[0], ptD[1]);
+                    if (dist < minDist) { minDist = dist; closestDIdx = idxD; }
+                 });
+                 if (minDist < globalMin) globalMin = minDist;
+                 return { minDist, closestDIdx, passIdx: idxP };
+              });
 
-                 // Downsample to max 50 coordinates to fit OSRM public table limit
-                 let sampleSize = Math.max(1, Math.ceil(candidates.length / 50));
-                 let sampled = [];
-                 for (let i = 0; i < candidates.length; i += sampleSize) {
-                      sampled.push(candidates[i]);
-                 }
-                 if (sampled.length > 90) sampled = sampled.slice(0, 90);
-
-                 let coords = `${targetPos.lon},${targetPos.lat}`;
-                 sampled.forEach(c => { coords += `;${c.pt[1]},${c.pt[0]}`; });
-
-                 try {
-                     const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`);
-                     const data = await res.json();
-                     if (data.code !== 'Ok' || !data.durations || !data.durations[0]) throw new Error("Table API failed");
-
-                     let minDur = Infinity;
-                     let bestCandidate = null;
-                     for (let i = 0; i < sampled.length; i++) {
-                         const dur = data.durations[0][i + 1];
-                         if (dur !== null && dur < minDur) { minDur = dur; bestCandidate = sampled[i]; }
-                     }
-                     return bestCandidate || sampled.reduce((min, c) => c.dist < min.dist ? c : min, sampled[0]);
-                 } catch(e) {
-                     return sampled.reduce((min, c) => c.dist < min.dist ? c : min, sampled[0]);
-                 }
-              };
-
-              // 1. Constrain Passenger to Driver's Route via actual Road Network Proximity!
-              const bestPickup = await findBestNetworkNode(passengerFrom);
-              const bestDropoff = await findBestNetworkNode(passengerTo);
-
-              if (!bestPickup || !bestDropoff || bestPickup.idx >= bestDropoff.idx) return null;
-
-              let pickupIdx = bestPickup.idx;
-              let dropIdx = bestDropoff.idx;
-              let meetPickup = driverRoute[pickupIdx];
-              let meetDropoff = driverRoute[dropIdx];
+              // Dynamically buffer node sparsity. If paths natively cross but nodes physically sit 80m apart, globalMin evaluates exactly exposing the true intersection natively!
+              const overlapThreshold = Math.max(0.04, globalMin + 0.02);
               
-              let interceptPaths = {
-                 pickupPath: [[passengerFrom.lat, passengerFrom.lon], [meetPickup[0], meetPickup[1]]],
-                 dropoffPath: [[meetDropoff[0], meetDropoff[1]], [passengerTo.lat, passengerTo.lon]]
-              };
+              const overlaps = distProfile
+                 .filter(pt => pt.minDist <= overlapThreshold)
+                 .map(pt => ({ passIdx: pt.passIdx, driverIdx: pt.closestDIdx }));
+
+              // Process match variables
+              let pickupIdx = -1, dropIdx = -1, meetPickup = null, meetDropoff = null;
+              let interceptPaths = { pickupPath: [], dropoffPath: [] };
               
-              // Segment 1 & 3: Connector routes mapped natively to exactly the OSRM geometric paths!
-              try {
-                  const pFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFrom.lon},${passengerFrom.lat};${meetPickup[1]},${meetPickup[0]}?geometries=geojson`);
-                  const dFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${meetDropoff[1]},${meetDropoff[0]};${passengerTo.lon},${passengerTo.lat}?geometries=geojson`);
-                  const [pRes, dRes] = await Promise.all([pFetch, dFetch]);
-                  const pData = await pRes.json();
-                  const dData = await dRes.json();
-                  if (pData.routes?.length > 0) interceptPaths.pickupPath = pData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-                  if (dData.routes?.length > 0) interceptPaths.dropoffPath = dData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-              } catch (e) {
-                  console.error("OSRM Connector routing failed natively", e);
+              // Pre-calculate absolute Euclidean nearest neighbors globally for Disjoint Route Fallbacks
+              let minOriginD = Infinity, euclidPickupIdx = -1;
+              let minDestD = Infinity, euclidDropIdx = -1;
+              passengerRoute.forEach((pt, idx) => {
+                  const distP = getDistanceKM(pt[0], pt[1], pLat, pLon);
+                  if (distP < minOriginD) { minOriginD = distP; euclidPickupIdx = idx; }
+                  const distD = getDistanceKM(pt[0], pt[1], dLat, dLon);
+                  if (distD < minDestD) { minDestD = distD; euclidDropIdx = idx; }
+              });
+
+              if (overlaps.length > 0) {
+                 const minPassOverlap = overlaps.reduce((min, o) => o.driverIdx < min.driverIdx ? o : min, overlaps[0]);
+                 const maxPassOverlap = overlaps.reduce((max, o) => o.driverIdx > max.driverIdx ? o : max, overlaps[0]);
+
+                 // Parity block: In FindMatches, o.passIdx uniquely maps to the Driver route, and o.driverIdx identically maps to the Passenger Route. 
+                 // If the driver intercepts the passenger's drop-off index BEFORE their pick-up index, they are inversely opposing directions!
+                 if (minPassOverlap.passIdx > maxPassOverlap.passIdx) return null;
+
+                 pickupIdx = minPassOverlap.driverIdx;
+                 dropIdx = maxPassOverlap.driverIdx;
+                 
+                 meetPickup = passengerRoute[pickupIdx];
+                 meetDropoff = passengerRoute[dropIdx];
+                 
+                 interceptPaths.pickupPath = passengerRoute.slice(0, pickupIdx + 1);
+                 interceptPaths.dropoffPath = passengerRoute.slice(dropIdx);
+              } else {
+                 // Pure Fallback: If absolutely no true overlap is physically detected, fall back to pure Euclidean origins sweeping
+                 if (minOriginD > 5.0 || minDestD > 5.0) return null; // Reject completely out of bounds rides
+                 
+                 pickupIdx = euclidPickupIdx;
+                 dropIdx = euclidDropIdx;
+                 meetPickup = passengerRoute[euclidPickupIdx];
+                 meetDropoff = passengerRoute[euclidDropIdx];
+                 interceptPaths = {
+                    pickupPath: passengerRoute.slice(0, pickupIdx + 1),
+                    dropoffPath: passengerRoute.slice(dropIdx)
+                 };
               }
 
-              // Final sequential sanity check
-              if (pickupIdx >= dropIdx) return null;
+              // Final sequential sanity check to prevent rides moving backward in time
+              if (pickupIdx > dropIdx) return null;
 
               const geometricPayload = {
                  id: req.id,
-                 price: '0.00 ₱', 
+                 price: '0.00 Γé▒', 
                  pickup: { lat: pLat, lon: pLon, address: req.from.address },
                  dropoff: { lat: dLat, lon: dLon, address: req.to.address },
                  meetPickup: { lat: meetPickup[0], lon: meetPickup[1], idx: pickupIdx },
                  meetDropoff: { lat: meetDropoff[0], lon: meetDropoff[1], idx: dropIdx },
                  interceptPaths,
                  driverFullRoute: driverRoute,
-                 rawRequest: req,
-                 rating: ratingParams,
-                 reviews: reviewsParams,
-                 completedRides: completedRidesParams,
-                 carMake: carMakeParams,
-                 carModel: carModelParams,
-                 carColor: carColorParams,
-                 plateNumber: plateNumberParams
+                 rawRequest: req
               };
 
               // Map to local logical memory
@@ -341,6 +276,8 @@ export default function FindMatches() {
                  type: typeStatus,
                  name: nameParams,
                  time: timeParams,
+                 rating: ratingParams,
+                 reviews: req.userReviews || 0,
                  seats: req.seats || 1,
                  seatsTaken: req.seatsTaken || 0,
                  profilePic: req.userProfilePic || '',
@@ -373,34 +310,17 @@ export default function FindMatches() {
   }, [passengerRoute, ride?.userId]);
 
   // Real-time bidirectional matching state sync natively updating passenger match views instantly if a driver reacts
-  const [volatilePassengerState, setVolatilePassengerState] = useState(ride);
-
-  useEffect(() => {
-    volatilePassengerStateRef.current = volatilePassengerState;
-  }, [volatilePassengerState]);
+  const [volatilePassengerState, setVolatilePassengerState] = useState(null);
 
   useEffect(() => {
     if (!ride?.id) return;
     const unsub = onSnapshot(doc(db, 'rideRequests', ride.id), (docSnap) => {
-        if (docSnap.exists()) {
-            setVolatilePassengerState({ id: docSnap.id, ...docSnap.data() });
-        }
+      if (docSnap.exists()) {
+        setVolatilePassengerState(docSnap.data());
+      }
     });
     return () => unsub();
   }, [ride?.id]);
-
-  useEffect(() => {
-      // Transition out of the matching phase instantaneously into active tracking if the driver initiates the trip
-      // Note: Passenger state remains 'confirmed', but the Driver's rideOffers status switches to 'in_progress'
-      if (volatilePassengerState?.status === 'active') { // Failsafe generic state
-          navigate('/passenger-tracking', { replace: true, state: { ride: volatilePassengerState } });
-      } else if (volatilePassengerState?.status === 'confirmed' && volatilePassengerState?.offeredByRideId) {
-          const theHostDriver = matches.find(m => m.id === volatilePassengerState.offeredByRideId);
-          if (theHostDriver && theHostDriver.rawRequest?.status === 'in_progress') {
-              navigate('/passenger-tracking', { replace: true, state: { ride: volatilePassengerState } });
-          }
-      }
-  }, [volatilePassengerState, matches, navigate]);
 
   useEffect(() => {
      if (volatilePassengerState?.status === 'offered' && volatilePassengerState?.offeredByRideId) {
@@ -410,18 +330,6 @@ export default function FindMatches() {
                  if (m.id === volatilePassengerState.offeredByRideId && m.type !== 'offered') {
                      changed = true;
                      return { ...m, type: 'offered' };
-                 }
-                 return m;
-             });
-             return changed ? next : prev;
-         });
-     } else if (volatilePassengerState?.status === 'completed' && volatilePassengerState?.offeredByRideId) {
-         setMatches(prev => {
-             let changed = false;
-             const next = prev.map(m => {
-                 if (m.id === volatilePassengerState.offeredByRideId && m.type !== 'completed') {
-                     changed = true;
-                     return { ...m, type: 'completed' };
                  }
                  return m;
              });
@@ -441,11 +349,9 @@ export default function FindMatches() {
          });
      } else if (volatilePassengerState?.status === 'open' || volatilePassengerState?.status === 'cancelled_by_passenger' || !volatilePassengerState) {
          setMatches(prev => {
-             // Sweep out any uniquely purged rides locally that bypassed deletion due to parity locks
-             const filtered = prev.filter(m => m.rawRequest?.status !== 'cancelled' && m.rawRequest?.status !== 'completed');
-             let changed = filtered.length !== prev.length;
-             const next = filtered.map(m => {
-                 if (m.type === 'offered' || m.type === 'confirmed' || m.type === 'request') {
+             let changed = false;
+             const next = prev.map(m => {
+                 if (m.type === 'offered') {
                      changed = true;
                      return { ...m, type: 'match' };
                  }
@@ -468,24 +374,9 @@ export default function FindMatches() {
   };
 
   const activeDriver = matches.find(m => m.id === activeDriverId);
-  const activeDriverRoute = activeDriver?.meetPickup && activeDriver?.driverFullRoute?.length > 0
-    ? activeDriver.driverFullRoute.slice(activeDriver.meetPickup.idx, activeDriver.meetDropoff.idx + 1)
+  const activeDriverRoute = activeDriver?.meetPickup && passengerRoute.length > 0
+    ? passengerRoute.slice(activeDriver.meetPickup.idx, activeDriver.meetDropoff.idx + 1)
     : [];
-
-  const handleMessageContact = async (userId) => {
-      if (!userId) return;
-      try {
-          const snap = await getDoc(doc(db, 'users', userId));
-          if (snap.exists() && snap.data().phoneNumber) {
-              window.location.href = `sms:${snap.data().phoneNumber}`;
-          } else {
-              alert("This user has not registered a phone number.");
-          }
-      } catch (err) {
-          console.error(err);
-          alert("Failed to retrieve phone number.");
-      }
-  };
 
   const handleRequestJoin = async (matchId) => {
     const match = matches.find(m => m.id === matchId);
@@ -555,11 +446,6 @@ export default function FindMatches() {
     <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
       
       {/* BACKGROUND MAP */}
-      {isLoadingMatches && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1000, background: 'white', padding: '15px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex' }}>
-          <Loader2 size={32} color="#00b0f0" style={{ animation: 'spin 1.2s linear infinite' }} />
-        </div>
-      )}
       <MapContainer 
         center={[14.5552, 121.0400]} 
         zoom={14} 
@@ -583,9 +469,9 @@ export default function FindMatches() {
         {/* PASSENGER PERSISTENT ROUTE (Visible if NO matches) */}
         {!activeDriverRoute.length && passengerRoute.length > 0 && (
           <>
-             <Polyline positions={passengerRoute} pathOptions={{ color: volatilePassengerState?.status === 'cancelled' ? '#888' : '#00b0f0', weight: 6, opacity: 0.8 }} />
-             <Marker position={[passengerFrom.lat, passengerFrom.lon]} icon={getDriverStartIcon(volatilePassengerState?.status === 'cancelled' ? 'cancelled' : 'match')} />
-             <Marker position={[passengerTo.lat, passengerTo.lon]} icon={getDriverEndIcon(volatilePassengerState?.status === 'cancelled' ? 'cancelled' : 'match')} />
+            <Polyline positions={passengerRoute} pathOptions={{ color: '#00b0f0', weight: 6, opacity: 0.8 }} />
+            <Marker position={[passengerFrom.lat, passengerFrom.lon]} icon={getDriverStartIcon('match')} />
+            <Marker position={[passengerTo.lat, passengerTo.lon]} icon={getDriverEndIcon('match')} />
           </>
         )}
 
@@ -597,13 +483,13 @@ export default function FindMatches() {
             <Marker position={[passengerTo.lat, passengerTo.lon]} icon={getDriverEndIcon(activeDriver.type)} />
 
             {/* Main passenger transit overlap path (solid Color) */}
-            <Polyline positions={activeDriverRoute} pathOptions={{ color: activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 6, opacity: 1 }} />
+            <Polyline positions={activeDriverRoute} pathOptions={{ color: activeDriver.type === 'confirmed' ? '#28ec33' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 6, opacity: 1 }} />
             
             {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node */}
             {passengerRoute.length > 0 && activeDriver?.meetPickup && (
                <Polyline 
                  positions={activeDriver?.interceptPaths?.pickupPath || [[activeDriver.pickup.lat, activeDriver.pickup.lon], [activeDriver.meetPickup.lat, activeDriver.meetPickup.lon]]} 
-                 pathOptions={{ color: activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 pathOptions={{ color: activeDriver.type === 'confirmed' ? '#28ec33' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
 
@@ -634,7 +520,7 @@ export default function FindMatches() {
             {passengerRoute.length > 0 && activeDriver?.meetDropoff && (
                <Polyline 
                  positions={activeDriver?.interceptPaths?.dropoffPath || [[activeDriver.meetDropoff.lat, activeDriver.meetDropoff.lon], [activeDriver.dropoff.lat, activeDriver.dropoff.lon]]} 
-                 pathOptions={{ color: activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#ea4335' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 pathOptions={{ color: activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#ea4335' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
 
@@ -663,13 +549,13 @@ export default function FindMatches() {
           {/* Dark Navbar */}
           <div style={{ padding: '1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', color: '#fff' }}>
             <div style={{ display: 'flex', gap: '1rem' }}>
-              <button onClick={() => navigate('/my-rides', { state: { initialTab: location.state?.fromTab || location.state?.initialTab || 'Pending' } })} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+              <button onClick={() => navigate('/my-rides')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
                 <ArrowLeft size={24} />
               </button>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600 }}>
-                  {volatilePassengerState?.status === 'cancelled' ? 'Find Ride (Cancelled)' : 'Find Ride'}
-                </h2>
+                <h1 style={{ margin: 0, fontSize: '1.25rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                   <span style={{ fontWeight: 800, fontSize: '1.25rem' }}>Find Ride</span>
+                </h1>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: '#ccc' }}>{rideTimeStr}, {rideDateStr}</p>
               </div>
             </div>
@@ -682,11 +568,10 @@ export default function FindMatches() {
                    );
                 })}
               </div>
-              {volatilePassengerState?.status !== 'completed' && volatilePassengerState?.status !== 'cancelled' && (
-                <button onClick={() => { setDrawerMode('request'); setIsBottomPanelExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: 4, transition: 'background 0.3s' }}>
-                  <MoreHorizontal size={16} color="#fff" />
-                </button>
-              )}
+              {/* 
+              <MessageCircle size={20} />
+              <MoreHorizontal size={20} /> 
+              */}
             </div>
           </div>
 
@@ -767,12 +652,8 @@ export default function FindMatches() {
           </div>
         ) : matches.length === 0 ? (
           <div style={{ background: '#fff', borderRadius: '12px', padding: '30px 20px', textAlign: 'center', width: '90%', margin: '0 auto', boxShadow: '0 4px 15px rgba(0,0,0,0.1)', flexShrink: 0 }}>
-            <p style={{ margin: 0, color: '#555', fontWeight: 600, fontSize: '1.2rem' }}>
-              {volatilePassengerState?.status === 'cancelled' ? 'Ride Cancelled 🚫' : 'No Matches Found 😢'}
-            </p>
-            <p style={{ margin: '8px 0 0', color: '#888', fontSize: '0.9rem', lineHeight: '1.4' }}>
-              {volatilePassengerState?.status === 'cancelled' ? 'This ride request has been officially cancelled.' : "We couldn't find any drivers offering a ride along your planned route right now."}
-            </p>
+            <p style={{ margin: 0, color: '#555', fontWeight: 600, fontSize: '1.2rem' }}>No Matches Found ≡ƒÿó</p>
+            <p style={{ margin: '8px 0 0', color: '#888', fontSize: '0.9rem', lineHeight: '1.4' }}>We couldn't find any drivers offering a ride along your planned route right now.</p>
           </div>
         ) : (
           matches.map((match) => (
@@ -791,19 +672,19 @@ export default function FindMatches() {
             }}
           >
             {/* Top Info Row */}
-            <div style={{ padding: '14px', display: 'flex', gap: '12px', alignItems: 'center', position: 'relative' }}>
+            <div style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center', position: 'relative' }}>
                
                <div>
                  <img 
                    src={match.profilePic || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"} 
                    alt="" 
                    onError={(e) => { e.target.onerror = null; e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"; }}
-                   style={{ width: 45, height: 45, borderRadius: '50%', objectFit: 'cover' }} 
+                   style={{ width: 50, height: 50, borderRadius: '50%', objectFit: 'cover' }} 
                  />
                </div>
                
-               <div style={{ flex: 1, minWidth: 0 }}>
-                 <p style={{ margin: 0, fontSize: '0.8rem', color: match.type === 'completed' ? '#9cc93a' : match.type === 'confirmed' ? '#9cc93a' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888', fontWeight: 600 }}>
+               <div style={{ flex: 1 }}>
+                 <p style={{ margin: 0, fontSize: '0.8rem', color: match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888', fontWeight: 600 }}>
                    {match.time}
                  </p>
                  <h3 style={{ margin: '2px 0', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
@@ -817,27 +698,22 @@ export default function FindMatches() {
                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#ea4335', fontWeight: 600, marginLeft: '6px' }}>Offer Declined</p>
                    </div>
                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      {[1, 2, 3, 4, 5].map(starNum => {
-                         const ratingVal = parseFloat(match.rating) || 0;
-                         const isFilled = starNum <= Math.round(ratingVal);
-                         return <Star key={starNum} size={12} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
-                      })}
-                      <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px', fontWeight: 600 }}>{match.rating} <span style={{ fontWeight: 400 }}>({match.reviews})</span></span>
-                    </div>
-                 )}
-                 {match.plateNumber && (
-                    <div style={{ marginTop: '2px', fontSize: '0.7rem', color: '#777', whiteSpace: 'nowrap' }}>
-                       <span style={{ fontWeight: 600 }}>{match.plateNumber}</span> | {match.carMake} {match.carModel} ({match.carColor})
-                    </div>
+                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
+                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
+                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
+                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
+                     <Star size={12} fill="#eaeaea" color="#eaeaea" />
+                     <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px' }}>{match.rating} ({match.reviews})</span>
+                   </div>
                  )}
                </div>
 
                <div style={{ textAlign: 'right' }}>
-                  {match.type === 'match' || match.type === 'offered' || match.type === 'request' || match.type === 'confirmed' || match.type === 'completed' ? (
+                  {match.type === 'match' || match.type === 'offered' || match.type === 'request' || match.type === 'confirmed' ? (
                      <div style={{ display: 'flex', alignItems: 'center', gap: '2px', justifyContent: 'flex-end', marginBottom: '4px' }}>
                         {Array.from({ length: match.seats || 4 }).map((_, i) => (
-                           <User key={i} size={12} fill={match.type === 'completed' ? '#9cc93a' : match.type === 'confirmed' ? '#9cc93a' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} color={match.type === 'completed' ? '#9cc93a' : match.type === 'confirmed' ? '#9cc93a' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} />
+                           <User key={i} size={12} fill={match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} color={match.type === 'confirmed' ? '#28ec33' : match.type === 'match' ? '#00b0f0' : match.type === 'offered' ? '#ff0043' : match.type === 'request' ? '#eab308' : '#888'} />
                         ))}
                      </div>
                   ) : null}
@@ -848,19 +724,16 @@ export default function FindMatches() {
             {/* Bottom Button Row */}
             <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto' }}>
                
-               {/* State 1: Confirmed or Completed Match */}
-               {(match.type === 'confirmed' || match.type === 'completed') && (
+               {/* State 1: Confirmed Match */}
+               {match.type === 'confirmed' && (
                  <>
-                   <button 
-                     onClick={() => handleMessageContact(match.rawRequest?.userId)}
-                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                   >
+                   <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    <button 
-                     onClick={() => { if(match.type !== 'completed') { setConfirmedMatchToCancel(match.id); setShowCancelConfirmedModal(true); } }}
-                     style={{ flex: 1, padding: '16px', background: match.type === 'completed' ? '#9cc93a' : '#9cc93a', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: match.type === 'completed' ? 'default' : 'pointer' }}>
-                     {match.type === 'completed' ? 'Completed Ride' : 'Confirmed'}
+                     onClick={() => { setConfirmedMatchToCancel(match.id); setShowCancelConfirmedModal(true); }}
+                     style={{ flex: 1, padding: '16px', background: '#28ec33', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
+                     Confirmed
                    </button>
                  </>
                )}
@@ -868,10 +741,7 @@ export default function FindMatches() {
                {/* State 2: Match -> Request to Join */}
                {match.type === 'match' && (
                  <>
-                   <button 
-                     onClick={() => handleMessageContact(match.rawRequest?.userId)}
-                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                   >
+                   <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    <button onClick={() => handleRequestJoin(match.id)} style={{ flex: 1, padding: '16px', background: '#00b0f0', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
@@ -883,10 +753,7 @@ export default function FindMatches() {
                {/* State 3: Request -> Request Sent */}
                {match.type === 'request' && (
                  <>
-                   <button 
-                     onClick={() => handleMessageContact(match.rawRequest?.userId)}
-                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                   >
+                   <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    <button 
@@ -901,10 +768,7 @@ export default function FindMatches() {
                {/* State 4: Offered -> Accept Offer */}
                {match.type === 'offered' && (
                  <>
-                   <button 
-                     onClick={() => handleMessageContact(match.rawRequest?.userId)}
-                     style={{ position: 'relative', width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-                   >
+                   <button style={{ position: 'relative', width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                      <div style={{ position: 'absolute', top: 8, right: 8, background: '#ff0043', color: '#fff', width: 14, height: 14, borderRadius: '50%', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #333' }}>1</div>
                    </button>
@@ -927,23 +791,6 @@ export default function FindMatches() {
         )))}
       </div>
 
-      {/* DRAWER BACKDROP OVERLAY */}
-      <div 
-        onClick={() => setIsBottomPanelExpanded(false)}
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          background: 'rgba(0,0,0,0.5)',
-          zIndex: 1500,
-          opacity: isBottomPanelExpanded ? 1 : 0,
-          pointerEvents: isBottomPanelExpanded ? 'auto' : 'none',
-          transition: 'opacity 0.3s ease-in-out'
-        }}
-      />
-
       {/* BOTTOM ACTION PANEL PULL-UP OVERLAY */}
       <div 
         style={{
@@ -952,12 +799,12 @@ export default function FindMatches() {
           left: 0,
           width: '100%',
           background: '#f2f4f7', 
-          borderTopLeftRadius: '8px',
-          borderTopRightRadius: '8px',
+          borderTopLeftRadius: '24px',
+          borderTopRightRadius: '24px',
           boxShadow: '0 -4px 15px rgba(0,0,0,0.1)',
           padding: '16px 24px 32px 24px',
           zIndex: 2000,
-          transform: isBottomPanelExpanded ? 'translateY(0)' : (matches.length > 0 ? 'translateY(calc(100% - 40px))' : 'translateY(100%)'),
+          transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))',
           transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
           display: 'flex',
           flexDirection: 'column',
@@ -967,117 +814,28 @@ export default function FindMatches() {
       >
         {/* Drag Handle Top Bar */}
         <div 
-          onClick={() => { setDrawerMode('driver'); setIsBottomPanelExpanded(!isBottomPanelExpanded); }}
+          onClick={() => setIsBottomPanelExpanded(!isBottomPanelExpanded)}
           style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}
         >
            {/* Center Pill */}
            <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s' }}></div>
            
            {/* Top Right Close Applet */}
-           <div onClick={(e) => { e.stopPropagation(); setIsBottomPanelExpanded(false); }} style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', cursor: 'pointer' }}>
-             <X size={24} color="#999" strokeWidth={2.5} />
+           <div style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s' }}>
+             <X size={24} color="#555" strokeWidth={2.5} />
            </div>
         </div>
 
         {/* Content (only visible fully when expanded) */}
-        <div style={{ width: '100%', marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
-           {drawerMode === 'request' ? (
-             <div style={{ textAlign: 'center', width: '100%' }}>
-               <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
-                 {volatilePassengerState?.status === 'completed' ? 'This ride is completed.' : volatilePassengerState?.status === 'cancelled' ? 'This ride has been cancelled.' : 'Cancel your ride request?'}
-               </h3>
-               <p style={{ margin: '0 0 24px', color: '#888', fontSize: '0.9rem' }}>
-                 {volatilePassengerState?.status === 'completed' ? 'Your historical records are safely stored.' : volatilePassengerState?.status === 'cancelled' ? 'This request is natively archived.' : 'You can retract your active request below.'}
-               </p>
-               
-               {(volatilePassengerState?.status !== 'completed' && volatilePassengerState?.status !== 'cancelled') && (
-                 <button 
-                   onClick={() => setShowCancelModal(true)}
-                   style={{ width: '100%', padding: '16px', background: '#dbdbdb', border: 'none', borderRadius: '8px', color: '#555', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
-                 >
-                   Cancel Ride
-                 </button>
-               )}
-             </div>
-           ) : activeDriver ? (
-             <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
-                  <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {activeDriver.profilePic ? (
-                       <img src={activeDriver.profilePic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="driver" />
-                    ) : (
-                       <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#888' }}>{activeDriver.name?.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase()}</span>
-                    )}
-                  </div>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activeDriver.name}</h2>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0px', marginRight: '32px' }}>
-                         {Array.from({ length: activeDriver.seats || 4 }).map((_, i) => (
-                            <User key={i} size={14} fill="#888" color="#888" />
-                         ))}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                      {[1, 2, 3, 4, 5].map(starNum => {
-                         const ratingVal = parseFloat(activeDriver.rating) || 0;
-                         const isFilled = starNum <= Math.round(ratingVal);
-                         return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#d4d4d4"} color={isFilled ? "#ffb800" : "#d4d4d4"} />;
-                      })}
-                      <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{activeDriver.rating} <span style={{ fontWeight: 500 }}>({activeDriver.reviews})</span></span>
-                    </div>
-                    {activeDriver.plateNumber && (
-                       <div style={{ marginTop: '2px', fontSize: '0.85rem', color: '#666', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Car size={14} color="#666" />
-                          <span><span style={{ fontWeight: 700 }}>{activeDriver.plateNumber}</span> • {activeDriver.carMake} {activeDriver.carModel} ({activeDriver.carColor})</span>
-                       </div>
-                    )}
-                  </div>
-                </div>
-
-                {activeDriver.rawRequest?.note && activeDriver.rawRequest.note.trim() !== '' && (
-                  <p style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#444', fontStyle: 'italic', background: '#fff', padding: '12px', borderRadius: '8px', borderLeft: `4px solid ${activeDriver.type === 'completed' || activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888'}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                    "{activeDriver.rawRequest.note}"
-                  </p>
-                )}
-
-                <div style={{ width: '100%', height: '1px', background: '#e5e7eb', marginBottom: '16px' }}></div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#555' }}>
-                       <span style={{ fontWeight: 600 }}>{activeDriver.rawRequest?.date ? dayjs(activeDriver.rawRequest.date).format('MMM. D, h:mma') : activeDriver.time}</span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
-                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '4px', paddingBottom: '4px' }}>
-                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
-                           <div style={{ width: 1, flex: 1, background: '#ccc', margin: '4px 0' }}></div>
-                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
-                         </div>
-                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
-                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
-                             {activeDriver.rawRequest?.from?.address || 'Unknown Pickup Address'}
-                           </div>
-                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
-                             {activeDriver.rawRequest?.to?.address || 'Unknown Dropoff Address'}
-                           </div>
-                         </div>
-                      </div>
-                </div>
-             </div>
-           ) : (
-             <div style={{ textAlign: 'center', width: '100%', padding: '24px 0' }}>
-                <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
-                  {volatilePassengerState?.status === 'cancelled' ? 'Ride Cancelled' : 'Driver Overlay'}
-                </h3>
-                <p style={{ margin: 0, color: '#888', fontSize: '0.9rem' }}>
-                  {volatilePassengerState?.status === 'cancelled' ? 'This ride has been cancelled.' : 'No active driver overview.'}
-                </p>
-             </div>
-           )}
+        <div style={{ width: '100%', marginTop: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
+           <h3 style={{ margin: '0 0 24px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>Cancel your ride request?</h3>
+           
+           <button 
+             onClick={() => setShowCancelModal(true)}
+             style={{ width: '100%', padding: '16px', background: '#dbdbdb', border: 'none', borderRadius: '8px', color: '#555', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+           >
+             Cancel Ride
+           </button>
         </div>
       </div>
 
@@ -1105,23 +863,9 @@ export default function FindMatches() {
                 onClick={async () => {
                   try {
                       if (ride?.id) {
-                          await updateDoc(doc(db, 'rideRequests', ride.id), { status: 'cancelled' });
-                          
-                          const matchingOffersRef = query(collection(db, 'rideOffers'), where('requestedByPassengerIds', 'array-contains', ride.id));
-                          const offersSnap = await getDocs(matchingOffersRef);
-                          
-                          for (const offerDoc of offersSnap.docs) {
-                             const data = offerDoc.data();
-                             const updatePayload = { requestedByPassengerIds: arrayRemove(ride.id) };
-                             if (data.status === 'confirmed' && data.requestedByRideId === ride.id) {
-                                updatePayload.seatsTaken = increment(-Math.abs(parseInt(ride.seats) || 1));
-                             }
-                             try {
-                                await updateDoc(doc(db, 'rideOffers', offerDoc.id), updatePayload);
-                             } catch (err) { console.error("clean up fail", err); }
-                          }
+                          await updateDoc(doc(db, 'rideRequests', ride.id), { status: 'cancelled_by_passenger' });
                       }
-                      navigate('/my-rides', { state: { initialTab: 'History' } });
+                      navigate('/my-rides');
                   } catch (e) {
                       console.error("Cancellation error:", e);
                   }
