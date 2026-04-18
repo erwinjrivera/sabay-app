@@ -7,7 +7,11 @@ function LocationMarker({ position }) {
   const map = useMap();
   useEffect(() => {
     if (position) {
-      map.flyTo(position, map.getZoom());
+      // Shifting the camera target ~200px SOUTH so the marker floats NORTH of the bento boxes
+      const zoom = map.getZoom();
+      const targetPoint = map.project(position, zoom).add([0, 200]);
+      const targetLatLng = map.unproject(targetPoint, zoom);
+      map.flyTo(targetLatLng, zoom);
     }
   }, [position, map]);
   return position === null ? null : (

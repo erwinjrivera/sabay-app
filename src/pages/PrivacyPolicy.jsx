@@ -21,7 +21,7 @@ export default function PrivacyPolicy() {
         <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b', marginBottom: '16px' }}>Privacy Policy</h1>
         
         <p style={{ marginBottom: '16px' }}>
-          At Sabay, we take your privacy extremely seriously. This Privacy Policy outlines precisely how we collect, map, and secure your personal data in compliance with the Philippine Data Privacy Act of 2012 (DPA).
+          At Karsabay, we take your privacy extremely seriously. This Privacy Policy outlines precisely how we collect, map, and secure your personal data in compliance with the Philippine Data Privacy Act of 2012 (DPA).
         </p>
 
         <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginTop: '24px', marginBottom: '8px' }}>1. Information We Collect</h2>
@@ -41,7 +41,7 @@ export default function PrivacyPolicy() {
         <p style={{ marginBottom: '16px' }}>You retain the absolute right to correct, update, or completely purge your settings locally from the interface or by directly deleting your Firebase Auth profile.</p>
 
         <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginTop: '24px', marginBottom: '8px' }}>5. Policy Updates</h2>
-        <p style={{ marginBottom: '32px' }}>Sabay reserves the right to modify this structural privacy document to aggressively ensure compliance with regulatory data policies continuously.</p>
+        <p style={{ marginBottom: '32px' }}>Karsabay reserves the right to modify this structural privacy document to aggressively ensure compliance with regulatory data policies continuously.</p>
       </div>
 
     </div>

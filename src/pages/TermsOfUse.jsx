@@ -18,15 +18,15 @@ export default function TermsOfUse() {
 
       {/* CONTENT */}
       <div style={{ padding: '24px', color: '#334155', lineHeight: '1.6', fontSize: '0.95rem' }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b', marginBottom: '16px' }}>Sabay Terms of Use</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b', marginBottom: '16px' }}>Karsabay Terms of Use</h1>
         
         <p style={{ marginBottom: '16px' }}>
-          Welcome to Sabay! By accessing or using our platform, you agree to comply with and be legally bound by these terms. If you do not agree, please refrain from using our services.
+          Welcome to Karsabay! By accessing or using our platform, you agree to comply with and be legally bound by these terms. If you do not agree, please refrain from using our services.
         </p>
 
         <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginTop: '24px', marginBottom: '8px' }}>1. Non-Profit Cost-Sharing & LTFRB Compliance</h2>
         <div style={{ background: '#fef3c7', padding: '16px', borderRadius: '8px', borderLeft: '4px solid #f59e0b', marginBottom: '16px' }}>
-          <strong>Legal Restriction:</strong> Sabay operates strictly as a non-profit, cost-sharing network. Drivers are explicitly prohibited from generating commercial profit or operating as an unlicensed Public Utility Vehicle (PUV/Colorum). Any fees exchanged between passengers and drivers are strictly limited to the proportional sharing of immediate trip costs (e.g., fuel, toll fees), in accordance with local Philippine Land Transportation Franchising and Regulatory Board (LTFRB) regulations.
+          <strong>Legal Restriction:</strong> Karsabay operates strictly as a non-profit, cost-sharing network. Drivers are explicitly prohibited from generating commercial profit or operating as an unlicensed Public Utility Vehicle (PUV/Colorum). Any fees exchanged between passengers and drivers are strictly limited to the proportional sharing of immediate trip costs (e.g., fuel, toll fees), in accordance with local Philippine Land Transportation Franchising and Regulatory Board (LTFRB) regulations.
         </div>
 
         <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginTop: '24px', marginBottom: '8px' }}>2. Eligibility</h2>
@@ -40,10 +40,10 @@ export default function TermsOfUse() {
         </ul>
 
         <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginTop: '24px', marginBottom: '8px' }}>4. Safety and Conduct</h2>
-        <p style={{ marginBottom: '16px' }}>While we utilize basic verification metrics natively, Sabay acts strictly as a peer-to-peer facilitator and does not guarantee absolute safety. Users are advised to take necessary precautions and report concerns.</p>
+        <p style={{ marginBottom: '16px' }}>While we utilize basic verification metrics natively, Karsabay acts strictly as a peer-to-peer facilitator and does not guarantee absolute safety. Users are advised to take necessary precautions and report concerns.</p>
 
         <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginTop: '24px', marginBottom: '8px' }}>5. Limitation of Liability</h2>
-        <p style={{ marginBottom: '16px' }}>Sabay acts as an informational platform connecting commuters. We are not responsible for disputes, accidents, or damages arising during rides.</p>
+        <p style={{ marginBottom: '16px' }}>Karsabay acts as an informational platform connecting commuters. We are not responsible for disputes, accidents, or damages arising during rides.</p>
 
         <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginTop: '24px', marginBottom: '8px' }}>6. Termination</h2>
         <p style={{ marginBottom: '16px' }}>We fundamentally reserve the right to suspend or terminate accounts for violations of these terms, especially any actions constituting commercial transport/profit operation.</p>

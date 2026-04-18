@@ -61,7 +61,7 @@ export default function Home() {
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '16px', zIndex: 10 }}>
          
          <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-            <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-1.5px', margin: 0 }}>Sabay</h1>
+            <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-1.5px', margin: 0 }}>Karsabay</h1>
             <p style={{ fontSize: '1.05rem', color: '#64748b', fontWeight: 600, margin: '4px 0 0 0' }}>Where are we going today?</p>
          </div>
 
@@ -86,15 +86,15 @@ export default function Home() {
             {/* OFFER RIDE (Secondary Tile) */}
             <div 
                onClick={() => navigate('/offer')}
-               style={{ background: '#fff', borderRadius: '32px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', cursor: 'pointer', boxShadow: '0 12px 32px rgba(0, 0, 0, 0.05)', border: '1px solid #f1f5f9', transition: 'transform 0.15s' }}
+               style={{ background: '#1e293b', borderRadius: '32px', padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', cursor: 'pointer', boxShadow: '0 12px 32px rgba(30, 41, 59, 0.25)', transition: 'transform 0.15s' }}
                onMouseOver={(e) => e.currentTarget.style.transform = 'scale(0.97)'}
                onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
             >
-               <div style={{ background: '#f1f5f9', width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Car size={22} color="#0f172a" strokeWidth={2.5} />
+               <div style={{ background: 'rgba(255,255,255,0.1)', width: 44, height: 44, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Car size={22} color="#fff" strokeWidth={2.5} />
                </div>
                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', lineHeight: 1.1, letterSpacing: '-0.3px' }}>Offer <br/> Ride</h3>
+                  <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#fff', lineHeight: 1.1, letterSpacing: '-0.3px' }}>Offer <br/> Ride</h3>
                </div>
             </div>
          </div>
@@ -102,28 +102,28 @@ export default function Home() {
          {/* GRID ROW 2: Activity Log Widget */}
          <div 
             onClick={() => navigate('/my-rides')}
-            style={{ background: '#1e293b', borderRadius: '32px', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', boxShadow: '0 12px 32px rgba(30, 41, 59, 0.25)', transition: 'transform 0.15s' }}
+            style={{ background: '#fff', borderRadius: '32px', padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', boxShadow: '0 12px 32px rgba(0, 0, 0, 0.05)', border: '1px solid #f1f5f9', transition: 'transform 0.15s' }}
             onMouseOver={(e) => e.currentTarget.style.transform = 'scale(0.98)'}
             onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-               <div style={{ background: 'rgba(255,255,255,0.1)', width: 46, height: 46, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <List size={22} color="#fff" />
+               <div style={{ background: '#f1f5f9', width: 46, height: 46, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <List size={22} color="#0f172a" />
                </div>
                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', letterSpacing: '-0.2px' }}>Activity Log</span>
-                  <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: 600 }}>Track your matches</span>
+                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', letterSpacing: '-0.2px' }}>My Rides</span>
+                  <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>Track your matches</span>
                </div>
             </div>
-            <div style={{ background: '#334155', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-               <span style={{ fontSize: '1.2rem', color: '#fff' }}>›</span>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '50%', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+               <span style={{ fontSize: '1.2rem', color: '#64748b' }}>›</span>
             </div>
          </div>
       </div>
 
       <div style={{ position: 'absolute', bottom: '24px', left: 0, width: '100%', textAlign: 'center', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <span style={{ fontSize: '0.80rem', color: '#64748b' }}>
-          By using Sabay, you agree to our 
+          By using Karsabay, you agree to our 
         </span>
         <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
            <button onClick={() => navigate('/terms-of-use')} style={{ background: 'transparent', border: 'none', color: '#0ea5e9', fontWeight: 600, fontSize: '0.80rem', cursor: 'pointer', padding: 0 }}>Terms of Use</button>

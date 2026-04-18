@@ -423,6 +423,21 @@ export default function OfferMatches() {
     }
   };
 
+  const handleMessageContact = async (userId) => {
+      if (!userId) return;
+      try {
+          const snap = await getDoc(doc(db, 'users', userId));
+          if (snap.exists() && snap.data().phoneNumber) {
+              window.location.href = `sms:${snap.data().phoneNumber}`;
+          } else {
+              alert("This user has not registered a phone number.");
+          }
+      } catch (err) {
+          console.error(err);
+          alert("Failed to retrieve phone number.");
+      }
+  };
+
   const confirmedPassengers = matches.filter(m => m.type === 'confirmed' || m.type === 'completed');
 
   return (
@@ -699,7 +714,10 @@ export default function OfferMatches() {
                {/* State 1: Confirmed or Completed Match */}
                {(match.type === 'confirmed' || match.type === 'completed') && (
                  <>
-                   <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                   <button 
+                     onClick={() => handleMessageContact(match.userId)}
+                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                   >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    <button 
@@ -713,7 +731,10 @@ export default function OfferMatches() {
                {/* State 2: Match -> Offer Ride */}
                {match.type === 'match' && (
                  <>
-                   <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                   <button 
+                     onClick={() => handleMessageContact(match.userId)}
+                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                   >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    <button onClick={() => handleOfferRide(match.id)} style={{ flex: 1, padding: '16px', background: '#00b0f0', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
@@ -725,7 +746,10 @@ export default function OfferMatches() {
                {/* State 5: Offered -> Pending Accept */}
                {match.type === 'offered' && (
                  <>
-                   <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                   <button 
+                     onClick={() => handleMessageContact(match.userId)}
+                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                   >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    <button 
@@ -740,7 +764,10 @@ export default function OfferMatches() {
                {/* State 3: Request -> Accept */}
                {match.type === 'request' && (
                  <>
-                   <button style={{ position: 'relative', width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                   <button 
+                     onClick={() => handleMessageContact(match.userId)}
+                     style={{ position: 'relative', width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                   >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                      <div style={{ position: 'absolute', top: 8, right: 8, background: '#ff0043', color: '#fff', width: 14, height: 14, borderRadius: '50%', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #333' }}>1</div>
                    </button>
@@ -862,7 +889,12 @@ export default function OfferMatches() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
                       <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {activePassenger.profilePic ? (
-                           <img src={activePassenger.profilePic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="passenger" />
+                           <img 
+                             src={activePassenger.profilePic} 
+                             alt="passenger"
+                             onError={(e) => { e.target.onerror = null; e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"; }}
+                             style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                           />
                         ) : (
                            <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#888' }}>{activePassenger.name?.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase()}</span>
                         )}

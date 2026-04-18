@@ -78,7 +78,7 @@ export default function SwipeButton({ text, onSwipe, color = '#00b0f0', isComple
 
   if (isCompleted) {
     return (
-      <div style={{ width: '100%', padding: '16px', background: color, borderRadius: customBorderRadius, color: '#fff', fontWeight: 700, fontSize: '1rem', textAlign: 'center' }}>
+      <div style={{ width: '100%', padding: '16px', background: color, borderRadius: customBorderRadius, color: '#fff', fontWeight: 700, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>
         {text}
       </div>
     );

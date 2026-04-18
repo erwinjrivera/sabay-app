@@ -140,6 +140,33 @@ export default function ActiveRide() {
   const [isFetchingMatches, setIsFetchingMatches] = useState(true);
   const [isGlobalCancelled, setIsGlobalCancelled] = useState(false);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
+  const [showFinishCarpoolPrompt, setShowFinishCarpoolPrompt] = useState(false);
+  const finishCarpoolPromptFiredRef = useRef(false);
+
+  useEffect(() => {
+    if (matches.length > 0 && !isFetchingMatches) {
+        const allDone = matches.every(m => (passengerStates[m.id] || 0) === 2);
+        if (allDone && !finishCarpoolPromptFiredRef.current && !isGlobalCancelled) {
+             finishCarpoolPromptFiredRef.current = true;
+             setTimeout(() => setShowFinishCarpoolPrompt(true), 1500);
+        }
+    }
+  }, [passengerStates, matches, isFetchingMatches, isGlobalCancelled]);
+
+  const handleMessageContact = async (userId) => {
+      if (!userId) return;
+      try {
+          const snap = await getDoc(doc(db, 'users', userId));
+          if (snap.exists() && snap.data().phoneNumber) {
+              window.location.href = `sms:${snap.data().phoneNumber}`;
+          } else {
+              alert("This user has not registered a phone number.");
+          }
+      } catch (err) {
+          console.error(err);
+          alert("Failed to retrieve phone number.");
+      }
+  };
 
   const handleCancelAllPassengers = async () => {
     try {
@@ -736,13 +763,13 @@ export default function ActiveRide() {
                      />
                    </div>
                    
-                   <div style={{ flex: 1 }}>
-                     <p style={{ margin: 0, fontSize: '0.8rem', color: phase === 2 ? '#9cc93a' : '#00b0f0', fontWeight: 600, transition: 'color 0.3s' }}>
-                       {match.time}
-                     </p>
-                     <h3 style={{ margin: '2px 0', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
-                       {match.name}
-                     </h3>
+                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <p style={{ margin: 0, fontSize: '0.8rem', color: phase === 2 ? '#9cc93a' : '#00b0f0', fontWeight: 600, transition: 'color 0.3s' }}>
+                        {match.time}
+                      </p>
+                      <h3 style={{ margin: '2px 0', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
+                        {match.name}
+                      </h3>
                      
                      {/* Rating Line */}
                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -755,10 +782,10 @@ export default function ActiveRide() {
                      </div>
                    </div>
 
-                   <div style={{ textAlign: 'right' }}>
+                   <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '2px', justifyContent: 'flex-end', marginBottom: '4px' }}>
                          {Array.from({ length: match.seats || 4 }).map((_, i) => (
-                            <User key={i} size={12} fill={phase === 2 ? '#9cc93a' : '#00b0f0'} color={phase === 2 ? '#9cc93a' : '#00b0f0'} style={{ transition: 'all 0.3s' }} />
+                            <User key={i} size={12} fill="#888" color="#888" style={{ transition: 'all 0.3s' }} />
                          ))}
                       </div>
                       <p style={{ margin: 0, fontWeight: 700, fontSize: '1.1rem', color: '#111' }}>{match.price}</p>
@@ -767,7 +794,10 @@ export default function ActiveRide() {
 
                 {/* Bottom Button Row - Matching OfferMatches layout but with Slider integrated */}
                 <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto', background: '#fcfcfc' }}>
-                   <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: '0 0 0 12px' }}>
+                   <button 
+                     onClick={() => handleMessageContact(match.userId)}
+                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                   >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    {phase === 2 && (
@@ -820,7 +850,7 @@ export default function ActiveRide() {
       
       {/* Drawer Surface */}
       <div 
-        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#f2f4f7', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', boxShadow: '0 -4px 15px rgba(0,0,0,0.1)', padding: '16px 24px 32px 24px', zIndex: 2000, transform: isDrawerExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
+        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#f2f4f7', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', padding: '16px 24px 32px 24px', zIndex: 2000, transform: isDrawerExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
       >
         <div onClick={() => { setDrawerMode('passenger'); setIsDrawerExpanded(!isDrawerExpanded); }} style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
            <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: isDrawerExpanded ? 0 : 1, transition: 'opacity 0.2s' }}></div>
@@ -844,9 +874,6 @@ export default function ActiveRide() {
                       </div>
                       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                         <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activePassenger.name}</h2>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#555' }}>
-                           <span>{activePassenger.rawRequest?.date ? dayjs(activePassenger.rawRequest.date).format('h:mma, MMM. D') : activePassenger.time}</span>
-                        </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                           {[1, 2, 3, 4, 5].map(starNum => {
                              const ratingVal = parseFloat(activePassenger.rating || '5.0') || 0;
@@ -868,12 +895,18 @@ export default function ActiveRide() {
 
                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                           {Array.from({ length: activePassenger.seats || 1 }).map((_, i) => (
-                               <User key={i} size={14} fill={(passengerStates[activePassenger.id] || 0) === 2 ? '#9cc93a' : '#00b0f0'} color={(passengerStates[activePassenger.id] || 0) === 2 ? '#9cc93a' : '#00b0f0'} />
-                            ))}
+                        <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 600 }}>
+                          {activePassenger.rawRequest?.time ? dayjs(activePassenger.rawRequest.time).format('MMM. D, h:mma') : activePassenger.time}
+                        </span>
+                        <span style={{ fontSize: '0.85rem', color: '#ccc' }}>|</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                             {Array.from({ length: activePassenger.seats || 1 }).map((_, i) => (
+                                 <User key={i} size={14} fill="#888" color="#888" />
+                              ))}
+                          </div>
+                          <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{activePassenger.seats} Seat{activePassenger.seats > 1 ? 's' : ''} requested</span>
                         </div>
-                        <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{activePassenger.seats} Seat{activePassenger.seats > 1 ? 's' : ''} requested</span>
                       </div>
 
                       <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
@@ -992,6 +1025,34 @@ export default function ActiveRide() {
               </button>
               <button onClick={handleCancelAllPassengers} style={{ flex: 1, padding: '14px', background: '#ff2744', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
                 Yes, Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM FINISH CARPOOL PROMPT MODAL */}
+      {showFinishCarpoolPrompt && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#e0f6ff', color: '#00b0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <Check size={24} strokeWidth={3} />
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>All Passengers Dropped Off!</h3>
+            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>You have successfully completed all passenger routes. Would you like to finish this carpool session now?</p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => setShowFinishCarpoolPrompt(false)} 
+                style={{ flex: 1, padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#444', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
+                Not Yet
+              </button>
+              <button 
+                onClick={() => {
+                  setShowFinishCarpoolPrompt(false);
+                  handleFinishCarpool();
+                }} 
+                style={{ flex: 1, padding: '14px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
+                Finish Carpool
               </button>
             </div>
           </div>

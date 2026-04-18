@@ -125,6 +125,7 @@ export default function PassengerTracking() {
   const [hasSeenArrivalModal, setHasSeenArrivalModal] = useState(() => {
       return !!sessionStorage.getItem(`seen_arrival_${passengerRequest?.id}`);
   });
+  const [justRated, setJustRated] = useState(false);
 
   // 1. Subscribe to Local Passenger State
   useEffect(() => {
@@ -140,6 +141,21 @@ export default function PassengerTracking() {
      });
      return () => unsub();
   }, [passengerRequest?.id]);
+
+  const handleMessageContact = async (userId) => {
+      if (!userId) return;
+      try {
+          const snap = await getDoc(doc(db, 'users', userId));
+          if (snap.exists() && snap.data().phoneNumber) {
+              window.location.href = `sms:${snap.data().phoneNumber}`;
+          } else {
+              alert("This user has not registered a phone number.");
+          }
+      } catch (err) {
+          console.error(err);
+          alert("Failed to retrieve phone number.");
+      }
+  };
 
   // 2. Subscribe to Driver State
   useEffect(() => {
@@ -336,6 +352,7 @@ export default function PassengerTracking() {
 
   return (
     <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
+      <style>{`@keyframes pulseGlow { 0% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(119,119,119,0); } 50% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 8px rgba(119,119,119,0.7); } 100% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(119,119,119,0); } }`}</style>
       
       <MapContainer 
         center={[driverLiveLat, driverLiveLon]} 
@@ -476,7 +493,8 @@ export default function PassengerTracking() {
               boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
               display: 'flex',
               flexDirection: 'column',
-              overflow: 'hidden'
+              overflow: 'hidden',
+              animation: justRated ? 'pulseGlow 1.2s ease-in-out 1' : 'none'
           }}>
             {/* Top Detail Row */}
             <div style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
@@ -490,10 +508,7 @@ export default function PassengerTracking() {
                </div>
                
                <div style={{ flex: 1 }}>
-                 <p style={{ margin: 0, fontSize: '0.8rem', color: activeColor, fontWeight: 600 }}>
-                   {driverRide?.time ? dayjs(driverRide.time).format('h:mma') : dayjs().format('h:mma')}
-                 </p>
-                 <h3 style={{ margin: '2px 0', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
+                 <h3 style={{ margin: '2px 0 4px', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
                    {targetName}
                  </h3>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -513,9 +528,12 @@ export default function PassengerTracking() {
                </div>
 
                <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center' }}>
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: activeColor, fontWeight: 600, marginBottom: '2px' }}>
+                    {driverRide?.time ? dayjs(driverRide.time).format('h:mma') : dayjs().format('h:mma')}
+                  </p>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginBottom: '4px' }}>
                      {Array.from({ length: targetSeats }).map((_, i) => (
-                        <User key={i} size={12} fill={activeColor} color={activeColor} />
+                        <User key={i} size={12} fill="#888" color="#888" />
                      ))}
                   </div>
                   <p style={{ margin: 0, fontWeight: 700, fontSize: '1.1rem', color: '#111' }}>
@@ -526,7 +544,10 @@ export default function PassengerTracking() {
 
             {/* Bottom Interactivity Row */}
             <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto' }}>
-               <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+               <button 
+                 onClick={() => handleMessageContact(driverRide?.userId)}
+                 style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+               >
                  <MessageCircle size={20} fill="#fff" color="#fff" />
                </button>
                {isRideCompleted && (
@@ -587,9 +608,6 @@ export default function PassengerTracking() {
                   </div>
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{targetName}</h2>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#555' }}>
-                       <span>{driverRide?.time ? dayjs(driverRide.time).format('h:mma') : dayjs().format('h:mma')}</span>
-                    </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                       {[1, 2, 3, 4, 5].map(starNum => {
                          const ratingVal = parseFloat(targetRating) || 0;
@@ -616,10 +634,14 @@ export default function PassengerTracking() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 600 }}>
+                      {driverRide?.time ? dayjs(driverRide.time).format('MMM. D, h:mma') : dayjs().format('MMM. D, h:mma')}
+                    </span>
+                    <span style={{ fontSize: '0.85rem', color: '#ccc' }}>|</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
                            {Array.from({ length: targetSeats || 4 }).map((_, i) => (
-                               <User key={i} size={14} fill={activeColor} color={activeColor} />
+                               <User key={i} size={14} fill="#888" color="#888" />
                             ))}
                         </div>
                         <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{targetSeats} Seat{targetSeats > 1 ? 's' : ''} offering</span>
@@ -727,24 +749,45 @@ export default function PassengerTracking() {
                        const userDoc = uSnap.exists() ? uSnap.data() : {};
                        
                        const currentTotalRating = userDoc.rating ? parseFloat(userDoc.rating) : 5.0;
-                       const currentReviews = userDoc.reviews || 0;
+                       const currentReviews = userDoc.reviews || userDoc.reviewsCount || 0;
                        
-                       let newReviewsCount = currentReviews + 1;
-                       let newAverageRating = ((currentTotalRating * currentReviews) + tempRating) / newReviewsCount;
+                       let newReviewsCount = currentReviews;
+                       let newAverageRating = currentTotalRating;
+
+                       if (passengerState.passengerRatedDriver && passengerState.ratingGivenToDriver !== undefined) {
+                           // Update existing rating
+                           const oldTotalSum = currentTotalRating * currentReviews;
+                           const sumWithoutOld = oldTotalSum - passengerState.ratingGivenToDriver;
+                           newAverageRating = currentReviews > 0 ? ((sumWithoutOld + tempRating) / currentReviews) : tempRating;
+                       } else {
+                           // Add new rating
+                           newReviewsCount = currentReviews + 1;
+                           newAverageRating = ((currentTotalRating * currentReviews) + tempRating) / newReviewsCount;
+                       }
                        
                        await setDoc(userRef, { 
                           rating: newAverageRating.toFixed(1), 
-                          reviewsCount: newReviewsCount 
+                          reviews: newReviewsCount,
+                          reviewsCount: newReviewsCount // fallback for backwards compat
                        }, { merge: true });
                        
                        await updateDoc(doc(db, 'rideRequests', passengerState.id), { 
                           passengerRatedDriver: true,
                           ratingGivenToDriver: tempRating
                        });
+                       
+                       setDriverProfile(prev => prev ? { 
+                           ...prev, 
+                           rating: newAverageRating.toFixed(1), 
+                           reviews: newReviewsCount,
+                           reviewsCount: newReviewsCount
+                       } : prev);
                     } catch (err) { console.error("Rating save error", err); }
                  }
                  setHasRated(true);
                  setShowRatingModal(false);
+                 setJustRated(true);
+                 setTimeout(() => setJustRated(false), 1200);
               }}
               style={{ width: '100%', padding: '16px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
            >

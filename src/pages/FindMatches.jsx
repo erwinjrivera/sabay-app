@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2, Car } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, getDoc, updateDoc, onSnapshot, increment, arrayUnion, arrayRemove, where } from 'firebase/firestore';
@@ -473,6 +473,21 @@ export default function FindMatches() {
     ? passengerRoute.slice(activeDriver.meetPickup.idx, activeDriver.meetDropoff.idx + 1)
     : [];
 
+  const handleMessageContact = async (userId) => {
+      if (!userId) return;
+      try {
+          const snap = await getDoc(doc(db, 'users', userId));
+          if (snap.exists() && snap.data().phoneNumber) {
+              window.location.href = `sms:${snap.data().phoneNumber}`;
+          } else {
+              alert("This user has not registered a phone number.");
+          }
+      } catch (err) {
+          console.error(err);
+          alert("Failed to retrieve phone number.");
+      }
+  };
+
   const handleRequestJoin = async (matchId) => {
     const match = matches.find(m => m.id === matchId);
     if (!match) return;
@@ -837,7 +852,10 @@ export default function FindMatches() {
                {/* State 1: Confirmed or Completed Match */}
                {(match.type === 'confirmed' || match.type === 'completed') && (
                  <>
-                   <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                   <button 
+                     onClick={() => handleMessageContact(match.rawRequest?.userId)}
+                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                   >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    <button 
@@ -851,7 +869,10 @@ export default function FindMatches() {
                {/* State 2: Match -> Request to Join */}
                {match.type === 'match' && (
                  <>
-                   <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                   <button 
+                     onClick={() => handleMessageContact(match.rawRequest?.userId)}
+                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                   >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    <button onClick={() => handleRequestJoin(match.id)} style={{ flex: 1, padding: '16px', background: '#00b0f0', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
@@ -863,7 +884,10 @@ export default function FindMatches() {
                {/* State 3: Request -> Request Sent */}
                {match.type === 'request' && (
                  <>
-                   <button style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                   <button 
+                     onClick={() => handleMessageContact(match.rawRequest?.userId)}
+                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                   >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
                    <button 
@@ -878,7 +902,10 @@ export default function FindMatches() {
                {/* State 4: Offered -> Accept Offer */}
                {match.type === 'offered' && (
                  <>
-                   <button style={{ position: 'relative', width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                   <button 
+                     onClick={() => handleMessageContact(match.rawRequest?.userId)}
+                     style={{ position: 'relative', width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                   >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                      <div style={{ position: 'absolute', top: 8, right: 8, background: '#ff0043', color: '#fff', width: 14, height: 14, borderRadius: '50%', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #333' }}>1</div>
                    </button>
@@ -949,7 +976,7 @@ export default function FindMatches() {
            
            {/* Top Right Close Applet */}
            <div onClick={(e) => { e.stopPropagation(); setIsBottomPanelExpanded(false); }} style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', cursor: 'pointer' }}>
-             <X size={24} color="#555" strokeWidth={2.5} />
+             <X size={24} color="#999" strokeWidth={2.5} />
            </div>
         </div>
 
@@ -984,21 +1011,27 @@ export default function FindMatches() {
                     )}
                   </div>
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activeDriver.name}</h2>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#555' }}>
-                       <span>{activeDriver.rawRequest?.date ? dayjs(activeDriver.rawRequest.date).format('h:mma, MMM. D') : activeDriver.time}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                      <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activeDriver.name}</h2>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0px', marginRight: '32px' }}>
+                         {Array.from({ length: activeDriver.seats || 4 }).map((_, i) => (
+                            <User key={i} size={14} fill="#888" color="#888" />
+                         ))}
+                      </div>
                     </div>
+
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                       {[1, 2, 3, 4, 5].map(starNum => {
                          const ratingVal = parseFloat(activeDriver.rating) || 0;
                          const isFilled = starNum <= Math.round(ratingVal);
-                         return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
+                         return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#d4d4d4"} color={isFilled ? "#ffb800" : "#d4d4d4"} />;
                       })}
                       <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{activeDriver.rating} <span style={{ fontWeight: 500 }}>({activeDriver.reviews})</span></span>
                     </div>
                     {activeDriver.plateNumber && (
-                       <div style={{ marginTop: '2px', fontSize: '0.85rem', color: '#666' }}>
-                          <span style={{ fontWeight: 700 }}>{activeDriver.plateNumber}</span> | {activeDriver.carMake} {activeDriver.carModel} ({activeDriver.carColor})
+                       <div style={{ marginTop: '2px', fontSize: '0.85rem', color: '#666', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Car size={14} color="#666" />
+                          <span><span style={{ fontWeight: 700 }}>{activeDriver.plateNumber}</span> • {activeDriver.carMake} {activeDriver.carModel} ({activeDriver.carColor})</span>
                        </div>
                     )}
                   </div>
@@ -1013,13 +1046,10 @@ export default function FindMatches() {
                 <div style={{ width: '100%', height: '1px', background: '#e5e7eb', marginBottom: '16px' }}></div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                  {Array.from({ length: activeDriver.seats || 4 }).map((_, i) => (
-                           <User key={i} size={14} fill={activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888'} color={activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888'} />
-                        ))}
+                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#555' }}>
+                       <span style={{ fontWeight: 600 }}>{activeDriver.rawRequest?.date ? dayjs(activeDriver.rawRequest.date).format('MMM. D, h:mma') : activeDriver.time}</span>
                     </div>
-                    <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{activeDriver.seats} Seat{activeDriver.seats > 1 ? 's' : ''} offering</span>
                   </div>
 
                   <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
