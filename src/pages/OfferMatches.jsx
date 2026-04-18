@@ -220,76 +220,74 @@ export default function OfferMatches() {
            
            try {
               // Extract passenger route dynamically!
-              const resPass = await fetch(`https://router.project-osrm.org/route/v1/driving/${pLon},${pLat};${dLon},${dLat}?geometries=geojson&overview=full`);
-              const passData = await resPass.json();
-              if (!passData.routes || passData.routes.length === 0) return null;
+              const passengerFromPos = { lat: pLat, lon: pLon };
+              const passengerToPos = { lat: dLat, lon: dLon };
+
+              // Sub-function to find the true road-network driving distance optimal point on D
+              const findBestNetworkNode = async (targetPos) => {
+                 const candidates = driverRoute.map((pt, idx) => ({ pt, idx, dist: getDistanceKM(pt[0], pt[1], targetPos.lat, targetPos.lon) }))
+                                               .filter(c => c.dist <= 5.0);
+                 if (candidates.length === 0) return null;
+
+                 // Downsample to max 50 coordinates to fit OSRM public table limit
+                 let sampleSize = Math.max(1, Math.ceil(candidates.length / 50));
+                 let sampled = [];
+                 for (let i = 0; i < candidates.length; i += sampleSize) {
+                      sampled.push(candidates[i]);
+                 }
+                 if (sampled.length > 90) sampled = sampled.slice(0, 90);
+
+                 let coords = `${targetPos.lon},${targetPos.lat}`;
+                 sampled.forEach(c => { coords += `;${c.pt[1]},${c.pt[0]}`; });
+
+                 try {
+                     const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`);
+                     const data = await res.json();
+                     if (data.code !== 'Ok' || !data.durations || !data.durations[0]) throw new Error("Table API failed");
+
+                     let minDur = Infinity;
+                     let bestCandidate = null;
+                     for (let i = 0; i < sampled.length; i++) {
+                         const dur = data.durations[0][i + 1];
+                         if (dur !== null && dur < minDur) { minDur = dur; bestCandidate = sampled[i]; }
+                     }
+                     return bestCandidate || sampled.reduce((min, c) => c.dist < min.dist ? c : min, sampled[0]);
+                 } catch(e) {
+                     return sampled.reduce((min, c) => c.dist < min.dist ? c : min, sampled[0]);
+                 }
+              };
+
+              // 1. Constrain Passenger to Driver's Route via actual Road Network Proximity!
+              const bestPickup = await findBestNetworkNode(passengerFromPos);
+              const bestDropoff = await findBestNetworkNode(passengerToPos);
+
+              if (!bestPickup || !bestDropoff || bestPickup.idx >= bestDropoff.idx) return null;
+
+              let pickupIdx = bestPickup.idx;
+              let dropIdx = bestDropoff.idx;
+              let meetPickup = driverRoute[pickupIdx];
+              let meetDropoff = driverRoute[dropIdx];
               
-              const passRoute = passData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+              let interceptPaths = {
+                 pickupPath: [[passengerFromPos.lat, passengerFromPos.lon], [meetPickup[0], meetPickup[1]]],
+                 dropoffPath: [[meetDropoff[0], meetDropoff[1]], [passengerToPos.lat, passengerToPos.lon]]
+              };
               
-              // Find intersections! Find the points on the passenger route natively mapping overlaps
-              let globalMin = Infinity;
-              const distProfile = passRoute.map((ptP, idxP) => {
-                 let minDist = Infinity;
-                 let closestDIdx = -1;
-                 driverRoute.forEach((ptD, idxD) => {
-                    const dist = getDistanceKM(ptP[0], ptP[1], ptD[0], ptD[1]);
-                    if (dist < minDist) { minDist = dist; closestDIdx = idxD; }
-                 });
-                 if (minDist < globalMin) globalMin = minDist;
-                 return { minDist, closestDIdx, passIdx: idxP };
-              });
-
-              // Dynamically buffer node sparsity. If paths natively cross but nodes physically sit 80m apart, globalMin evaluates exactly exposing the true intersection natively!
-              const overlapThreshold = Math.max(0.04, globalMin + 0.02);
-              
-              const overlaps = distProfile
-                 .filter(pt => pt.minDist <= overlapThreshold)
-                 .map(pt => ({ passIdx: pt.passIdx, driverIdx: pt.closestDIdx }));
-
-              // Process match variables
-              let pickupIdx = -1, dropIdx = -1, meetPickup = null, meetDropoff = null;
-              let interceptPaths = { pickupPath: [], dropoffPath: [] };
-              
-              // Pre-calculate absolute Euclidean nearest neighbors globally for Disjoint Route Fallbacks
-              let minOriginD = Infinity, euclidPickupIdx = -1;
-              let minDestD = Infinity, euclidDropIdx = -1;
-              passRoute.forEach((pt, idx) => {
-                  const distP = getDistanceKM(pt[0], pt[1], driverFrom.lat, driverFrom.lon);
-                  if (distP < minOriginD) { minOriginD = distP; euclidPickupIdx = idx; }
-                  const distD = getDistanceKM(pt[0], pt[1], driverTo.lat, driverTo.lon);
-                  if (distD < minDestD) { minDestD = distD; euclidDropIdx = idx; }
-              });
-
-              if (overlaps.length > 0) {
-                 const minPassOverlap = overlaps.reduce((min, o) => o.passIdx < min.passIdx ? o : min, overlaps[0]);
-                 const maxPassOverlap = overlaps.reduce((max, o) => o.passIdx > max.passIdx ? o : max, overlaps[0]);
-
-                 // Parity block: If the driver intercepts the passenger's destination BEFORE their origin, the paths run inversely!
-                 if (minPassOverlap.driverIdx > maxPassOverlap.driverIdx) return null;
-
-                 pickupIdx = minPassOverlap.passIdx;
-                 dropIdx = maxPassOverlap.passIdx;
-                 
-                 meetPickup = passRoute[pickupIdx];
-                 meetDropoff = passRoute[dropIdx];
-                 
-                 interceptPaths.pickupPath = passRoute.slice(0, pickupIdx + 1);
-                 interceptPaths.dropoffPath = passRoute.slice(dropIdx);
-              } else {
-                 if (minOriginD > 5.0 || minDestD > 5.0) return null; 
-                 
-                 pickupIdx = euclidPickupIdx;
-                 dropIdx = euclidDropIdx;
-                 meetPickup = passRoute[euclidPickupIdx];
-                 meetDropoff = passRoute[euclidDropIdx];
-                 interceptPaths = {
-                    pickupPath: passRoute.slice(0, pickupIdx + 1),
-                    dropoffPath: passRoute.slice(dropIdx)
-                 };
+              // Segment 1 & 3: Connector routes mapped natively to exactly the OSRM geometric paths!
+              try {
+                  const pFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFromPos.lon},${passengerFromPos.lat};${meetPickup[1]},${meetPickup[0]}?geometries=geojson`);
+                  const dFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${meetDropoff[1]},${meetDropoff[0]};${passengerToPos.lon},${passengerToPos.lat}?geometries=geojson`);
+                  const [pRes, dRes] = await Promise.all([pFetch, dFetch]);
+                  const pData = await pRes.json();
+                  const dData = await dRes.json();
+                  if (pData.routes?.length > 0) interceptPaths.pickupPath = pData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                  if (dData.routes?.length > 0) interceptPaths.dropoffPath = dData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+              } catch (e) {
+                  console.error("OSRM Connector routing failed natively", e);
               }
 
-              // Final sequential sanity check to prevent rides moving backward in time
-              if (pickupIdx > dropIdx) return null;
+              // Final sequential sanity check
+              if (pickupIdx >= dropIdx) return null;
 
               const geometricPayload = {
                  id: req.id,
@@ -299,7 +297,7 @@ export default function OfferMatches() {
                  meetPickup: { lat: meetPickup[0], lon: meetPickup[1], idx: pickupIdx },
                  meetDropoff: { lat: meetDropoff[0], lon: meetDropoff[1], idx: dropIdx },
                  interceptPaths,
-                 sharedPath: passRoute.slice(pickupIdx, dropIdx + 1),
+                 sharedPath: driverRoute.slice(pickupIdx, dropIdx + 1),
                  rawRequest: req
               };
 
