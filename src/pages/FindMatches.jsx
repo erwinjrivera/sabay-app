@@ -614,7 +614,7 @@ export default function FindMatches() {
             {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node */}
             {passengerRoute.length > 0 && activeDriver?.meetPickup && (
                <Polyline 
-                 positions={activeDriver?.interceptPaths?.pickupPath || [[activeDriver.pickup.lat, activeDriver.pickup.lon], [activeDriver.meetPickup.lat, activeDriver.meetPickup.lon]]} 
+                 positions={activeDriver?.interceptPaths?.pickupPath || [[passengerFrom.lat, passengerFrom.lon], [activeDriver.meetPickup.lat, activeDriver.meetPickup.lon]]} 
                  pathOptions={{ color: activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
@@ -645,7 +645,7 @@ export default function FindMatches() {
             {/* Dotted theoretical intercept line from Driver -> Dropoff */}
             {passengerRoute.length > 0 && activeDriver?.meetDropoff && (
                <Polyline 
-                 positions={activeDriver?.interceptPaths?.dropoffPath || [[activeDriver.meetDropoff.lat, activeDriver.meetDropoff.lon], [activeDriver.dropoff.lat, activeDriver.dropoff.lon]]} 
+                 positions={activeDriver?.interceptPaths?.dropoffPath || [[activeDriver.meetDropoff.lat, activeDriver.meetDropoff.lon], [passengerTo.lat, passengerTo.lon]]} 
                  pathOptions={{ color: activeDriver.type === 'completed' ? '#9cc93a' : activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#ea4335' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
                />
             )}
