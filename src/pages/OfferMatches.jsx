@@ -136,12 +136,16 @@ export default function OfferMatches() {
   useEffect(() => {
     const fetchDriverRoute = async () => {
       try {
-        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverFrom.lon},${driverFrom.lat};${driverTo.lon},${driverTo.lat}?geometries=geojson&overview=full`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverFrom.lon},${driverFrom.lat};${driverTo.lon},${driverTo.lat}?geometries=geojson&overview=full`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         const data = await res.json();
         const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
         setDriverRoute(coords);
       } catch (err) {
-        console.error("OSRM Driver Route Error", err);
+        if (err.name !== 'AbortError') console.error("OSRM Driver Route Error", err);
+        setDriverRoute([[driverFrom.lat, driverFrom.lon], [driverTo.lat, driverTo.lon]]);
       }
     };
     fetchDriverRoute();
@@ -241,7 +245,10 @@ export default function OfferMatches() {
                  sampled.forEach(c => { coords += `;${c.pt[1]},${c.pt[0]}`; });
 
                  try {
-                     const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`);
+                     const controller = new AbortController();
+                     const timeoutId = setTimeout(() => controller.abort(), 2000);
+                     const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`, { signal: controller.signal });
+                     clearTimeout(timeoutId);
                      const data = await res.json();
                      if (data.code !== 'Ok' || !data.durations || !data.durations[0]) throw new Error("Table API failed");
 
@@ -275,15 +282,20 @@ export default function OfferMatches() {
               
               // Segment 1 & 3: Connector routes mapped natively to exactly the OSRM geometric paths!
               try {
-                  const pFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFromPos.lon},${passengerFromPos.lat};${meetPickup[1]},${meetPickup[0]}?geometries=geojson`);
-                  const dFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${meetDropoff[1]},${meetDropoff[0]};${passengerToPos.lon},${passengerToPos.lat}?geometries=geojson`);
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 2000);
+                  const pFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFromPos.lon},${passengerFromPos.lat};${meetPickup[1]},${meetPickup[0]}?geometries=geojson`, { signal: controller.signal });
+                  const dFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${meetDropoff[1]},${meetDropoff[0]};${passengerToPos.lon},${passengerToPos.lat}?geometries=geojson`, { signal: controller.signal });
                   const [pRes, dRes] = await Promise.all([pFetch, dFetch]);
+                  clearTimeout(timeoutId);
                   const pData = await pRes.json();
                   const dData = await dRes.json();
                   if (pData.routes?.length > 0) interceptPaths.pickupPath = pData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
                   if (dData.routes?.length > 0) interceptPaths.dropoffPath = dData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
               } catch (e) {
-                  console.error("OSRM Connector routing failed natively", e);
+                  if (e.name !== 'AbortError') {
+                      console.error("OSRM Connector routing failed natively", e);
+                  }
               }
 
               // Final sequential sanity check
@@ -313,6 +325,7 @@ export default function OfferMatches() {
                  reviews: userReviews,
                  seats: req.seats || 1,
                  profilePic: req.userProfilePic || '',
+                 userId: req.userId
               };
 
            } catch (e) {
@@ -560,7 +573,7 @@ export default function OfferMatches() {
                 })}
               </div>
               {rideStatus !== 'completed' && rideStatus !== 'cancelled' && (
-                <button onClick={() => { setDrawerMode('ride'); setIsBottomPanelExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: 4, transition: 'background 0.3s' }}>
+                <button disabled={isLoadingMatches} onClick={() => { setDrawerMode('ride'); setIsBottomPanelExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: isLoadingMatches ? 'not-allowed' : 'pointer', marginLeft: 4, transition: 'background 0.3s, opacity 0.3s', opacity: isLoadingMatches ? 0.5 : 1 }}>
                   <Play size={16} fill="#fff" style={{ marginLeft: 2 }} />
                 </button>
               )}
@@ -836,7 +849,7 @@ export default function OfferMatches() {
            
            {/* Top Right Close Applet */}
            <div onClick={(e) => { e.stopPropagation(); setIsBottomPanelExpanded(false); }} style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', cursor: 'pointer' }}>
-             <X size={24} color="#555" strokeWidth={2.5} />
+             <X size={24} color="#bbb" strokeWidth={2} />
            </div>
         </div>
 
@@ -897,16 +910,16 @@ export default function OfferMatches() {
                            <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#888' }}>{activePassenger.name?.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase()}</span>
                         )}
                       </div>
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                        <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activePassenger.name}</h2>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#555' }}>
-                           <span>{activePassenger.rawRequest?.date ? dayjs(activePassenger.rawRequest.date).format('h:mma, MMM. D') : activePassenger.time}</span>
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                           <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activePassenger.name}</h2>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                           {[1, 2, 3, 4, 5].map(starNum => {
                              const ratingVal = parseFloat(activePassenger.rating || '5.0') || 0;
                              const isFilled = starNum <= Math.round(ratingVal);
-                             return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
+                             return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#bbb"} color={isFilled ? "#ffb800" : "#bbb"} />;
                           })}
                           <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{activePassenger.rating || '5.0'} <span style={{ fontWeight: 500 }}>({activePassenger.reviews || '5'})</span></span>
                         </div>
@@ -922,13 +935,17 @@ export default function OfferMatches() {
                    <div style={{ width: '100%', height: '1px', background: '#e5e7eb', marginBottom: '16px' }}></div>
 
                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
+                      {/* Date and Time and Seats displayed below the divider */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                           {Array.from({ length: activePassenger.seats || 1 }).map((_, i) => (
-                               <User key={i} size={14} fill={activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888'} color={activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888'} />
-                            ))}
-                        </div>
-                        <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{activePassenger.seats} Seat{activePassenger.seats > 1 ? 's' : ''} requested</span>
+                         <span style={{ fontSize: '0.95rem', color: '#555', fontWeight: 600 }}>
+                            {activePassenger.rawRequest?.date ? `${dayjs(activePassenger.rawRequest.date).format('MMM. D')}, ${activePassenger.time}` : activePassenger.time}
+                         </span>
+                         <span style={{ fontSize: '0.95rem', color: '#ccc' }}>•</span>
+                         <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                             {Array.from({ length: activePassenger.seats || 1 }).map((_, i) => (
+                                 <User key={i} size={14} fill="#bbb" color="#bbb" />
+                              ))}
+                         </div>
                       </div>
 
                       <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>

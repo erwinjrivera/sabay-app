@@ -132,12 +132,16 @@ export default function FindMatches() {
   useEffect(() => {
     const fetchPassengerRoute = async () => {
       try {
-        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFrom.lon},${passengerFrom.lat};${passengerTo.lon},${passengerTo.lat}?geometries=geojson&overview=full`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFrom.lon},${passengerFrom.lat};${passengerTo.lon},${passengerTo.lat}?geometries=geojson&overview=full`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         const data = await res.json();
         const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
         setPassengerRoute(coords);
       } catch (err) {
-        console.error("OSRM Passenger Route Error", err);
+        if (err.name !== 'AbortError') console.error("OSRM Passenger Route Error", err);
+        setPassengerRoute([[passengerFrom.lat, passengerFrom.lon], [passengerTo.lat, passengerTo.lon]]);
       }
     };
     fetchPassengerRoute();
@@ -266,7 +270,10 @@ export default function FindMatches() {
                  sampled.forEach(c => { coords += `;${c.pt[1]},${c.pt[0]}`; });
 
                  try {
-                     const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`);
+                     const controller = new AbortController();
+                     const timeoutId = setTimeout(() => controller.abort(), 2000);
+                     const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`, { signal: controller.signal });
+                     clearTimeout(timeoutId);
                      const data = await res.json();
                      if (data.code !== 'Ok' || !data.durations || !data.durations[0]) throw new Error("Table API failed");
 
@@ -300,15 +307,20 @@ export default function FindMatches() {
               
               // Segment 1 & 3: Connector routes mapped natively to exactly the OSRM geometric paths!
               try {
-                  const pFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFrom.lon},${passengerFrom.lat};${meetPickup[1]},${meetPickup[0]}?geometries=geojson`);
-                  const dFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${meetDropoff[1]},${meetDropoff[0]};${passengerTo.lon},${passengerTo.lat}?geometries=geojson`);
+                  const controller = new AbortController();
+                  const timeoutId = setTimeout(() => controller.abort(), 2000);
+                  const pFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFrom.lon},${passengerFrom.lat};${meetPickup[1]},${meetPickup[0]}?geometries=geojson`, { signal: controller.signal });
+                  const dFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${meetDropoff[1]},${meetDropoff[0]};${passengerTo.lon},${passengerTo.lat}?geometries=geojson`, { signal: controller.signal });
                   const [pRes, dRes] = await Promise.all([pFetch, dFetch]);
+                  clearTimeout(timeoutId);
                   const pData = await pRes.json();
                   const dData = await dRes.json();
                   if (pData.routes?.length > 0) interceptPaths.pickupPath = pData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
                   if (dData.routes?.length > 0) interceptPaths.dropoffPath = dData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
               } catch (e) {
-                  console.error("OSRM Connector routing failed natively", e);
+                  if (e.name !== 'AbortError') {
+                      console.error("OSRM Connector routing failed natively", e);
+                  }
               }
 
               // Final sequential sanity check
@@ -683,7 +695,7 @@ export default function FindMatches() {
                 })}
               </div>
               {volatilePassengerState?.status !== 'completed' && volatilePassengerState?.status !== 'cancelled' && (
-                <button onClick={() => { setDrawerMode('request'); setIsBottomPanelExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: 'pointer', marginLeft: 4, transition: 'background 0.3s' }}>
+                <button disabled={isLoadingMatches} onClick={() => { setDrawerMode('request'); setIsBottomPanelExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: isLoadingMatches ? 'not-allowed' : 'pointer', marginLeft: 4, transition: 'background 0.3s, opacity 0.3s', opacity: isLoadingMatches ? 0.5 : 1 }}>
                   <MoreHorizontal size={16} color="#fff" />
                 </button>
               )}
@@ -975,7 +987,7 @@ export default function FindMatches() {
            
            {/* Top Right Close Applet */}
            <div onClick={(e) => { e.stopPropagation(); setIsBottomPanelExpanded(false); }} style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', cursor: 'pointer' }}>
-             <X size={24} color="#999" strokeWidth={2.5} />
+             <X size={24} color="#bbb" strokeWidth={2} />
            </div>
         </div>
 
@@ -1012,18 +1024,13 @@ export default function FindMatches() {
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                       <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activeDriver.name}</h2>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0px', marginRight: '32px' }}>
-                         {Array.from({ length: activeDriver.seats || 4 }).map((_, i) => (
-                            <User key={i} size={14} fill="#888" color="#888" />
-                         ))}
-                      </div>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                       {[1, 2, 3, 4, 5].map(starNum => {
                          const ratingVal = parseFloat(activeDriver.rating) || 0;
                          const isFilled = starNum <= Math.round(ratingVal);
-                         return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#d4d4d4"} color={isFilled ? "#ffb800" : "#d4d4d4"} />;
+                         return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#bbb"} color={isFilled ? "#ffb800" : "#bbb"} />;
                       })}
                       <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{activeDriver.rating} <span style={{ fontWeight: 500 }}>({activeDriver.reviews})</span></span>
                     </div>
@@ -1046,8 +1053,14 @@ export default function FindMatches() {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#555' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem', color: '#555' }}>
                        <span style={{ fontWeight: 600 }}>{activeDriver.rawRequest?.date ? dayjs(activeDriver.rawRequest.date).format('MMM. D, h:mma') : activeDriver.time}</span>
+                       <span style={{ color: '#ccc' }}>•</span>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                          {Array.from({ length: activeDriver.seats || 4 }).map((_, i) => (
+                             <User key={i} size={14} fill="#bbb" color="#bbb" />
+                          ))}
+                       </div>
                     </div>
                   </div>
 
