@@ -262,49 +262,61 @@ export default function MyRides() {
   });
 
   return (
-    <div className="home-container" style={{ display: 'flex', flexDirection: 'column', background: '#fff', height: '100vh', overflow: 'hidden' }}>
+    <div className="home-container" style={{ display: 'flex', flexDirection: 'column', background: 'rgba(40,45,50,0.9)', height: '100vh', overflow: 'hidden' }}>
       
-      {/* Light Navbar Bento Style */}
-      <div style={{ background: '#fff', zIndex: 10, padding: '16px 20px', display: 'flex', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.04)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', width: '100%' }}>
-          <button onClick={() => navigate('/')} style={{ background: '#f1f5f9', width: 44, height: 44, borderRadius: '50%', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, transition: 'background 0.2s' }}>
-            <ArrowLeft size={22} color="#0f172a" />
+      {/* Dark Header Strip (Matching FindRide page) */}
+      <div style={{ background: 'rgba(40,45,50,0.9)', zIndex: 10 }}>
+        {/* Top Bar Navigation */}
+        <div style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '16px', color: '#fff' }}>
+          <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+            <ArrowLeft size={24} />
           </button>
-          <h2 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.3px' }}>Activity Log</h2>
+          <div>
+            <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: '#fff' }}>Activity Log</h1>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#bbb' }}>Track your rides and matches</p>
+          </div>
+        </div>
+
+        {/* Physical Folder Tabs seamlessly merged to the white content below */}
+        <div style={{ display: 'flex', padding: '0', background: 'rgba(0,0,0,0.15)', paddingTop: '10px' }}>
+          {['Pending', 'Active', 'History'].map((tab, tabIndex) => (
+            <div
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                position: 'relative',
+                zIndex: activeTab === tab ? 10 : 1,
+                flex: 1, textAlign: 'center', padding: '14px 0', fontWeight: 600, fontSize: '0.95rem',
+                color: activeTab === tab ? '#333' : '#aaa',
+                background: activeTab === tab ? '#fff' : 'transparent',
+                borderRadius: '12px 12px 0 0', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+              }}
+            >
+              {tab}
+              {tab === 'Active' && hasActiveRide && (
+                <span style={{ width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%' }}></span>
+              )}
+              {/* Seamless corner merge effects */}
+              {activeTab === tab && tabIndex === 0 && (
+                <div style={{ position: 'absolute', bottom: 0, right: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top right, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
+              )}
+              {activeTab === tab && tabIndex === 1 && (
+                <>
+                  <div style={{ position: 'absolute', bottom: 0, left: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top left, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
+                  <div style={{ position: 'absolute', bottom: 0, right: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top right, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
+                </>
+              )}
+              {activeTab === tab && tabIndex === 2 && (
+                <div style={{ position: 'absolute', bottom: 0, left: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top left, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Tabs Menu */}
-      {/* Bento Tabs Menu */}
-      <div style={{ display: 'flex', background: '#fff', padding: '8px 16px', gap: '12px', zIndex: 5, boxShadow: '0 4px 12px rgba(0,0,0,0.02)' }}>
-        {['Active', 'Pending', 'History'].map(tab => (
-          <div 
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            style={{ 
-              flex: 1, 
-              textAlign: 'center', 
-              padding: '12px 0', 
-              fontWeight: 700,
-              fontSize: '0.95rem',
-              color: activeTab === tab ? '#fff' : '#64748b',
-              background: activeTab === tab ? '#0f172a' : '#f1f5f9',
-              borderRadius: '24px',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
-            }}
-          >
-             {tab}
-             {tab === 'Active' && hasActiveRide && (
-               <span style={{ width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%' }}></span>
-             )}
-          </div>
-        ))}
-      </div>
-
       {/* RIDES LIST */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', background: '#fff', paddingBottom: '100px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', background: '#fff', paddingBottom: '100px', marginTop: '-1px', position: 'relative', zIndex: 5 }}>
       {loading ? (
         <div style={{ height: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
           <Loader2 size={40} color="#999" style={{ animation: 'spin 1.2s linear infinite' }} />
@@ -392,7 +404,7 @@ export default function MyRides() {
                          }}
                          style={{ 
                            background: '#fff', 
-                           borderRadius: '32px', 
+                           borderRadius: '12px', 
                            boxShadow: '0 12px 32px rgba(0,0,0,0.06)',
                            display: 'flex',
                            flexDirection: 'column',
@@ -460,7 +472,7 @@ export default function MyRides() {
                          {/* SECTION 2: PASSENGERS / DRIVER RECORD LIST */}
                          {ride.passengers && ride.passengers.filter(p => activeTab !== 'History' || ['Completed', 'Confirmed'].includes(p.pStatus)).length > 0 && (
                            <div style={{ padding: '0 20px 24px 20px' }}>
-                             <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', background: '#f8fafc', borderRadius: '20px' }}>
+                             <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', background: '#f8fafc', borderRadius: '10px' }}>
                                {ride.passengers.filter(p => activeTab !== 'History' || ['Completed', 'Confirmed'].includes(p.pStatus)).map((p, idx) => (
                                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', position: 'relative' }}>
                                     
@@ -533,7 +545,7 @@ export default function MyRides() {
                          ) : (
                            <>
                              <div style={{ width: '100%', height: '1px', background: '#f1f5f9' }}></div>
-                             <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ride.status === 'cancelled' ? '#f8fafc' : '#f0fdf4', borderBottomLeftRadius: '32px', borderBottomRightRadius: '32px' }}>
+                             <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ride.status === 'cancelled' ? '#f8fafc' : '#f0fdf4', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                    <span style={{ fontSize: '0.95rem', fontWeight: 800, color: ride.status === 'cancelled' ? '#94a3b8' : '#22c55e', letterSpacing: '0.5px' }}>
                                       {ride.status === 'cancelled' ? 'Ride Cancelled' : 'Ride Completed'}
