@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { ArrowLeft, User, Phone, MessageCircle, Star, Loader2, Navigation, Check, X } from 'lucide-react';
+import { ArrowLeft, User, Phone, MessageCircle, Star, Loader2, CarFront, Check, X, Calendar, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
 import { doc, onSnapshot, getDoc, updateDoc, setDoc } from 'firebase/firestore';
@@ -32,18 +32,18 @@ const getInitials = (nameStr, defaultChar = 'U') => {
 const getDriverCarIcon = (bearing, photoURL, name, themeColor = '#00b0f0') => {
   const initials = getInitials(name, 'D');
   const innerContent = photoURL 
-    ? `<img src="${photoURL}" onerror="this.onerror=null; this.outerHTML='<div style=\\'width:34px;height:34px;border-radius:50%;background:#ccc;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;color:#fff;border:2px solid #fff;transform:rotate(${ -135 - (bearing || 0) }deg);\\'>${initials}</div>';" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #fff;transform:rotate(${ -135 - (bearing || 0) }deg);background:#ccc;" />` 
-    : `<div style="width:34px;height:34px;border-radius:50%;background:#ccc;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;color:#fff;border:2px solid #fff;transform:rotate(${ -135 - (bearing || 0) }deg);">${initials}</div>`;
+    ? `<img src="${photoURL}" onerror="this.onerror=null; this.outerHTML='<div style=\\'width:34px;height:34px;border-radius:50%;background:#ccc;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;color:#fff;border:2px solid #fff;transform:rotate(-315deg);\\'>${initials}</div>';" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #fff;transform:rotate(-315deg);background:#ccc;" />` 
+    : `<div style="width:34px;height:34px;border-radius:50%;background:#ccc;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;color:#fff;border:2px solid #fff;transform:rotate(-315deg);">${initials}</div>`;
 
   return new L.DivIcon({
     className: 'custom-driver-car',
-    html: `<div style="width:50px;height:50px;display:flex;align-items:center;justify-content:center;position:relative; transform: rotate(${bearing || 0}deg); transition: transform 1s ease-out;">
+    html: `<div style="width:50px;height:50px;display:flex;align-items:center;justify-content:center;position:relative; transform: rotate(180deg);">
              <div style="position:absolute;width:40px;height:40px;background:${themeColor};border-radius:50% 50% 50% 0;transform:rotate(135deg);box-shadow:0 4px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
                 ${innerContent}
              </div>
            </div>`,
     iconSize: [50, 50],
-    iconAnchor: [25, 25]
+    iconAnchor: [25, 52]
   });
 };
 
@@ -89,10 +89,12 @@ const getDriverEndIcon = () => new L.DivIcon({
 
 function MapAdjuster({ route1, centerOnLoc }) {
   const map = useMap();
+  const hasFittedRef = React.useRef(false);
   useEffect(() => {
     if (centerOnLoc) {
        map.setView([centerOnLoc.lat, centerOnLoc.lon], 16, { animate: true });
-    } else if (route1 && route1.length > 0) {
+    } else if (route1 && route1.length > 0 && !hasFittedRef.current) {
+       hasFittedRef.current = true;
        const bounds = L.latLngBounds(route1);
        map.fitBounds(bounds, { padding: [50, 50], animate: true });
     }
@@ -110,7 +112,6 @@ export default function PassengerTracking() {
   const [passengerState, setPassengerState] = useState(passengerRequest);
   
   const [driverRoute, setDriverRoute] = useState([]);
-  const [passengerRoute, setPassengerRoute] = useState([]);
   const [sharedPath, setSharedPath] = useState([]);
   const [intercepts, setIntercepts] = useState(null);
   
@@ -218,89 +219,154 @@ export default function PassengerTracking() {
 
      const fetchRoutes = async () => {
          try {
-             // Fetch Passenger
-             const resP = await fetch(`https://router.project-osrm.org/route/v1/driving/${passengerRequest.from.lon},${passengerRequest.from.lat};${passengerRequest.to.lon},${passengerRequest.to.lat}?geometries=geojson&overview=full`);
-             const dataP = await resP.json();
-             const pRoute = dataP.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-             setPassengerRoute(pRoute);
-
-             // Fetch Driver
+             // Fetch Driver Route
              const resD = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverRide.from.lon},${driverRide.from.lat};${driverRide.to.lon},${driverRide.to.lat}?geometries=geojson&overview=full`);
              const dataD = await resD.json();
              const dRoute = dataD.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
              setDriverRoute(dRoute);
 
-             // Find exact overlaps against Driver Route using geometric nodes
-             let globalMin = Infinity;
-             const distProfile = pRoute.map((ptP, idxP) => {
-                let minDist = Infinity;
-                let closestDIdx = -1;
-                dRoute.forEach((ptD, idxD) => {
-                   const dist = getDistanceKM(ptP[0], ptP[1], ptD[0], ptD[1]);
-                   if (dist < minDist) { minDist = dist; closestDIdx = idxD; }
-                });
-                if (minDist < globalMin) globalMin = minDist;
-                return { minDist, closestDIdx, passIdx: idxP };
-             });
+             const passengerFromPos = { lat: passengerRequest.from.lat, lon: passengerRequest.from.lon };
+             const passengerToPos = { lat: passengerRequest.to.lat, lon: passengerRequest.to.lon };
 
-             const overlapThreshold = Math.max(0.04, globalMin + 0.02);
-             const overlaps = distProfile
-                .filter(pt => pt.minDist <= overlapThreshold)
-                .map(pt => ({ passIdx: pt.passIdx, driverIdx: pt.closestDIdx }));
+             // Sub-function to find the true road-network driving distance optimal point on driver route
+             const findBestNetworkNode = async (targetPos, minIdx = 0) => {
+                const candidates = dRoute.map((pt, idx) => ({ pt, idx, dist: getDistanceKM(pt[0], pt[1], targetPos.lat, targetPos.lon) }))
+                                                  .filter(c => c.dist <= 5.0 && c.idx >= minIdx);
+                if (candidates.length === 0) return null;
+     
+                let sampleSize = Math.max(1, Math.ceil(candidates.length / 50));
+                let sampled = [];
+                for (let i = 0; i < candidates.length; i += sampleSize) {
+                     sampled.push(candidates[i]);
+                }
+                if (sampled.length > 90) sampled = sampled.slice(0, 90);
+     
+                let coords = `${targetPos.lon},${targetPos.lat}`;
+                sampled.forEach(c => { coords += `;${c.pt[1]},${c.pt[0]}`; });
+     
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 2000);
+                    const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`, { signal: controller.signal });
+                    clearTimeout(timeoutId);
+                    const data = await res.json();
+                    if (data.code !== 'Ok' || !data.durations || !data.durations[0]) throw new Error("Table API failed");
+     
+                    let minDur = Infinity;
+                    let bestCandidate = null;
+                    for (let i = 0; i < sampled.length; i++) {
+                        const dur = data.durations[0][i + 1];
+                        if (dur !== null && dur < minDur) { minDur = dur; bestCandidate = sampled[i]; }
+                    }
+                    return bestCandidate || sampled.reduce((min, c) => c.dist < min.dist ? c : min, sampled[0]);
+                } catch(e) {
+                    return sampled.reduce((min, c) => c.dist < min.dist ? c : min, sampled[0]);
+                }
+             };
 
-             let pickupIdx = -1, dropoffIdx = -1, meetPickup = null, meetDropoff = null;
-             
-             if (overlaps.length > 0) {
-                 const minPassOverlap = overlaps.reduce((min, o) => o.passIdx < min.passIdx ? o : min, overlaps[0]);
-                 const maxPassOverlap = overlaps.reduce((max, o) => o.passIdx > max.passIdx ? o : max, overlaps[0]);
+             // 1. Find pickup and initial dropoff using road-network proximity
+             const bestPickup = await findBestNetworkNode(passengerFromPos);
+             const bestDropoff = await findBestNetworkNode(passengerToPos);
 
-                 if (minPassOverlap.driverIdx > maxPassOverlap.driverIdx) {
-                     pickupIdx = maxPassOverlap.passIdx;
-                     dropoffIdx = minPassOverlap.passIdx;
-                 } else {
-                     pickupIdx = minPassOverlap.passIdx;
-                     dropoffIdx = maxPassOverlap.passIdx;
+             let pickupIdx = bestPickup ? bestPickup.idx : 0;
+             let dropIdx = bestDropoff ? bestDropoff.idx : dRoute.length - 1;
+             let meetPickup = dRoute[pickupIdx];
+             let meetDropoff = dRoute[dropIdx];
+
+             if (pickupIdx >= dropIdx) {
+                 const temp = pickupIdx; pickupIdx = dropIdx; dropIdx = temp;
+                 meetPickup = dRoute[pickupIdx];
+                 meetDropoff = dRoute[dropIdx];
+             }
+
+             let interceptPaths = {
+                pickupPath: [[passengerFromPos.lat, passengerFromPos.lon], [meetPickup[0], meetPickup[1]]],
+                dropoffPath: [[meetDropoff[0], meetDropoff[1]], [passengerToPos.lat, passengerToPos.lon]]
+             };
+
+             // Fetch road-following connector paths using foot profile + convergence detection
+             try {
+                 const controller = new AbortController();
+                 const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+                 // PICKUP: Use FOOT profile
+                 const pFetch = fetch(`https://router.project-osrm.org/route/v1/foot/${passengerFromPos.lon},${passengerFromPos.lat};${meetPickup[1]},${meetPickup[0]}?geometries=geojson&overview=full`, { signal: controller.signal });
+                 // DROPOFF: Route from destination outward
+                 const bestDropNet = await findBestNetworkNode(passengerToPos, pickupIdx + 1);
+                 if (bestDropNet) {
+                     meetDropoff = bestDropNet.pt;
+                     dropIdx = bestDropNet.idx;
+                 }
+                 const dFetch = fetch(`https://router.project-osrm.org/route/v1/foot/${passengerToPos.lon},${passengerToPos.lat};${meetDropoff[1]},${meetDropoff[0]}?geometries=geojson&overview=full`, { signal: controller.signal });
+                 const [pRes, dRes] = await Promise.all([pFetch, dFetch]);
+                 clearTimeout(timeoutId);
+                 const pData = await pRes.json();
+                 const dData = await dRes.json();
+
+                 // PICKUP: find where the passenger's route FIRST joins the driver's route
+                 if (pData.routes?.length > 0) {
+                     let pPath = pData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                     let convergenceIdx = pPath.length - 1;
+                     for (let i = 0; i < pPath.length; i++) {
+                         for (let j = 0; j < dRoute.length; j++) {
+                             if (getDistanceKM(pPath[i][0], pPath[i][1], dRoute[j][0], dRoute[j][1]) < 0.015) {
+                                 convergenceIdx = i;
+                                 break;
+                             }
+                         }
+                         if (convergenceIdx !== pPath.length - 1) break;
+                     }
+                     interceptPaths.pickupPath = pPath.slice(0, convergenceIdx + 1);
+                     let bestMatchIdx = pickupIdx;
+                     let bestMatchDist = Infinity;
+                     for (let j = 0; j < dRoute.length; j++) {
+                         const d = getDistanceKM(pPath[convergenceIdx][0], pPath[convergenceIdx][1], dRoute[j][0], dRoute[j][1]);
+                         if (d < bestMatchDist) { bestMatchDist = d; bestMatchIdx = j; }
+                     }
+                     meetPickup = dRoute[bestMatchIdx];
+                     pickupIdx = bestMatchIdx;
+                     interceptPaths.pickupPath.push([meetPickup[0], meetPickup[1]]);
+                     if (pickupIdx >= dropIdx) {
+                         meetPickup = dRoute[bestPickup ? bestPickup.idx : 0];
+                         pickupIdx = bestPickup ? bestPickup.idx : 0;
+                         interceptPaths.pickupPath = [[passengerFromPos.lat, passengerFromPos.lon], [meetPickup[0], meetPickup[1]]];
+                     }
                  }
 
-                 meetPickup = pRoute[pickupIdx];
-                 meetDropoff = pRoute[dropoffIdx];
-                 
-                 const dPickIdx = Math.min(minPassOverlap.driverIdx, maxPassOverlap.driverIdx);
-                 const dDropIdx = Math.max(minPassOverlap.driverIdx, maxPassOverlap.driverIdx);
-                 setSharedPath(dRoute.slice(dPickIdx, dDropIdx + 1));
-                 
-                 setIntercepts({
-                    pickupPath: pRoute.slice(0, pickupIdx + 1),
-                    dropoffPath: pRoute.slice(dropoffIdx),
-                    meetPickup: { lat: meetPickup[0], lon: meetPickup[1] },
-                    meetDropoff: { lat: meetDropoff[0], lon: meetDropoff[1] }
-                 });
-             } else {
-                 let minOriginDist = Infinity;
-                 let minDestDist = Infinity;
-                 let fallbackPickIdx = 0, fallbackDropIdx = dRoute.length - 1;
+                 // DROPOFF: find where the destination walking route FIRST joins the driver's route
+                 if (dData.routes?.length > 0) {
+                     let dPath = dData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                     let dropConvergenceIdx = dPath.length - 1;
+                     for (let i = 0; i < dPath.length; i++) {
+                         for (let j = Math.max(0, pickupIdx); j < dRoute.length; j++) {
+                             if (getDistanceKM(dPath[i][0], dPath[i][1], dRoute[j][0], dRoute[j][1]) < 0.015) {
+                                 dropConvergenceIdx = i;
+                                 break;
+                             }
+                         }
+                         if (dropConvergenceIdx !== dPath.length - 1) break;
+                     }
+                     let bestDropMatchIdx = dropIdx;
+                     let bestDropMatchDist = Infinity;
+                     for (let j = Math.max(0, pickupIdx); j < dRoute.length; j++) {
+                         const d = getDistanceKM(dPath[dropConvergenceIdx][0], dPath[dropConvergenceIdx][1], dRoute[j][0], dRoute[j][1]);
+                         if (d < bestDropMatchDist) { bestDropMatchDist = d; bestDropMatchIdx = j; }
+                     }
+                     meetDropoff = dRoute[bestDropMatchIdx];
+                     dropIdx = bestDropMatchIdx;
+                     let dropPath = dPath.slice(0, dropConvergenceIdx + 1).reverse();
+                     interceptPaths.dropoffPath = [[meetDropoff[0], meetDropoff[1]], ...dropPath];
+                 }
+             } catch (e) {}
 
-                 dRoute.forEach((ptD, idx) => {
-                     const distOrigin = getDistanceKM(ptD[0], ptD[1], passengerRequest.from.lat, passengerRequest.from.lon);
-                     if (distOrigin < minOriginDist) { minOriginDist = distOrigin; fallbackPickIdx = idx; }
-                     const distDest = getDistanceKM(ptD[0], ptD[1], passengerRequest.to.lat, passengerRequest.to.lon);
-                     if (distDest < minDestDist) { minDestDist = distDest; fallbackDropIdx = idx; }
-                 });
+             setSharedPath(dRoute.slice(pickupIdx, dropIdx + 1));
+             setIntercepts({
+                pickupPath: interceptPaths.pickupPath,
+                dropoffPath: interceptPaths.dropoffPath,
+                meetPickup: { lat: meetPickup[0], lon: meetPickup[1] },
+                meetDropoff: { lat: meetDropoff[0], lon: meetDropoff[1] }
+             });
 
-                 if (fallbackPickIdx > fallbackDropIdx) { const temp = fallbackPickIdx; fallbackPickIdx = fallbackDropIdx; fallbackDropIdx = temp; }
-                 
-                 meetPickup = dRoute[fallbackPickIdx];
-                 meetDropoff = dRoute[fallbackDropIdx];
-
-                 setSharedPath(dRoute.slice(fallbackPickIdx, fallbackDropIdx + 1));
-                 
-                 setIntercepts({
-                    pickupPath: [ [passengerRequest.from.lat, passengerRequest.from.lon], meetPickup ],
-                    dropoffPath: [ meetDropoff, [passengerRequest.to.lat, passengerRequest.to.lon] ],
-                    meetPickup: { lat: meetPickup[0], lon: meetPickup[1] },
-                    meetDropoff: { lat: meetDropoff[0], lon: meetDropoff[1] }
-                 });
-             }
              setIsInitializing(false);
          } catch (e) {
              console.error("OSRM Routing Error", e);
@@ -321,12 +387,14 @@ export default function PassengerTracking() {
      );
   }
 
-  const driverLiveLat = driverRide.currentLat || driverRide.from.lat;
-  const driverLiveLon = driverRide.currentLon || driverRide.from.lon;
-  const driverLiveBearing = driverRide.currentHeading || 0;
-
   const isRideCompleted = driverRide?.status === 'completed' || passengerState?.status === 'completed';
   const isRideCancelled = !isRideCompleted && (driverRide?.status === 'cancelled' || passengerState?.status === 'cancelled');
+  const isFinalState = isRideCompleted || isRideCancelled;
+
+  const driverLiveLat = isFinalState ? driverRide.from.lat : (driverRide.currentLat || driverRide.from.lat);
+  const driverLiveLon = isFinalState ? driverRide.from.lon : (driverRide.currentLon || driverRide.from.lon);
+  const driverLiveBearing = isFinalState ? 0 : (driverRide.currentHeading || 0);
+
   const activeColor = isRideCancelled ? '#888' : (isRideCompleted ? '#9cc93a' : '#00b0f0');
 
   let statusText = isRideCancelled ? "Ride Cancelled" : (isRideCompleted ? "Ride Completed" : "Driver is on their way");
@@ -366,9 +434,8 @@ export default function PassengerTracking() {
            <Polyline positions={driverRoute} pathOptions={{ color: '#555', weight: 5, opacity: 0.5 }} />
         )}
 
-        {passengerRoute.length > 0 && (
+        {driverRoute.length > 0 && (
            <>
-             <Polyline positions={passengerRoute} pathOptions={{ color: activeColor, weight: 6, opacity: 0.8 }} />
              <Marker position={[passengerRequest.from.lat, passengerRequest.from.lon]} icon={getPassengerStartIcon(activeColor)} />
              <Marker position={[passengerRequest.to.lat, passengerRequest.to.lon]} icon={getPassengerEndIcon(activeColor)} />
            </>
@@ -389,7 +456,17 @@ export default function PassengerTracking() {
                 <Tooltip direction="right" offset={[10, 0]} opacity={1} permanent>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {passPhoto ? (
-                      <img src={passPhoto} style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} />
+                      <>
+                          <img 
+                              src={passPhoto} 
+                              alt="avatar" 
+                              style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} 
+                              onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                          />
+                          <div style={{ display: 'none', width: 24, height: 24, borderRadius: '50%', background: '#ccc', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>
+                              {getInitials(passName, 'P')}
+                          </div>
+                      </>
                   ) : (
                       <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>
                           {getInitials(passName, 'P')}
@@ -418,10 +495,9 @@ export default function PassengerTracking() {
       {/* Recenter Button */}
       {(!isRideCompleted && !isRideCancelled) && (
         <button 
-          onClick={() => { setPanToCar(true); setTimeout(() => setPanToCar(false), 1000); }} 
-          style={{ position: 'absolute', bottom: '260px', right: '20px', background: '#fff', border: 'none', borderRadius: '50%', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000 }}
+          onClick={() => { setPanToCar(true); setTimeout(() => setPanToCar(false), 1000); }}           style={{ position: 'absolute', bottom: '220px', right: '20px', background: '#fff', border: 'none', borderRadius: '50%', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000 }}
         >
-           <Navigation size={22} color={activeColor} fill={activeColor} />
+           <CarFront size={22} color={activeColor} />
         </button>
       )}
 
@@ -496,19 +572,22 @@ export default function PassengerTracking() {
               overflow: 'hidden',
               animation: justRated ? 'pulseGlow 1.2s ease-in-out 1' : 'none'
           }}>
-            {/* Top Detail Row */}
-            <div style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center' }}>
+            {/* Top Detail Row - aligned with FindMatches card layout */}
+            <div style={{ padding: '14px', display: 'flex', gap: '12px', alignItems: 'center', position: 'relative' }}>
                <div>
                  <img 
                    src={targetPhotoURL || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"}
                    alt="Driver Profile" 
                    onError={(e) => { e.target.onerror = null; e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"; }}
-                   style={{ width: 50, height: 50, borderRadius: '50%', objectFit: 'cover' }} 
+                   style={{ width: 45, height: 45, borderRadius: '50%', objectFit: 'cover' }} 
                  />
                </div>
                
-               <div style={{ flex: 1 }}>
-                 <h3 style={{ margin: '2px 0 4px', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
+               <div style={{ flex: 1, minWidth: 0 }}>
+                 <p style={{ margin: 0, fontSize: '0.8rem', color: activeColor, fontWeight: 600 }}>
+                   {driverRide?.time ? dayjs(driverRide.time).format('h:mma') : dayjs().format('h:mma')}
+                 </p>
+                 <h3 style={{ margin: '2px 0', fontSize: '1rem', fontWeight: 600, color: '#222' }}>
                    {targetName}
                  </h3>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -516,25 +595,24 @@ export default function PassengerTracking() {
                         const isFilled = starNum <= Math.round(parseFloat(targetRating)); 
                         return <Star key={starNum} size={12} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
                     })}
-                    <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px' }}>
-                        {targetRating === '0.0' ? 'New' : `${targetRating} (${targetReviews})`}
+                    <span style={{ fontSize: '0.75rem', color: '#555', marginLeft: '4px', fontWeight: 600 }}>
+                        {targetRating === '0.0' ? 'New' : `${targetRating}`} <span style={{ fontWeight: 400 }}>({targetReviews})</span>
                     </span>
                  </div>
                  {driverProfile?.plateNumber && (
-                    <div style={{ marginTop: '2px', fontSize: '0.75rem', color: '#777' }}>
+                    <div style={{ marginTop: '2px', fontSize: '0.7rem', color: '#777', whiteSpace: 'nowrap' }}>
                        <span style={{ fontWeight: 600 }}>{driverProfile.plateNumber}</span> | {driverProfile.carMake} {driverProfile.carModel} ({driverProfile.carColor})
                     </div>
                  )}
                </div>
 
-               <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center' }}>
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: activeColor, fontWeight: 600, marginBottom: '2px' }}>
-                    {driverRide?.time ? dayjs(driverRide.time).format('h:mma') : dayjs().format('h:mma')}
-                  </p>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginBottom: '4px' }}>
-                     {Array.from({ length: targetSeats }).map((_, i) => (
-                        <User key={i} size={12} fill="#888" color="#888" />
-                     ))}
+               <div style={{ textAlign: 'right' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '2px', justifyContent: 'flex-end', marginBottom: '4px' }}>
+                     {Array.from({ length: targetSeats }).map((_, i) => {
+                        const seatsTaken = parseInt(driverRide?.seatsTaken || driverRide?.confirmedCount || 0);
+                        const isTaken = i < seatsTaken;
+                        return <User key={i} size={12} fill={isTaken ? activeColor : '#e0e0e0'} color={isTaken ? activeColor : '#e0e0e0'} />;
+                     })}
                   </div>
                   <p style={{ margin: 0, fontWeight: 700, fontSize: '1.1rem', color: '#111' }}>
                       {targetPrice}
@@ -579,10 +657,11 @@ export default function PassengerTracking() {
       <div 
         style={{
           position: 'absolute', bottom: 0, left: 0, width: '100%',
-          background: '#f2f4f7', borderTopLeftRadius: '8px', borderTopRightRadius: '8px',
-          boxShadow: isBottomPanelExpanded ? '0 -4px 15px rgba(0,0,0,0.1)' : 'none', padding: '16px 24px 32px 24px', zIndex: 2000,
-          transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px))',
-          transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+          background: isBottomPanelExpanded ? 'rgba(40,45,50,0.98)' : 'rgba(40,45,50,0.9)', 
+          borderTopLeftRadius: '8px', borderTopRightRadius: '8px',
+          boxShadow: '0 -4px 15px rgba(0,0,0,0.5)', padding: '16px 24px 16px 24px', zIndex: 2000,
+          transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 34px))',
+          transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.3s',
           display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box'
         }}
       >
@@ -590,81 +669,116 @@ export default function PassengerTracking() {
           onClick={() => setIsBottomPanelExpanded(!isBottomPanelExpanded)}
           style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}
         >
-           <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s' }}></div>
+           <ChevronUp size={28} color="#888" style={{ position: 'absolute', top: '2px', left: '50%', transform: 'translateX(-50%)', opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s' }} />
            <div onClick={(e) => { e.stopPropagation(); setIsBottomPanelExpanded(false); }} style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', cursor: 'pointer' }}>
-             <X size={24} color="#555" strokeWidth={2.5} />
+             <X size={24} color="#888" strokeWidth={2.5} />
            </div>
         </div>
 
-        <div style={{ width: '100%', marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
-             <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
-                  <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {targetPhotoURL ? (
-                       <img src={targetPhotoURL} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="driver" />
-                    ) : (
-                       <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#888' }}>{getInitials(targetName, 'D')}</span>
-                    )}
-                  </div>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{targetName}</h2>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                      {[1, 2, 3, 4, 5].map(starNum => {
-                         const ratingVal = parseFloat(targetRating) || 0;
-                         const isFilled = starNum <= Math.round(ratingVal);
-                         return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#eaeaea"} color={isFilled ? "#ffb800" : "#eaeaea"} />;
-                      })}
-                      <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{targetRating === '0.0' ? 'New' : targetRating} <span style={{ fontWeight: 500 }}>({targetReviews})</span></span>
+        <div style={{ width: '100%', marginTop: '16px', display: 'flex', flexDirection: 'column', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
+           <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'center', textAlign: 'center', paddingBottom: '0' }}>
+                 <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#333', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px', border: '3px solid #444', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+                     {targetPhotoURL ? (
+                        <img src={targetPhotoURL} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="driver" />
+                     ) : (
+                        <span style={{ fontSize: '1.8rem', fontWeight: 800, color: '#ccc' }}>{getInitials(targetName, 'D')}</span>
+                     )}
+                 </div>
+                 <h2 style={{ margin: '0 0 4px', fontSize: '1.3rem', fontWeight: 600, color: '#fff' }}>{targetName}</h2>
+                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginBottom: '4px' }}>
+                   {[1, 2, 3, 4, 5].map(starNum => {
+                      const ratingVal = parseFloat(targetRating) || 0;
+                      const isFilled = starNum <= Math.round(ratingVal);
+                      return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#444"} color={isFilled ? "#ffb800" : "#444"} />;
+                   })}
+                   <span style={{ fontSize: '0.9rem', color: '#eee', fontWeight: 600, marginLeft: '4px' }}>{targetRating === '0.0' ? 'New' : targetRating} <span style={{ fontWeight: 400 }}>({targetReviews})</span></span>
+                 </div>
+                 {driverProfile?.plateNumber && (
+                    <div style={{ marginTop: '2px', fontSize: '0.85rem', color: '#ccc', marginBottom: '24px' }}>
+                       <span style={{ fontWeight: 700, color: '#fff' }}>{driverProfile.plateNumber}</span> | {driverProfile.carMake} {driverProfile.carModel} <span style={{ opacity: 0.8 }}>({driverProfile.carColor})</span>
                     </div>
-                    {driverProfile?.plateNumber && (
-                       <div style={{ marginTop: '2px', fontSize: '0.85rem', color: '#666' }}>
-                          <span style={{ fontWeight: 700 }}>{driverProfile.plateNumber}</span> | {driverProfile.carMake} {driverProfile.carModel} ({driverProfile.carColor})
-                       </div>
-                    )}
+                 )}
+                 {!driverProfile?.plateNumber && <div style={{ marginBottom: '24px' }}></div>}
+
+                  {/* "Ride Details" divider */}
+                  <div style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '16px' }}>
+                     <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+                     <span style={{ padding: '0 16px', fontWeight: 700, fontSize: '1.1rem', color: '#f1f1f1' }}>Ride Details</span>
+                     <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
                   </div>
-                </div>
 
-                {driverRide?.note && driverRide.note.trim() !== '' && (
-                  <p style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#444', fontStyle: 'italic', background: '#fff', padding: '12px', borderRadius: '8px', borderLeft: `4px solid ${activeColor}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                    "{driverRide.note}"
-                  </p>
-                )}
-
-                <div style={{ width: '100%', height: '1px', background: '#e5e7eb', marginBottom: '16px' }}></div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 600 }}>
-                      {driverRide?.time ? dayjs(driverRide.time).format('MMM. D, h:mma') : dayjs().format('MMM. D, h:mma')}
-                    </span>
-                    <span style={{ fontSize: '0.85rem', color: '#ccc' }}>|</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                           {Array.from({ length: targetSeats || 4 }).map((_, i) => (
-                               <User key={i} size={14} fill="#888" color="#888" />
-                            ))}
+                  {/* Date, Time, Seats */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#8da4bd' }}>
+                           <Calendar size={14} />
+                           <span style={{ fontSize: '0.9rem', fontWeight: 400 }}>
+                              {(driverRide?.date || driverRide?.time) ? dayjs(driverRide?.date || driverRide?.time).format('MMMM D, YYYY') : 'Unknown Date'}
+                           </span>
                         </div>
-                        <span style={{ fontSize: '0.85rem', color: '#666', fontWeight: 600 }}>{targetSeats} Seat{targetSeats > 1 ? 's' : ''} offering</span>
-                    </div>
+                        <span style={{ color: '#444' }}>|</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#8da4bd' }}>
+                           <Clock size={14} />
+                           <span style={{ fontSize: '0.9rem', fontWeight: 400 }}>
+                              {driverRide?.time ? dayjs(driverRide.time).format('h:mm A') : dayjs().format('h:mm A')}
+                           </span>
+                        </div>
+                     </div>
+                     <span style={{ fontSize: '1rem', fontWeight: 700, color: activeColor }}>{targetSeats} seat{targetSeats > 1 ? 's' : ''} offering</span>
                   </div>
 
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
-                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '4px', paddingBottom: '4px' }}>
-                     <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
-                     <div style={{ width: 1, flex: 1, background: '#ccc', margin: '4px 0' }}></div>
-                     <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
-                   </div>
-                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
-                     <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
-                       {driverRide?.from?.address || 'Unknown Pickup Address'}
+                  {/* Locations */}
+                  <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '20px', alignItems: 'center', marginBottom: '16px' }}>
+                     {/* Origin */}
+                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 500, color: '#aaa', marginBottom: '4px' }}>From:</span>
+                        {(() => {
+                           const addrStr = driverRide?.from?.address || 'Unknown Pickup Address';
+                           const parts = addrStr.split(',');
+                           const mainAddr = parts[0] ? parts[0].trim() : addrStr;
+                           const subAddr = parts.length > 1 ? parts.slice(1).join(',').trim() : '';
+                           return (
+                              <>
+                                 <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>{mainAddr}</span>
+                                 {subAddr && <span style={{ fontSize: '0.9rem', color: '#bbb' }}>{subAddr}</span>}
+                              </>
+                           );
+                        })()}
                      </div>
-                     <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
-                       {driverRide?.to?.address || 'Unknown Dropoff Address'}
+
+                     {/* Destination */}
+                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                        <span style={{ fontSize: '0.9rem', fontWeight: 500, color: '#aaa', marginBottom: '4px' }}>To:</span>
+                        {(() => {
+                           const addrStr = driverRide?.to?.address || 'Unknown Dropoff Address';
+                           const parts = addrStr.split(',');
+                           const mainAddr = parts[0] ? parts[0].trim() : addrStr;
+                           const subAddr = parts.length > 1 ? parts.slice(1).join(',').trim() : '';
+                           return (
+                              <>
+                                 <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>{mainAddr}</span>
+                                 {subAddr && <span style={{ fontSize: '0.9rem', color: '#bbb' }}>{subAddr}</span>}
+                              </>
+                           );
+                        })()}
                      </div>
-                   </div>
-                </div>
-                </div>
-             </div>
+                  </div>
+
+                  {driverRide?.note && driverRide.note.trim() !== '' && (
+                    <p style={{ margin: '0', fontSize: '0.95rem', color: '#ddd', fontStyle: 'italic', background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.2)', width: '100%', textAlign: 'left' }}>
+                      <strong style={{ fontStyle: 'normal', color: '#aaa', fontWeight: 600, marginRight: '4px' }}>Note:</strong>"{driverRide.note}"
+                    </p>
+                  )}
+              </div>
+           </div>
+           {/* Collapse Drawer Button */}
+           <div 
+              onClick={() => setIsBottomPanelExpanded(false)} 
+              style={{ display: 'flex', justifyContent: 'center', marginTop: '8px', cursor: 'pointer', marginBottom: '-8px' }}
+           >
+              <ChevronDown size={32} color="#888" style={{ opacity: 0.8 }} />
+           </div>
         </div>
       </div>
 
