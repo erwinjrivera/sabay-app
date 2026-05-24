@@ -12,7 +12,7 @@ export default function Home() {
   const [imgError, setImgError] = useState(false);
   const [vehiclePrompt, setVehiclePrompt] = useState(false);
   const [missingFields, setMissingFields] = useState([]);
-  const { currentUser, userPhotoURL, logout } = useAuth();
+  const { currentUser, userPhotoURL, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
 
   const getInitials = (nameStr) => {
@@ -80,9 +80,13 @@ export default function Home() {
 
       {/* TOP NAVBAR */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', zIndex: 100, background: 'linear-gradient(to bottom, rgba(15,23,42,0.8), rgba(15,23,42,0))' }}>
-         <button onClick={() => setSidebarOpen(true)} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
-            <Menu size={28} />
-         </button>
+         <div style={{ width: 44 }}>
+            {isAdmin && (
+               <button onClick={() => setSidebarOpen(true)} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
+                  <Menu size={28} />
+               </button>
+            )}
+         </div>
          <button className="profile-btn" onClick={handleProfileClick} style={{ background: '#1e293b', border: 'none', borderRadius: '50%', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.3)', cursor: 'pointer', overflow: 'hidden', padding: 0 }}>
           {currentUser && (userPhotoURL || currentUser.photoURL) && !imgError ? (
             <img 

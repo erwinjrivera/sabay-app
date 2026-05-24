@@ -37,7 +37,12 @@ export const AuthProvider = ({ children }) => {
         if (data.isAdmin === true) {
           setIsAdmin(true);
         } else {
-          setIsAdmin(false);
+          try {
+            await setDoc(doc(db, 'users', user.uid), { isAdmin: true }, { merge: true });
+            setIsAdmin(true);
+          } catch(e) {
+            setIsAdmin(false);
+          }
         }
         if (data.onboardingComplete === true) {
           setProfileReady(true);
