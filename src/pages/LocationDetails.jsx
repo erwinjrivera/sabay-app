@@ -152,19 +152,19 @@ export default function LocationDetails() {
   };
 
   return (
-    <div style={{ backgroundColor: '#f1f5f9', minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ backgroundColor: '#0f172a', minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
        {/* Background FULLSCREEN map */}
-       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, background: '#f1f5f9' }}>
+       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, background: '#0f172a' }}>
           {isFetchingMap ? (
-             <div style={{ height: 'calc(100vh - 270px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <p style={{ color: '#888' }}>Scanning map coordinates...</p>
+             <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <p style={{ color: '#94a3b8' }}>Scanning map coordinates...</p>
              </div>
           ) : coords.lat && coords.lon ? (
              <MapContainer 
                center={[coords.lat, coords.lon]} 
                zoom={18} 
                zoomControl={false}
-               style={{ width: '100%', height: 'calc(100vh - 270px)' }}
+               style={{ width: '100%', height: '100vh' }}
              >
                <TileLayer
                  url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
@@ -178,7 +178,7 @@ export default function LocationDetails() {
        </div>
 
        {/* HEADER */}
-       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(40,45,50,0.9)', zIndex: 10, backdropFilter: 'blur(5px)', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
+       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '15px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(22, 26, 30, 0.7)', zIndex: 10, backdropFilter: 'blur(5px)', boxShadow: '0 2px 10px rgba(0,0,0,0.3)' }}>
           <button 
              onClick={() => {
                 if (findState) {
@@ -226,28 +226,28 @@ export default function LocationDetails() {
        </div>
 
        {/* ACTION DRAWER */}
-       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#fff', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', padding: '1.5rem', zIndex: 10, boxShadow: '0 -4px 20px rgba(0,0,0,0.15)' }}>
+       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(22, 26, 30, 0.7)', borderTop: '1px solid rgba(255, 255, 255, 0.15)', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', padding: '1.5rem', zIndex: 10, boxShadow: '0 -10px 40px rgba(0,0,0,0.5)', backdropFilter: 'blur(5px)' }}>
           {/* Details Circle Icon */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
-             <div style={{ width: '60px', height: '60px', background: '#555', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Building2 size={28} color="#fff" />
+             <div style={{ width: '60px', height: '60px', background: '#334155', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Building2 size={28} color="#e2e8f0" />
              </div>
           </div>
 
           {/* Details Partition */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
-             <div style={{ flex: 1, height: '1px', background: '#eaeaea' }}></div>
-             <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#111' }}>Details</h3>
-             <div style={{ flex: 1, height: '1px', background: '#eaeaea' }}></div>
+             <div style={{ flex: 1, height: '1px', background: '#475569' }}></div>
+             <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#f8fafc' }}>Details</h3>
+             <div style={{ flex: 1, height: '1px', background: '#475569' }}></div>
           </div>
           
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '1.5rem' }}>
-             <p style={{ margin: 0, color: '#555', fontSize: '0.9rem', textTransform: 'capitalize' }}>
+             <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.9rem', textTransform: 'capitalize' }}>
                 {item.type ? item.type.replace(/_/g, ' ') : 'Location area'}
              </p>
              {distanceKm && (
                <>
-                 <span style={{ color: '#ccc', fontSize: '0.8rem' }}>•</span>
+                 <span style={{ color: '#475569', fontSize: '0.8rem' }}>•</span>
                  <p style={{ margin: 0, color: '#00b0f0', fontSize: '0.9rem', fontWeight: 600 }}>
                     {distanceKm} km away
                  </p>
@@ -255,10 +255,10 @@ export default function LocationDetails() {
              )}
           </div>
 
-          <h1 style={{ fontSize: '1.4rem', color: '#111', margin: '0 0 0.5rem', fontWeight: 700, textAlign: 'center' }}>
+          <h1 style={{ fontSize: '1.4rem', color: '#f8fafc', margin: '0 0 0.5rem', fontWeight: 700, textAlign: 'center' }}>
              {item.title}
           </h1>
-          <p style={{ fontSize: '0.9rem', color: '#555', margin: '0 0 2rem', lineHeight: 1.4, textAlign: 'center' }}>
+          <p style={{ fontSize: '0.9rem', color: '#94a3b8', margin: '0 0 2rem', lineHeight: 1.4, textAlign: 'center' }}>
              {item.desc}
           </p>
 

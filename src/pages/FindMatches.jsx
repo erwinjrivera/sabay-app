@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2, Car } from 'lucide-react';
+import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2, Car, Calendar, Clock, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, getDoc, updateDoc, onSnapshot, increment, arrayUnion, arrayRemove, where } from 'firebase/firestore';
@@ -82,6 +82,34 @@ const getMeetDropSpotIcon = (type) => new L.DivIcon({
   iconAnchor: [11, 11]
 });
 
+const AvatarFallback = ({ src, name, size = 40 }) => {
+    const [imgError, setImgError] = useState(false);
+    const getInitials = (name) => {
+        if (!name) return '';
+        const parts = name.split(' ');
+        if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+        return name.substring(0, 2).toUpperCase();
+    };
+
+    if (src && !imgError) {
+        return <img src={src} alt={name || 'Avatar'} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} onError={() => setImgError(true)} />;
+    }
+
+    if (name) {
+        return (
+            <div style={{ width: size, height: size, borderRadius: '50%', backgroundColor: '#00b0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: size * 0.4, flexShrink: 0 }}>
+                {getInitials(name)}
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ width: size, height: size, borderRadius: '50%', backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <User size={size * 0.6} color="#555" />
+        </div>
+    );
+};
+
 // Map Focus Adjuster Component
 function MapAdjuster({ route1, route2 }) {
   const map = useMap();
@@ -119,6 +147,11 @@ export default function FindMatches() {
   const [capacityModalText, setCapacityModalText] = useState("");
   const [showCancelConfirmedModal, setShowCancelConfirmedModal] = useState(false);
   const [confirmedMatchToCancel, setConfirmedMatchToCancel] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Real-time bidirectional matching state sync natively updating passenger match views instantly if a driver reacts
+  const [volatilePassengerState, setVolatilePassengerState] = useState(ride);
 
   // Parse exact passenger coordinates bound intrinsically to real ride payloads
   const passengerFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
@@ -152,7 +185,7 @@ export default function FindMatches() {
   // Matching Engine: Fetch and filter drivers dynamically
   useEffect(() => {
     if (passengerRoute.length === 0) return;
-    if (volatilePassengerStateRef.current?.status === 'cancelled') {
+    if (['cancelled', 'expired'].includes(volatilePassengerStateRef.current?.status)) {
         setIsLoadingMatches(false);
         setMatches([]);
         return;
@@ -174,11 +207,15 @@ export default function FindMatches() {
            const dRide = dayjs(ride.date).format('YYYY-MM-DD');
            const dReq = dayjs(req.date).format('YYYY-MM-DD');
            if (dRide !== dReq) return null;
-           if (dRide < dayjs().format('YYYY-MM-DD')) return null;
+           const isLinkedMatch = volatilePassengerStateRef.current?.offeredByRideId === req.id || 
+                                 (req.requestedByPassengerIds || []).includes(ride?.id) || 
+                                 (req.offeredToPassengerIds || []).includes(ride?.id);
+           if (!isLinkedMatch && dRide < dayjs().subtract(1, 'day').format('YYYY-MM-DD')) return null;
            const mRide = dayjs(ride.time).hour() * 60 + dayjs(ride.time).minute();
            const mReq = dayjs(req.time).hour() * 60 + dayjs(req.time).minute();
-           if (Math.abs(mRide - mReq) > 90) return null;
-           if (req.status === 'completed' || req.status === 'cancelled') {
+           const timeDiff = mReq - mRide;
+           if (!isLinkedMatch && (timeDiff < -60 || timeDiff > 180)) return null;
+           if (req.status === 'completed' || req.status === 'cancelled' || req.status === 'in_progress') {
                if (volatilePassengerStateRef.current?.offeredByRideId !== req.id) {
                    if (geometryCache.current[req.id]) delete geometryCache.current[req.id];
                    return null;
@@ -186,14 +223,22 @@ export default function FindMatches() {
            }
 
            // CRITICAL FIX: Hide all other unrelated active open drivers entirely if this passenger request historically or actively bound itself to someone else natively!
-           if (volatilePassengerStateRef.current?.status !== 'open' && volatilePassengerStateRef.current?.offeredByRideId && volatilePassengerStateRef.current?.offeredByRideId !== req.id) {
+           if (['confirmed', 'in_progress', 'completed'].includes(volatilePassengerStateRef.current?.status) && volatilePassengerStateRef.current?.offeredByRideId && volatilePassengerStateRef.current?.offeredByRideId !== req.id) {
                return null;
            }
 
-           let typeStatus = (req.status === 'confirmed' && req.requestedByRideId === ride?.id) ? 'confirmed' : ((req.requestedByPassengerIds || []).includes(ride?.id)) ? 'request' : 'match';
-           if (volatilePassengerStateRef.current?.offeredByRideId === req.id) {
-               if (volatilePassengerStateRef.current?.status === 'completed') typeStatus = 'completed';
-               else if (volatilePassengerStateRef.current?.status === 'confirmed') typeStatus = 'confirmed';
+           let typeStatus = 'match';
+           const passengerIsConfirmedWithThisDriver = ['confirmed', 'completed', 'in_progress'].includes(volatilePassengerStateRef.current?.status) && volatilePassengerStateRef.current?.offeredByRideId === req.id;
+           const driverIsConfirmedWithThisPassenger = ['confirmed', 'completed', 'in_progress'].includes(req.status) && req.requestedByRideId === ride?.id;
+
+           if (passengerIsConfirmedWithThisDriver) {
+               typeStatus = volatilePassengerStateRef.current?.status;
+           } else if (driverIsConfirmedWithThisPassenger) {
+               typeStatus = req.status;
+           } else if ((req.requestedByPassengerIds || []).includes(ride?.id)) {
+               typeStatus = 'request';
+           } else if ((req.offeredToPassengerIds || []).includes(ride?.id)) {
+               typeStatus = 'offered';
            }
 
            const nameParams = req.userName || 'Erwin Rivera';
@@ -221,6 +266,7 @@ export default function FindMatches() {
                        if (userData.carModel) carModelParams = userData.carModel;
                        if (userData.carColor) carColorParams = userData.carColor;
                        if (userData.plateNumber) plateNumberParams = userData.plateNumber;
+                       if (userData.photoURL) req.userProfilePic = userData.photoURL;
                    }
                } catch (e) {
                    console.error("Error fetching user rating", e);
@@ -293,12 +339,16 @@ export default function FindMatches() {
               const bestPickup = await findBestNetworkNode(passengerFrom);
               const bestDropoff = await findBestNetworkNode(passengerTo);
 
-              if (!bestPickup || !bestDropoff || bestPickup.idx >= bestDropoff.idx) return null;
+              if (!isLinkedMatch && (!bestPickup || !bestDropoff || bestPickup.idx >= bestDropoff.idx)) return null;
 
-              let pickupIdx = bestPickup.idx;
-              let dropIdx = bestDropoff.idx;
-              let meetPickup = driverRoute[pickupIdx];
-              let meetDropoff = driverRoute[dropIdx];
+              let pickupIdx = bestPickup?.idx || 0;
+              let dropIdx = bestDropoff?.idx || (driverRoute.length - 1);
+              if (isLinkedMatch && pickupIdx >= dropIdx) {
+                  pickupIdx = 0;
+                  dropIdx = Math.max(0, driverRoute.length - 1);
+              }
+              let meetPickup = driverRoute[pickupIdx] || [passengerFrom.lat, passengerFrom.lon];
+              let meetDropoff = driverRoute[dropIdx] || [passengerTo.lat, passengerTo.lon];
               
               let interceptPaths = {
                  pickupPath: [[passengerFrom.lat, passengerFrom.lon], [meetPickup[0], meetPickup[1]]],
@@ -324,7 +374,7 @@ export default function FindMatches() {
               }
 
               // Final sequential sanity check
-              if (pickupIdx >= dropIdx) return null;
+              if (!isLinkedMatch && pickupIdx >= dropIdx) return null;
 
               const geometricPayload = {
                  id: req.id,
@@ -367,7 +417,35 @@ export default function FindMatches() {
         const results = await Promise.all(matchPromises);
         const validMatches = results.filter(m => m !== null);
         
-        setMatches(validMatches);
+        // Re-apply the absolute freshest volatilePassengerStateRef synchronously before commit to prevent async stale overwrites
+        let finalMatchesToProcess = validMatches;
+        if (['confirmed', 'in_progress', 'completed'].includes(volatilePassengerStateRef.current?.status) && volatilePassengerStateRef.current?.offeredByRideId) {
+            finalMatchesToProcess = finalMatchesToProcess.filter(m => m.id === volatilePassengerStateRef.current.offeredByRideId);
+        }
+
+        const fullyFreshMatches = finalMatchesToProcess.map(m => {
+            let finalType = m.type;
+            const req = m.rawRequest;
+            if (!req) return m;
+
+            const passengerIsConfirmedWithThisDriver = ['confirmed', 'completed', 'in_progress'].includes(volatilePassengerStateRef.current?.status) && volatilePassengerStateRef.current?.offeredByRideId === req.id;
+            const driverIsConfirmedWithThisPassenger = ['confirmed', 'completed', 'in_progress'].includes(req.status) && req.requestedByRideId === ride?.id;
+
+            if (passengerIsConfirmedWithThisDriver) {
+                finalType = volatilePassengerStateRef.current?.status;
+            } else if (driverIsConfirmedWithThisPassenger) {
+                finalType = req.status;
+            } else if ((req.requestedByPassengerIds || []).includes(ride?.id)) {
+                finalType = 'request';
+            } else if ((req.offeredToPassengerIds || []).includes(ride?.id)) {
+                finalType = 'offered';
+            } else {
+                finalType = 'match';
+            }
+            return { ...m, type: finalType };
+        });
+        
+        setMatches(fullyFreshMatches);
         setIsLoadingMatches(false);
         setActiveDriverId(currentId => {
            if (validMatches.length > 0 && !validMatches.find(m => m.id === currentId)) {
@@ -382,13 +460,15 @@ export default function FindMatches() {
     });
 
     return () => unsubscribe();
-  }, [passengerRoute, ride?.userId]);
-
-  // Real-time bidirectional matching state sync natively updating passenger match views instantly if a driver reacts
-  const [volatilePassengerState, setVolatilePassengerState] = useState(ride);
+  }, [passengerRoute, ride?.userId, refreshKey]);
 
   useEffect(() => {
     volatilePassengerStateRef.current = volatilePassengerState;
+    
+    // Failsafe UI cleanup: if passenger is locked into a ride natively, instantly hide all other drivers locally
+    if (['confirmed', 'in_progress', 'completed'].includes(volatilePassengerState?.status) && volatilePassengerState?.offeredByRideId) {
+        setMatches(prev => prev.filter(m => m.id === volatilePassengerState.offeredByRideId));
+    }
   }, [volatilePassengerState]);
 
   useEffect(() => {
@@ -414,59 +494,53 @@ export default function FindMatches() {
       }
   }, [volatilePassengerState, matches, navigate]);
 
+  // Synchronize matches when the passenger's own live database document updates
   useEffect(() => {
-     if (volatilePassengerState?.status === 'offered' && volatilePassengerState?.offeredByRideId) {
-         setMatches(prev => {
-             let changed = false;
-             const next = prev.map(m => {
-                 if (m.id === volatilePassengerState.offeredByRideId && m.type !== 'offered') {
-                     changed = true;
-                     return { ...m, type: 'offered' };
-                 }
-                 return m;
-             });
-             return changed ? next : prev;
-         });
-     } else if (volatilePassengerState?.status === 'completed' && volatilePassengerState?.offeredByRideId) {
-         setMatches(prev => {
-             let changed = false;
-             const next = prev.map(m => {
-                 if (m.id === volatilePassengerState.offeredByRideId && m.type !== 'completed') {
-                     changed = true;
-                     return { ...m, type: 'completed' };
-                 }
-                 return m;
-             });
-             return changed ? next : prev;
-         });
-     } else if (volatilePassengerState?.status === 'confirmed' && volatilePassengerState?.offeredByRideId) {
-         setMatches(prev => {
-             let changed = false;
-             const next = prev.map(m => {
-                 if (m.id === volatilePassengerState.offeredByRideId && m.type !== 'confirmed') {
-                     changed = true;
-                     return { ...m, type: 'confirmed' };
-                 }
-                 return m;
-             });
-             return changed ? next : prev;
-         });
-     } else if (volatilePassengerState?.status === 'open' || volatilePassengerState?.status === 'cancelled_by_passenger' || !volatilePassengerState) {
-         setMatches(prev => {
-             // Sweep out any uniquely purged rides locally that bypassed deletion due to parity locks
-             const filtered = prev.filter(m => m.rawRequest?.status !== 'cancelled' && m.rawRequest?.status !== 'completed');
-             let changed = filtered.length !== prev.length;
-             const next = filtered.map(m => {
-                 if (m.type === 'offered' || m.type === 'confirmed' || m.type === 'request') {
-                     changed = true;
-                     return { ...m, type: 'match' };
-                 }
-                 return m;
-             });
-             return changed ? next : prev;
-         });
-     }
-  }, [volatilePassengerState, matches]);
+    if (!volatilePassengerState) return;
+    setMatches(prev => {
+        const filtered = prev.filter(m => {
+            const req = m.rawRequest;
+            if (!req) return true;
+            if ((req.status === 'completed' || req.status === 'cancelled' || req.status === 'in_progress') && volatilePassengerState.offeredByRideId !== req.id) {
+                return false;
+            }
+            // CRITICAL FIX: Ensure competing race condition drivers are completely purged from the UI if the passenger natively confirms!
+            if (['confirmed', 'in_progress', 'completed'].includes(volatilePassengerState.status) && volatilePassengerState.offeredByRideId && volatilePassengerState.offeredByRideId !== req.id) {
+                return false;
+            }
+            return true;
+        });
+        
+        const mapped = filtered.map(m => {
+            let newType = m.type;
+            const req = m.rawRequest;
+            if (!req) return m;
+
+            const passengerIsConfirmedWithThisDriver = ['confirmed', 'completed', 'in_progress'].includes(volatilePassengerState.status) && volatilePassengerState.offeredByRideId === req.id;
+            const driverIsConfirmedWithThisPassenger = ['confirmed', 'completed', 'in_progress'].includes(req.status) && req.requestedByRideId === ride?.id;
+
+            if (passengerIsConfirmedWithThisDriver) {
+                newType = volatilePassengerState.status;
+            } else if (driverIsConfirmedWithThisPassenger) {
+                newType = req.status;
+            } else if ((req.requestedByPassengerIds || []).includes(ride?.id)) {
+                newType = 'request';
+            } else if ((req.offeredToPassengerIds || []).includes(ride?.id)) {
+                newType = 'offered';
+            } else {
+                newType = 'match';
+            }
+            
+            return m.type !== newType ? { ...m, type: newType } : m;
+        });
+        
+        // Simple deep equality check to prevent infinite re-renders or unnecessary state updates
+        if (prev.length === mapped.length && prev.every((m, i) => m.type === mapped[i].type && m.id === mapped[i].id)) {
+            return prev;
+        }
+        return mapped;
+    });
+  }, [volatilePassengerState, ride?.id]);
 
   // Carousel Scroll Intersection Logic detecting centered card
   const handleScroll = () => {
@@ -503,6 +577,12 @@ export default function FindMatches() {
     const match = matches.find(m => m.id === matchId);
     if (!match) return;
 
+    if (['confirmed', 'in_progress', 'completed'].includes(volatilePassengerState?.status)) {
+      setCapacityModalText("You already have a confirmed ride. Please cancel your confirmed ride before requesting to join another ride.");
+      setShowCapacityFullModal(true);
+      return;
+    }
+
     const passengerSeats = parseInt(ride?.seats) || 1;
     const driverMaxSeats = parseInt(match.seats) || 4;
     const driverConfirmedCount = parseInt(match.confirmedCount || match.seatsTaken) || 0;
@@ -535,6 +615,12 @@ export default function FindMatches() {
   };
 
   const handleAcceptOffer = async (matchId) => {
+    if (['confirmed', 'in_progress', 'completed'].includes(volatilePassengerState?.status)) {
+      setCapacityModalText("You already have a confirmed ride. Please cancel your existing confirmed ride before accepting another offer.");
+      setShowCapacityFullModal(true);
+      return;
+    }
+
     const match = matches.find(m => m.id === matchId);
     if ((match?.confirmedCount || match?.seatsTaken || 0) >= (match?.seats || 4)) {
       setCapacityModalText("You cannot accept this offer because the driver's vehicle has already reached maximum seating capacity.");
@@ -542,7 +628,7 @@ export default function FindMatches() {
       return;
     }
     setMatches((prev) => 
-      prev.map((m) => m.id === matchId ? { ...m, type: 'confirmed' } : m)
+      prev.filter(m => m.id === matchId).map((m) => m.id === matchId ? { ...m, type: 'confirmed' } : m)
     );
     try {
       const passengerDocRef = doc(db, 'rideRequests', ride.id);
@@ -562,6 +648,16 @@ export default function FindMatches() {
   };
 
   const confirmedDrivers = matches.filter(m => m.type === 'confirmed');
+
+  const handleManualRefresh = () => {
+    setIsRefreshing(true);
+    setRefreshKey(prev => prev + 1);
+    
+    // Auto-remove the spinning animation class after 1 second
+    setTimeout(() => {
+        setIsRefreshing(false);
+    }, 1000);
+  };
 
   return (
     <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
@@ -630,11 +726,7 @@ export default function FindMatches() {
                  >
                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                      <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                       {activeDriver.profilePic ? (
-                          <img src={activeDriver.profilePic} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                       ) : (
-                          <User size={14} color="#555" />
-                       )}
+                       <AvatarFallback src={activeDriver.profilePic} name={activeDriver.name} size={24} />
                      </div>
                      <span style={{ fontWeight: 600, color: '#333' }}>Meet around here</span>
                    </div>
@@ -694,7 +786,7 @@ export default function FindMatches() {
                    );
                 })}
               </div>
-              {volatilePassengerState?.status !== 'completed' && volatilePassengerState?.status !== 'cancelled' && (
+              {![ 'completed', 'cancelled', 'expired' ].includes(volatilePassengerState?.status || ride?.computedStatus) && (
                 <button disabled={isLoadingMatches} onClick={() => { setDrawerMode('request'); setIsBottomPanelExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: isLoadingMatches ? 'not-allowed' : 'pointer', marginLeft: 4, transition: 'background 0.3s, opacity 0.3s', opacity: isLoadingMatches ? 0.5 : 1 }}>
                   <MoreHorizontal size={16} color="#fff" />
                 </button>
@@ -744,8 +836,15 @@ export default function FindMatches() {
         
         {/* Floating Menu Button positioned OUTSIDE the grey background logically */}
         <div style={{ padding: '0 1rem 1rem', marginTop: '1rem', pointerEvents: 'none' }}>
-          <div style={{ background: '#fff', width: 40, height: 40, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', cursor: 'pointer', pointerEvents: 'auto' }}>
-            <List size={20} color="#555" />
+          <div 
+            onClick={handleManualRefresh}
+            style={{ background: '#fff', width: 40, height: 40, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', cursor: 'pointer', pointerEvents: 'auto' }}
+          >
+            <RefreshCw 
+              size={20} 
+              color="#555" 
+              style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }}
+            />
           </div>
         </div>
       </div>
@@ -787,9 +886,19 @@ export default function FindMatches() {
             </p>
           </div>
         ) : (
-          matches.map((match) => (
+          matches.map((match, index) => (
           <div 
             key={match.id}
+            onClick={() => {
+               if (activeDriverId !== match.id) {
+                  setActiveDriverId(match.id);
+                  if (carouselRef.current) {
+                      carouselRef.current.scrollTo({ left: index * (window.innerWidth * 0.85), behavior: 'smooth' });
+                  }
+               }
+               setDrawerMode('driver');
+               setIsBottomPanelExpanded(prev => activeDriverId === match.id ? !prev : true);
+            }}
             style={{ 
               minWidth: '85vw', 
               maxWidth: '85vw',
@@ -799,19 +908,15 @@ export default function FindMatches() {
               scrollSnapAlign: 'center',
               display: 'flex',
               flexDirection: 'column',
-              overflow: 'hidden'
+              overflow: 'hidden',
+              cursor: 'pointer'
             }}
           >
             {/* Top Info Row */}
             <div style={{ padding: '14px', display: 'flex', gap: '12px', alignItems: 'center', position: 'relative' }}>
                
                <div>
-                 <img 
-                   src={match.profilePic || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"} 
-                   alt="" 
-                   onError={(e) => { e.target.onerror = null; e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"; }}
-                   style={{ width: 45, height: 45, borderRadius: '50%', objectFit: 'cover' }} 
-                 />
+                 <AvatarFallback src={match.profilePic} name={match.name} size={45} />
                </div>
                
                <div style={{ flex: 1, minWidth: 0 }}>
@@ -858,7 +963,7 @@ export default function FindMatches() {
             </div>
 
             {/* Bottom Button Row */}
-            <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto' }}>
+            <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto' }} onClick={(e) => e.stopPropagation()}>
                
                {/* State 1: Confirmed or Completed Match */}
                {(match.type === 'confirmed' || match.type === 'completed') && (
@@ -871,8 +976,9 @@ export default function FindMatches() {
                    </button>
                    <button 
                      onClick={() => { if(match.type !== 'completed') { setConfirmedMatchToCancel(match.id); setShowCancelConfirmedModal(true); } }}
-                     style={{ flex: 1, padding: '16px', background: match.type === 'completed' ? '#9cc93a' : '#9cc93a', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: match.type === 'completed' ? 'default' : 'pointer' }}>
-                     {match.type === 'completed' ? 'Completed Ride' : 'Confirmed'}
+                     style={{ flex: 1, padding: '10px', background: match.type === 'completed' ? '#9cc93a' : '#9cc93a', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: match.type === 'completed' ? 'default' : 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                     <span>{match.type === 'completed' ? 'Completed Ride' : 'Confirmed'}</span>
+                     {match.type !== 'completed' && <span style={{ fontSize: '0.65rem', fontWeight: 500, opacity: 0.85, marginTop: '2px' }}>tap again to cancel</span>}
                    </button>
                  </>
                )}
@@ -903,9 +1009,10 @@ export default function FindMatches() {
                    </button>
                    <button 
                      onClick={() => { setMatchToRetract(match.id); setShowRetractRequestModal(true); }}
-                     style={{ flex: 1, padding: '16px', background: '#eab308', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+                     style={{ flex: 1, padding: '10px', background: '#eab308', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
                    >
-                     Sent Request
+                     <span>Sent Request</span>
+                     <span style={{ fontSize: '0.65rem', fontWeight: 500, opacity: 0.85, marginTop: '2px' }}>tap again to cancel</span>
                    </button>
                  </>
                )}
@@ -963,14 +1070,14 @@ export default function FindMatches() {
           bottom: 0,
           left: 0,
           width: '100%',
-          background: '#f2f4f7', 
+          background: isBottomPanelExpanded ? 'rgba(40,45,50,0.98)' : 'rgba(40,45,50,0.9)', 
           borderTopLeftRadius: '8px',
           borderTopRightRadius: '8px',
-          boxShadow: '0 -4px 15px rgba(0,0,0,0.1)',
-          padding: '16px 24px 32px 24px',
+          boxShadow: '0 -4px 15px rgba(0,0,0,0.5)',
+          padding: '16px 24px 16px 24px',
           zIndex: 2000,
-          transform: isBottomPanelExpanded ? 'translateY(0)' : (matches.length > 0 ? 'translateY(calc(100% - 40px))' : 'translateY(100%)'),
-          transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+          transform: isBottomPanelExpanded ? 'translateY(0)' : (matches.length > 0 ? 'translateY(calc(100% - 34px))' : 'translateY(100%)'),
+          transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.3s',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -983,114 +1090,150 @@ export default function FindMatches() {
           style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}
         >
            {/* Center Pill */}
-           <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s' }}></div>
+           <ChevronUp size={28} color="#888" style={{ position: 'absolute', top: '2px', left: '50%', transform: 'translateX(-50%)', opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s' }} />
            
            {/* Top Right Close Applet */}
            <div onClick={(e) => { e.stopPropagation(); setIsBottomPanelExpanded(false); }} style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', cursor: 'pointer' }}>
-             <X size={24} color="#bbb" strokeWidth={2} />
+             <X size={24} color="#888" strokeWidth={2} />
            </div>
         </div>
 
         {/* Content (only visible fully when expanded) */}
-        <div style={{ width: '100%', marginTop: '16px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
+        <div style={{ width: '100%', marginTop: '16px', display: 'flex', flexDirection: 'column', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
+           <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '8px' }}>
            {drawerMode === 'request' ? (
-             <div style={{ textAlign: 'center', width: '100%' }}>
-               <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
+             <div style={{ textAlign: 'center', width: '100%', padding: '24px 0' }}>
+               <h3 style={{ margin: '0 0 16px', fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>
                  {volatilePassengerState?.status === 'completed' ? 'This ride is completed.' : volatilePassengerState?.status === 'cancelled' ? 'This ride has been cancelled.' : 'Cancel your ride request?'}
                </h3>
-               <p style={{ margin: '0 0 24px', color: '#888', fontSize: '0.9rem' }}>
+               <p style={{ margin: '0 0 24px', color: '#ccc', fontSize: '0.9rem' }}>
                  {volatilePassengerState?.status === 'completed' ? 'Your historical records are safely stored.' : volatilePassengerState?.status === 'cancelled' ? 'This request is natively archived.' : 'You can retract your active request below.'}
                </p>
                
                {(volatilePassengerState?.status !== 'completed' && volatilePassengerState?.status !== 'cancelled') && (
                  <button 
                    onClick={() => setShowCancelModal(true)}
-                   style={{ width: '100%', padding: '16px', background: '#dbdbdb', border: 'none', borderRadius: '8px', color: '#555', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
+                   style={{ width: '100%', padding: '16px', background: '#333', border: 'none', borderRadius: '8px', color: '#ccc', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
                  >
                    Cancel Ride
                  </button>
                )}
              </div>
            ) : activeDriver ? (
-             <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
-                  <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    {activeDriver.profilePic ? (
-                       <img src={activeDriver.profilePic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="driver" />
-                    ) : (
-                       <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#888' }}>{activeDriver.name?.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase()}</span>
-                    )}
-                  </div>
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activeDriver.name}</h2>
+             <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'center', textAlign: 'center', paddingBottom: '0' }}>
+                 <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#333', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px', border: '3px solid #444', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+                     {activeDriver.profilePic ? (
+                        <img src={activeDriver.profilePic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="driver" />
+                     ) : (
+                        <span style={{ fontSize: '1.8rem', fontWeight: 800, color: '#ccc' }}>{getInitials(activeDriver.name, 'D')}</span>
+                     )}
+                 </div>
+                 <h2 style={{ margin: '0 0 4px', fontSize: '1.3rem', fontWeight: 600, color: '#fff' }}>{activeDriver.name}</h2>
+                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginBottom: '8px' }}>
+                   {[1, 2, 3, 4, 5].map(starNum => {
+                      const ratingVal = parseFloat(activeDriver.rating || '5.0') || 0;
+                      const isFilled = starNum <= Math.round(ratingVal);
+                      return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#444"} color={isFilled ? "#ffb800" : "#444"} />;
+                   })}
+                   <span style={{ fontSize: '0.9rem', color: '#eee', fontWeight: 600, marginLeft: '4px' }}>{activeDriver.rating || '5.0'} <span style={{ fontWeight: 400 }}>({activeDriver.reviews || '0'})</span></span>
+                 </div>
+                 
+                 {activeDriver.plateNumber && (
+                    <div style={{ marginBottom: '24px', fontSize: '0.9rem', color: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: 'rgba(255,255,255,0.05)', padding: '6px 12px', borderRadius: '16px' }}>
+                       <Car size={16} color="#bbb" />
+                       <span><span style={{ fontWeight: 700, color: '#fff' }}>{activeDriver.plateNumber}</span> • {activeDriver.carMake} {activeDriver.carModel} <span style={{ opacity: 0.8 }}>({activeDriver.carColor})</span></span>
                     </div>
+                 )}
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
-                      {[1, 2, 3, 4, 5].map(starNum => {
-                         const ratingVal = parseFloat(activeDriver.rating) || 0;
-                         const isFilled = starNum <= Math.round(ratingVal);
-                         return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#bbb"} color={isFilled ? "#ffb800" : "#bbb"} />;
-                      })}
-                      <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{activeDriver.rating} <span style={{ fontWeight: 500 }}>({activeDriver.reviews})</span></span>
-                    </div>
-                    {activeDriver.plateNumber && (
-                       <div style={{ marginTop: '2px', fontSize: '0.85rem', color: '#666', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Car size={14} color="#666" />
-                          <span><span style={{ fontWeight: 700 }}>{activeDriver.plateNumber}</span> • {activeDriver.carMake} {activeDriver.carModel} ({activeDriver.carColor})</span>
+                 {/* "Ride Details" divider */}
+                 <div style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '16px' }}>
+                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+                    <span style={{ padding: '0 16px', fontWeight: 700, fontSize: '1.1rem', color: '#f1f1f1' }}>Ride Details</span>
+                    <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+                 </div>
+
+                 {/* Date, Time, Seats */}
+                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#8da4bd' }}>
+                          <Calendar size={14} />
+                          <span style={{ fontSize: '0.9rem', fontWeight: 400 }}>
+                             {(activeDriver.rawRequest?.date || activeDriver.rawRequest?.time) ? dayjs(activeDriver.rawRequest?.date || activeDriver.rawRequest?.time).format('MMMM D, YYYY') : 'Unknown Date'}
+                          </span>
                        </div>
-                    )}
-                  </div>
-                </div>
-
-                {activeDriver.rawRequest?.note && activeDriver.rawRequest.note.trim() !== '' && (
-                  <p style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#444', fontStyle: 'italic', background: '#fff', padding: '12px', borderRadius: '8px', borderLeft: `4px solid ${activeDriver.type === 'completed' || activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888'}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                    "{activeDriver.rawRequest.note}"
-                  </p>
-                )}
-
-                <div style={{ width: '100%', height: '1px', background: '#e5e7eb', marginBottom: '16px' }}></div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.95rem', color: '#555' }}>
-                       <span style={{ fontWeight: 600 }}>{activeDriver.rawRequest?.date ? dayjs(activeDriver.rawRequest.date).format('MMM. D, h:mma') : activeDriver.time}</span>
-                       <span style={{ color: '#ccc' }}>•</span>
-                       <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                          {Array.from({ length: activeDriver.seats || 4 }).map((_, i) => (
-                             <User key={i} size={14} fill="#bbb" color="#bbb" />
-                          ))}
+                       <span style={{ color: '#444' }}>|</span>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#8da4bd' }}>
+                          <Clock size={14} />
+                          <span style={{ fontSize: '0.9rem', fontWeight: 400 }}>
+                             {activeDriver.rawRequest?.time ? dayjs(activeDriver.rawRequest.time).format('h:mm A') : activeDriver.time}
+                          </span>
                        </div>
                     </div>
-                  </div>
+                    <span style={{ fontSize: '1rem', fontWeight: 700, color: activeDriver.type === 'completed' || activeDriver.type === 'confirmed' ? '#9cc93a' : activeDriver.type === 'match' ? '#00b0f0' : activeDriver.type === 'offered' ? '#ff0043' : activeDriver.type === 'request' ? '#eab308' : '#888' }}>{activeDriver.seats} seat{activeDriver.seats > 1 ? 's' : ''} available</span>
+                 </div>
 
-                  <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
-                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '4px', paddingBottom: '4px' }}>
-                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
-                           <div style={{ width: 1, flex: 1, background: '#ccc', margin: '4px 0' }}></div>
-                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
-                         </div>
-                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
-                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
-                             {activeDriver.rawRequest?.from?.address || 'Unknown Pickup Address'}
-                           </div>
-                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
-                             {activeDriver.rawRequest?.to?.address || 'Unknown Dropoff Address'}
-                           </div>
-                         </div>
-                      </div>
-                </div>
+                 {/* Locations */}
+                 <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '20px', alignItems: 'center', marginBottom: '16px' }}>
+                    {/* Origin */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                       <span style={{ fontSize: '0.9rem', fontWeight: 500, color: '#aaa', marginBottom: '4px' }}>From:</span>
+                       {(() => {
+                          const addrStr = activeDriver.rawRequest?.from?.address || 'Unknown Pickup Address';
+                          const parts = addrStr.split(',');
+                          const mainAddr = parts[0] ? parts[0].trim() : addrStr;
+                          const subAddr = parts.length > 1 ? parts.slice(1).join(',').trim() : '';
+                          return (
+                             <>
+                                <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>{mainAddr}</span>
+                                {subAddr && <span style={{ fontSize: '0.9rem', color: '#bbb' }}>{subAddr}</span>}
+                             </>
+                          );
+                       })()}
+                    </div>
+
+                    {/* Destination */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                       <span style={{ fontSize: '0.9rem', fontWeight: 500, color: '#aaa', marginBottom: '4px' }}>To:</span>
+                       {(() => {
+                          const addrStr = activeDriver.rawRequest?.to?.address || 'Unknown Dropoff Address';
+                          const parts = addrStr.split(',');
+                          const mainAddr = parts[0] ? parts[0].trim() : addrStr;
+                          const subAddr = parts.length > 1 ? parts.slice(1).join(',').trim() : '';
+                          return (
+                             <>
+                                <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>{mainAddr}</span>
+                                {subAddr && <span style={{ fontSize: '0.9rem', color: '#bbb' }}>{subAddr}</span>}
+                             </>
+                          );
+                       })()}
+                    </div>
+                 </div>
+
+                 {activeDriver.rawRequest?.note && activeDriver.rawRequest.note.trim() !== '' && (
+                   <p style={{ margin: '0', fontSize: '0.95rem', color: '#ddd', fontStyle: 'italic', background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.2)', width: '100%', textAlign: 'left' }}>
+                     <strong style={{ fontStyle: 'normal', color: '#aaa', fontWeight: 600, marginRight: '4px' }}>Note:</strong>"{activeDriver.rawRequest.note}"
+                   </p>
+                 )}
              </div>
            ) : (
              <div style={{ textAlign: 'center', width: '100%', padding: '24px 0' }}>
-                <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
+                <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>
                   {volatilePassengerState?.status === 'cancelled' ? 'Ride Cancelled' : 'Driver Overlay'}
                 </h3>
-                <p style={{ margin: 0, color: '#888', fontSize: '0.9rem' }}>
+                <p style={{ margin: 0, color: '#ccc', fontSize: '0.9rem' }}>
                   {volatilePassengerState?.status === 'cancelled' ? 'This ride has been cancelled.' : 'No active driver overview.'}
                 </p>
              </div>
            )}
+           </div>
+
+           {/* Collapse Drawer Button */}
+           <div 
+              onClick={() => setIsBottomPanelExpanded(false)} 
+              style={{ display: 'flex', justifyContent: 'center', marginTop: '8px', cursor: 'pointer', marginBottom: '-8px' }}
+           >
+              <ChevronDown size={32} color="#888" style={{ opacity: 0.8 }} />
+           </div>
         </div>
       </div>
 
@@ -1222,7 +1365,7 @@ export default function FindMatches() {
                          
                          // Clear the passenger's direct link structurally
                          await updateDoc(doc(db, 'rideRequests', ride.id), { status: 'open', offeredByRideId: null });
-                         
+
                          // Extract the passenger natively AND restore driver capacity seamlessly resolving state
                          const passengerSeatCount = parseInt(ride?.seats) || 1;
                          await updateDoc(doc(db, 'rideOffers', confirmedMatchToCancel), { 

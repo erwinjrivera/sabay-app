@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, MapPin, Navigation, Crosshair, Map, Clock, Calendar, Search, X, MoreHorizontal, Heart, Users, Minus, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Navigation, Crosshair, Map, Clock, Calendar, Search, X, MoreHorizontal, Heart, Users, Minus, Plus, Trash2, ChevronUp } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 /* MUI IMPORTS */
@@ -14,9 +14,14 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const theme = createTheme({
   palette: {
+    mode: 'dark',
     primary: {
       main: '#00b0f0', // Sabay Blue overlay for the pickers!
     },
+    background: {
+      default: '#0f172a',
+      paper: '#1e293b'
+    }
   },
 });
 
@@ -31,7 +36,7 @@ export default function FindRide() {
   const [toLocation, setToLocation] = useState('');
   const [toCoords, setToCoords] = useState(null);
 
-  const { currentUser } = useAuth();
+  const { currentUser, userPhotoURL } = useAuth();
   
   const [activeTab, setActiveTab] = useState(location.state?.activeTab || 'recent'); // 'recent' or 'saved'
   const [recentPlaces, setRecentPlaces] = useState(() => {
@@ -341,7 +346,7 @@ export default function FindRide() {
       const payload = {
         userId: currentUser.uid,
         userName: currentUser.displayName || 'Passenger',
-        userProfilePic: currentUser.photoURL || '',
+        userProfilePic: userPhotoURL || currentUser.photoURL || '',
         status: 'open',
         type: 'passenger',
         from: {
@@ -382,10 +387,10 @@ export default function FindRide() {
     <ThemeProvider theme={theme}>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
 
-        <div className="find-ride-container" style={{ background: '#f8fafc', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="find-ride-container" style={{ background: '#0f172a', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
           
           {/* Dark Header Strip (Matches OfferMatches.jsx style exactly) */}
-          <div style={{ background: 'rgba(40,45,50,0.9)', zIndex: 10 }}>
+          <div style={{ background: '#161a1e', zIndex: 10 }}>
             {/* Top Bar Navigation */}
             <div style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '16px', color: '#fff' }}>
               <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
@@ -422,11 +427,11 @@ export default function FindRide() {
                              setActiveField('from');
                              setIsPanelOpen(false);
                           }}
-                          style={{ width: 'calc(100% - 8px)', background: activeField === 'from' ? '#64686a' : 'transparent', color: '#fff', border: '1px solid transparent', padding: '8px 36px 8px 14px', marginLeft: '-4px', borderRadius: '20px', fontSize: '0.9rem', lineHeight: '1.3', boxSizing: 'border-box', outline: 'none', transition: 'all 0.2s' }}
+                          style={{ width: 'calc(100% - 8px)', background: activeField === 'from' ? '#334155' : 'transparent', color: '#f8fafc', border: '1px solid transparent', padding: '8px 36px 8px 14px', marginLeft: '-4px', borderRadius: '20px', fontSize: '0.9rem', lineHeight: '1.3', boxSizing: 'border-box', outline: 'none', transition: 'all 0.2s' }}
                         />
                         {activeField === 'from' && fromLocation && (
-                          <button onClick={() => setFromLocation('')} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', cursor: 'pointer' }}>
-                            <X size={12} color="#555" strokeWidth={3} />
+                          <button onClick={() => setFromLocation('')} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: '#475569', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', cursor: 'pointer' }}>
+                            <X size={12} color="#94a3b8" strokeWidth={3} />
                           </button>
                         )}
                       </div>
@@ -445,11 +450,11 @@ export default function FindRide() {
                              setActiveField('to');
                              setIsPanelOpen(false);
                           }}
-                          style={{ width: 'calc(100% - 8px)', background: activeField === 'to' ? '#64686a' : 'transparent', color: activeField === 'to' || toLocation ? '#fff' : '#ccc', border: '1px solid transparent', padding: '8px 36px 8px 14px', marginLeft: '-4px', borderRadius: '20px', fontSize: '0.9rem', lineHeight: '1.3', boxSizing: 'border-box', outline: 'none', transition: 'all 0.2s' }}
+                          style={{ width: 'calc(100% - 8px)', background: activeField === 'to' ? '#334155' : 'transparent', color: activeField === 'to' || toLocation ? '#f8fafc' : '#94a3b8', border: '1px solid transparent', padding: '8px 36px 8px 14px', marginLeft: '-4px', borderRadius: '20px', fontSize: '0.9rem', lineHeight: '1.3', boxSizing: 'border-box', outline: 'none', transition: 'all 0.2s' }}
                         />
                         {activeField === 'to' && toLocation && (
-                          <button onClick={() => setToLocation('')} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: '#ccc', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', cursor: 'pointer' }}>
-                            <X size={12} color="#555" strokeWidth={3} />
+                          <button onClick={() => setToLocation('')} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: '#475569', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', cursor: 'pointer' }}>
+                            <X size={12} color="#94a3b8" strokeWidth={3} />
                           </button>
                         )}
                       </div>
@@ -460,21 +465,21 @@ export default function FindRide() {
 
             {/* Physical Folder Tabs seamlessly merged to the white box below */}
             {/* Physical Folder Tabs seamlessly merged to the white box below */}
-            <div style={{ display: 'flex', padding: '0', background: 'rgba(0,0,0,0.15)', paddingTop: '10px' }}>
+            <div style={{ display: 'flex', padding: '0', background: 'transparent', paddingTop: '10px' }}>
               <div 
                 onClick={() => setActiveTab('recent')}
                 style={{ 
                   position: 'relative',
                   zIndex: activeTab === 'recent' ? 10 : 1,
                   flex: 1, textAlign: 'center', padding: '14px 0', fontWeight: 600, fontSize: '0.95rem',
-                  color: activeTab === 'recent' ? '#333' : '#aaa',
-                  background: activeTab === 'recent' ? '#fff' : 'transparent',
+                  color: activeTab === 'recent' ? '#f8fafc' : '#94a3b8',
+                  background: activeTab === 'recent' ? '#1e293b' : 'transparent',
                   borderRadius: '12px 12px 0 0', cursor: 'pointer'
                 }}
               >
                 Recent
                 {activeTab === 'recent' && (
-                  <div style={{ position: 'absolute', bottom: 0, right: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top right, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
+                  <div style={{ position: 'absolute', bottom: 0, right: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top right, transparent 12px, #1e293b 12.5px)', pointerEvents: 'none' }}></div>
                 )}
               </div>
               <div 
@@ -483,21 +488,21 @@ export default function FindRide() {
                   position: 'relative',
                   zIndex: activeTab === 'saved' ? 10 : 1,
                   flex: 1, textAlign: 'center', padding: '14px 0', fontWeight: 600, fontSize: '0.95rem',
-                  color: activeTab === 'saved' ? '#333' : '#aaa',
-                  background: activeTab === 'saved' ? '#fff' : 'transparent',
+                  color: activeTab === 'saved' ? '#f8fafc' : '#94a3b8',
+                  background: activeTab === 'saved' ? '#1e293b' : 'transparent',
                   borderRadius: '12px 12px 0 0', cursor: 'pointer'
                 }}
               >
                 Saved
                 {activeTab === 'saved' && (
-                  <div style={{ position: 'absolute', bottom: 0, left: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top left, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
+                  <div style={{ position: 'absolute', bottom: 0, left: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top left, transparent 12px, #1e293b 12.5px)', pointerEvents: 'none' }}></div>
                 )}
               </div>
             </div>
           </div>
 
           {/* Default List Container */}
-          <div className="fr-list-container" style={{ background: '#fff', marginTop: '-1px', position: 'relative', zIndex: 20 }}>
+          <div className="fr-list-container" style={{ background: '#1e293b', marginTop: '-1px', position: 'relative', zIndex: 20 }}>
             {activeTab === 'recent' && (
               <div className="fr-list">
                 
@@ -629,11 +634,11 @@ export default function FindRide() {
               <div className="fr-list">
                 {savedPlaces.length === 0 ? (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 1rem', textAlign: 'center' }}>
-                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
+                    <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#334155', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem' }}>
                       <Heart size={32} color="#94a3b8" strokeWidth={1.5} />
                     </div>
-                    <h3 style={{ margin: '0 0 0.5rem', color: '#1e293b', fontSize: '1.2rem', fontWeight: 600 }}>No saved places</h3>
-                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>You don't have any saved places at the moment.</p>
+                    <h3 style={{ margin: '0 0 0.5rem', color: '#f8fafc', fontSize: '1.2rem', fontWeight: 600 }}>No saved places</h3>
+                    <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.95rem' }}>You don't have any saved places at the moment.</p>
                   </div>
                 ) : (
                   savedPlaces.map((item) => (
@@ -676,33 +681,43 @@ export default function FindRide() {
              
             {/* The clickable handle/dome */}
             <div className="fr-peek" onClick={() => setIsPanelOpen(!isPanelOpen)}>
-               <div className="fr-panel-handle" style={{ opacity: isPanelOpen ? 0 : 1, transition: 'opacity 0.2s', margin: 0 }}></div>
+               <div className="fr-chevron-grabber" style={{ opacity: isPanelOpen ? 0 : 1, transition: 'opacity 0.2s', margin: 0 }}>
+                  <ChevronUp size={28} />
+               </div>
                <div style={{ position: 'absolute', top: '10px', right: '16px', opacity: isPanelOpen ? 1 : 0, transition: 'opacity 0.2s' }}>
                   <X size={24} color="#555" strokeWidth={2.5} />
                </div>
             </div>
 
             <div className="fr-panel-content">
+              <style>{`
+                .fr-datetime-row .MuiInputBase-input { color: #f8fafc !important; -webkit-text-fill-color: #f8fafc !important; opacity: 1 !important; }
+                .fr-datetime-row .MuiSvgIcon-root { color: #94a3b8 !important; fill: #94a3b8 !important; }
+                .fr-datetime-row .MuiIconButton-root { color: #94a3b8 !important; }
+                input.fr-drawer-input::placeholder { color: #94a3b8 !important; opacity: 1 !important; }
+              `}</style>
               <h3 className="fr-panel-title">Choose date and time</h3>
               
               <div className="fr-datetime-row" style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
                  <div style={{ flex: 1 }}>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#64748b', marginBottom: '6px' }}>Date</label>
-                    <MobileDatePicker
+                     <MobileDatePicker
                       value={dateVal}
                       onChange={(newValue) => setDateVal(newValue)}
                       disablePast
                       slotProps={{
                          textField: {
                             sx: {
-                              width: '100%',background: '#fff',borderRadius: '10px',
+                              width: '100%',background: '#0f172a',borderRadius: '10px',
                               '& .MuiOutlinedInput-root': {
                                 borderRadius: '10px',
-                                '& fieldset': { borderColor: '#cbd5e1 !important', borderWidth: '1px !important', borderRadius: '10px !important' },
-                                '&:hover fieldset': { borderColor: '#cbd5e1 !important' },
+                                color: '#f8fafc',
+                                '& fieldset': { borderColor: '#334155 !important', borderWidth: '1px !important', borderRadius: '10px !important' },
+                                '&:hover fieldset': { borderColor: '#475569 !important' },
                                 '&.Mui-focused fieldset': { borderColor: '#00b0f0 !important', borderWidth: '1px !important' }
                               },
-                              '& .MuiInputBase-input': { padding: '14px', fontSize: '0.95rem', color: '#1e293b', boxSizing: 'border-box', height: 'auto' }
+                              '& .MuiInputBase-input': { padding: '14px', fontSize: '0.95rem', color: '#f8fafc !important', boxSizing: 'border-box', height: 'auto', WebkitTextFillColor: '#f8fafc !important' },
+                              '& .MuiSvgIcon-root': { color: '#94a3b8 !important' }
                             }
                          }
                       }}
@@ -717,14 +732,16 @@ export default function FindRide() {
                       slotProps={{
                          textField: {
                             sx: {
-                              width: '100%',background: '#fff',borderRadius: '10px',
+                              width: '100%',background: '#0f172a',borderRadius: '10px',
                               '& .MuiOutlinedInput-root': {
                                 borderRadius: '10px',
-                                '& fieldset': { borderColor: '#cbd5e1 !important', borderWidth: '1px !important', borderRadius: '10px !important' },
-                                '&:hover fieldset': { borderColor: '#cbd5e1 !important' },
+                                color: '#f8fafc',
+                                '& fieldset': { borderColor: '#334155 !important', borderWidth: '1px !important', borderRadius: '10px !important' },
+                                '&:hover fieldset': { borderColor: '#475569 !important' },
                                 '&.Mui-focused fieldset': { borderColor: '#00b0f0 !important', borderWidth: '1px !important' }
                               },
-                              '& .MuiInputBase-input': { padding: '14px', fontSize: '0.95rem', color: '#1e293b', boxSizing: 'border-box', height: 'auto' }
+                              '& .MuiInputBase-input': { padding: '14px', fontSize: '0.95rem', color: '#f8fafc !important', boxSizing: 'border-box', height: 'auto', WebkitTextFillColor: '#f8fafc !important' },
+                              '& .MuiSvgIcon-root': { color: '#94a3b8 !important' }
                             }
                          }
                       }}
@@ -742,19 +759,20 @@ export default function FindRide() {
                      <input 
                         type="text" 
                         maxLength={100}
+                        className="fr-drawer-input"
                         placeholder="e.g. Meet me at the lobby"
                         value={noteToDriver}
                         onChange={e => setNoteToDriver(e.target.value)}
                         style={{
                            width: '100%', padding: '14px', borderRadius: '10px',
-                           border: '1px solid #cbd5e1', fontSize: '0.95rem', color: '#1e293b',
-                           outline: 'none', background: '#fff', boxSizing: 'border-box'
+                           border: '1px solid #334155', fontSize: '0.95rem', color: '#f8fafc',
+                           outline: 'none', background: '#0f172a', boxSizing: 'border-box'
                         }}
                      />
                  </div>
 
                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', borderRadius: '10px', border: '1px solid #cbd5e1', background: '#fff' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px', borderRadius: '10px', border: '1px solid #334155', background: '#0f172a' }}>
                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <Users size={18} color="#94a3b8" />
                           <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>Passengers</span>
@@ -766,15 +784,15 @@ export default function FindRide() {
                              disabled={(parseInt(seats) || 3) <= 1}
                              style={{ 
                                 width: 32, height: 32, borderRadius: '6px', 
-                                background: (parseInt(seats) || 3) <= 1 ? '#e2e8f0' : '#cbd5e1', 
+                                background: (parseInt(seats) || 3) <= 1 ? '#334155' : '#475569', 
                                 border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', 
                                 cursor: (parseInt(seats) || 3) <= 1 ? 'not-allowed' : 'pointer',
                                 transition: 'background 0.2s'
                              }}>
-                             <Minus size={16} color={(parseInt(seats) || 3) <= 1 ? '#fff' : '#475569'} />
+                             <Minus size={16} color={(parseInt(seats) || 3) <= 1 ? '#64748b' : '#f8fafc'} />
                           </button>
                           
-                          <span style={{ fontSize: '1.05rem', fontWeight: 500, color: '#1e293b', width: '20px', textAlign: 'center' }}>
+                          <span style={{ fontSize: '1.05rem', fontWeight: 500, color: '#f8fafc', width: '20px', textAlign: 'center' }}>
                              {parseInt(seats) || 3}
                           </span>
                           
@@ -810,17 +828,17 @@ export default function FindRide() {
 
           {/* CUSTOM ERROR PROMPT MODAL */}
           {errorMsg && (
-            <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
-              <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', background: 'rgba(0,0,0,0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+              <div style={{ background: '#1e293b', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.5)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
                 <style>{`@keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }`}</style>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fee2e2', color: '#ff2744', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                   <X size={24} strokeWidth={3} />
                 </div>
-                <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>Missing Information</h3>
-                <p style={{ margin: '0 0 24px', color: '#555', fontSize: '0.95rem', lineHeight: 1.4 }}>{errorMsg}</p>
+                <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>Missing Information</h3>
+                <p style={{ margin: '0 0 24px', color: '#94a3b8', fontSize: '0.95rem', lineHeight: 1.4 }}>{errorMsg}</p>
                 <button 
                   onClick={() => setErrorMsg('')}
-                  style={{ width: '100%', padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#111', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
+                  style={{ width: '100%', padding: '14px', background: '#334155', border: 'none', borderRadius: '8px', color: '#f8fafc', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
                 >
                   Okay
                 </button>

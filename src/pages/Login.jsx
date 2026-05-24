@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import MapBackground from '../components/MapBackground';
 
 export default function Login() {
@@ -11,7 +13,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [isResetMode, setIsResetMode] = useState(false);
   
-  const { currentUser, loginGoogle, loginEmail, signupEmail, resetPassword } = useAuth();
+  const { currentUser, profileReady, loginGoogle, loginEmail, signupEmail, resetPassword } = useAuth();
   const navigate = useNavigate();
 
   const getFriendlyErrorMessage = (errMsg) => {
@@ -24,12 +26,32 @@ export default function Login() {
     return 'An error occurred. Please try again.';
   };
 
+  // Helper: check if user has completed onboarding
+  const checkAndRedirect = async (user) => {
+    if (!user) return;
+    try {
+      const docSnap = await getDoc(doc(db, 'users', user.uid));
+      if (docSnap.exists() && docSnap.data().onboardingComplete === true) {
+        navigate('/');
+      } else {
+        navigate('/onboarding');
+      }
+    } catch (err) {
+      // Fallback: let AuthContext handle it
+      navigate('/');
+    }
+  };
+
   useEffect(() => {
     // If user is already logged in (Google auto-verify, or email was verified)
     if (currentUser && currentUser.emailVerified !== false) {
-      navigate('/');
+      if (profileReady) {
+        navigate('/');
+      } else {
+        navigate('/onboarding');
+      }
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, profileReady, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -37,8 +59,8 @@ export default function Login() {
     setMessage('');
     try {
       if (isLogin) {
-        await loginEmail(email, password);
-        navigate('/');
+        const result = await loginEmail(email, password);
+        await checkAndRedirect(result.user);
       } else {
         await signupEmail(email, password);
         setMessage('Registration successful! Please check your email inbox to verify your account.');
@@ -64,8 +86,8 @@ export default function Login() {
 
   const handleGoogle = async () => {
     try {
-      await loginGoogle();
-      navigate('/');
+      const result = await loginGoogle();
+      await checkAndRedirect(result.user);
     } catch (err) {
       setError(getFriendlyErrorMessage(err.message));
     }
@@ -77,7 +99,7 @@ export default function Login() {
       <div className="auth-overlay" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }}>
         <div className="auth-box" style={{ background: 'transparent', boxShadow: 'none', padding: 0, width: '90%', maxWidth: '350px' }}>
           <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-            <h1 style={{ color: '#00b0f0', fontWeight: 800, fontSize: '2.5rem', marginBottom: '0.2rem' }}>Karsabay</h1>
+            <h1 style={{ color: '#00b0f0', fontWeight: 800, fontSize: '2.5rem', marginBottom: '0.2rem' }}>Sabay</h1>
             <h2 style={{ color: '#555', fontSize: '1rem', fontWeight: 500 }}>{isLogin ? 'a free carpool sharing for every Juan' : 'Create an Account'}</h2>
           </div>
           

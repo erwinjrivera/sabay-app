@@ -25,7 +25,7 @@ const customIcon = L.divIcon({
   iconSize: [0, 0]
 });
 
-export default function MapBackground() {
+export default function MapBackground({ theme = 'light' }) {
   const [position, setPosition] = useState(null);
 
   useEffect(() => {
@@ -49,7 +49,9 @@ export default function MapBackground() {
         attributionControl={false}
       >
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          url={theme === 'dark' 
+            ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"}
           attribution='&copy; <a href="https://carto.com/">CartoDB</a>'
         />
         <LocationMarker position={position} />

@@ -557,12 +557,14 @@ export default function PassengerTracking() {
 
       {/* BOTTOM CARD HUD */}
       <div style={{ 
-          position: 'absolute', bottom: '48px', left: 0, width: '100%', 
+          position: 'absolute', bottom: '68px', left: 0, width: '100%', 
           display: 'flex', justifyContent: 'center', zIndex: 1000,
           opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s',
           pointerEvents: isBottomPanelExpanded ? 'none' : 'auto'
       }}>
-          <div style={{ 
+          <div 
+              onClick={() => setIsBottomPanelExpanded(true)}
+              style={{ 
               width: '90vw', maxWidth: '400px',
               background: '#fff', 
               borderRadius: '8px', 
@@ -570,7 +572,8 @@ export default function PassengerTracking() {
               display: 'flex',
               flexDirection: 'column',
               overflow: 'hidden',
-              animation: justRated ? 'pulseGlow 1.2s ease-in-out 1' : 'none'
+              animation: justRated ? 'pulseGlow 1.2s ease-in-out 1' : 'none',
+              cursor: 'pointer'
           }}>
             {/* Top Detail Row - aligned with FindMatches card layout */}
             <div style={{ padding: '14px', display: 'flex', gap: '12px', alignItems: 'center', position: 'relative' }}>
@@ -621,7 +624,7 @@ export default function PassengerTracking() {
             </div>
 
             {/* Bottom Interactivity Row */}
-            <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto' }}>
+            <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto' }} onClick={(e) => e.stopPropagation()}>
                <button 
                  onClick={() => handleMessageContact(driverRide?.userId)}
                  style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
@@ -812,19 +815,22 @@ export default function PassengerTracking() {
       <div 
         onClick={() => {
            setShowRatingModal(false);
+           navigate('/my-rides', { state: { initialTab: 'History' } });
         }}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', zIndex: 10000, opacity: showRatingModal ? 1 : 0, transition: 'opacity 0.3s', pointerEvents: showRatingModal ? 'auto' : 'none' }}
       ></div>
       
       <div 
-        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#fff', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', boxShadow: showRatingModal ? '0 -4px 20px rgba(0,0,0,0.15)' : 'none', padding: '16px 24px 32px 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
+        onClick={(e) => e.stopPropagation()}
+        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#282d32', borderTopLeftRadius: '16px', borderTopRightRadius: '16px', boxShadow: showRatingModal ? '0 -4px 20px rgba(0,0,0,0.5)' : 'none', padding: '16px 24px 32px 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
       >
         <div onClick={() => {
            setShowRatingModal(false);
+           navigate('/my-rides', { state: { initialTab: 'History' } });
         }} style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
-           <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: showRatingModal ? 0 : 1, transition: 'opacity 0.2s' }}></div>
+           <div style={{ width: '48px', height: '6px', background: '#555', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: showRatingModal ? 0 : 1, transition: 'opacity 0.2s' }}></div>
            <div style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center' }}>
-             <X size={24} color="#555" strokeWidth={2.5} />
+             <X size={24} color="#ccc" strokeWidth={2.5} />
            </div>
         </div>
 
@@ -834,8 +840,8 @@ export default function PassengerTracking() {
              alt="" 
              style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', marginBottom: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} 
            />
-           <p style={{ margin: '0 0 8px', color: '#111', fontSize: '0.95rem', fontWeight: 800 }}>Ride Completed</p>
-           <h3 style={{ margin: '0 0 24px', fontSize: '1.4rem', fontWeight: 800, color: '#111', textAlign: 'center', lineHeight: '1.3' }}>
+           <p style={{ margin: '0 0 8px', color: '#aaa', fontSize: '0.95rem', fontWeight: 800 }}>Ride Completed</p>
+           <h3 style={{ margin: '0 0 24px', fontSize: '1.4rem', fontWeight: 800, color: '#fff', textAlign: 'center', lineHeight: '1.3' }}>
              How was your carpool with {targetName.split(' ')[0]}?
            </h3>
            
@@ -844,8 +850,8 @@ export default function PassengerTracking() {
                 <Star 
                   key={star} 
                   size={40} 
-                  fill={star <= tempRating ? "#ffb800" : "#eaeaea"} 
-                  color={star <= tempRating ? "#ffb800" : "#eaeaea"} 
+                  fill={star <= tempRating ? "#ffb800" : "#444"} 
+                  color={star <= tempRating ? "#ffb800" : "#444"} 
                   style={{ cursor: 'pointer', transition: 'all 0.2s' }}
                   onClick={() => setTempRating(star)}
                 />
@@ -901,7 +907,10 @@ export default function PassengerTracking() {
                  setHasRated(true);
                  setShowRatingModal(false);
                  setJustRated(true);
-                 setTimeout(() => setJustRated(false), 1200);
+                 setTimeout(() => {
+                     setJustRated(false);
+                     navigate('/my-rides', { state: { initialTab: 'History' } });
+                 }, 1200);
               }}
               style={{ width: '100%', padding: '16px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}
            >

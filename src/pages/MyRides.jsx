@@ -1,18 +1,54 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, MapPin, Clock, User, Car, Search, MoreHorizontal, Check, Edit, Loader2, X } from 'lucide-react';
+import { ArrowLeft, MapPin, Clock, User, Car, Search, MoreHorizontal, Check, Edit, Loader2, X, Calendar, ChevronRight, Users, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, getDocs, orderBy, getDoc, doc, onSnapshot } from 'firebase/firestore';
 import dayjs from 'dayjs';
 
+const AvatarFallback = ({ src, name }) => {
+  const [error, setError] = useState(false);
+  
+  const getInitials = (n) => {
+    if (!n) return '';
+    const parts = n.trim().split(' ').filter(Boolean);
+    if (parts.length === 0) return '';
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  if (!src || error) {
+    const initials = getInitials(name);
+    return initials ? (
+      <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.5px' }}>{initials}</span>
+    ) : (
+      <User size={20} color="#64748b" />
+    );
+  }
+
+  return (
+    <img 
+      src={src} 
+      alt="Profile" 
+      onError={() => setError(true)} 
+      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+    />
+  );
+};
+
 export default function MyRides() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser } = useAuth();
+  const { currentUser, cleanupStaleRides } = useAuth();
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(location.state?.initialTab || 'Pending');
+
+  useEffect(() => {
+    if (location.state?.initialTab) {
+      setActiveTab(location.state.initialTab);
+    }
+  }, [location.state?.initialTab]);
 
   // Geospatial Euclidean Filter mirroring OfferMatches constraints securely
   const getDistanceKM = (lat1, lon1, lat2, lon2) => {
@@ -29,6 +65,11 @@ export default function MyRides() {
     if (!currentUser) {
       navigate('/login');
       return;
+    }
+    
+    // Explicitly run cleanup on MyRides mount so the database syncs quickly
+    if (cleanupStaleRides) {
+        cleanupStaleRides(currentUser);
     }
 
     // High-performance mathematical map proxy mapping vector dot-products securely detecting inverted trips without OSRM intensity!
@@ -59,7 +100,7 @@ export default function MyRides() {
         return (r1MaxLat > r2MinLat && r1MinLat < r2MaxLat) && (r1MaxLon > r2MinLon && r1MinLon < r2MaxLon);
     };
 
-    const isValidTemporalProxy = (ride1, ride2) => {
+    const isValidTemporalProxy = (ride1, ride2, isRide1Driver) => {
         if (!ride1.date || !ride2.date || !ride1.time || !ride2.time) return false;
         const d1 = dayjs(ride1.date).format('YYYY-MM-DD');
         const d2 = dayjs(ride2.date).format('YYYY-MM-DD');
@@ -72,7 +113,12 @@ export default function MyRides() {
         const time2 = dayjs(ride2.time);
         const m1 = time1.hour() * 60 + time1.minute();
         const m2 = time2.hour() * 60 + time2.minute();
-        if (Math.abs(m1 - m2) > 90) return false;
+        
+        const mDriver = isRide1Driver ? m1 : m2;
+        const mPassenger = isRide1Driver ? m2 : m1;
+        
+        const timeDiff = mDriver - mPassenger;
+        if (timeDiff < -5 || timeDiff > 180) return false;
 
         return true;
     };
@@ -129,7 +175,7 @@ export default function MyRides() {
                  r.from?.lat && r.to?.lat && 
                  (r.status === 'open' || r.offeredByRideId === data.id || (data.requestedByPassengerIds || []).includes(r.id)) &&
                  isValidGeographicProxy(data, r) &&
-                 isValidTemporalProxy(data, r)
+                 isValidTemporalProxy(data, r, true)
              );
              
              let matchesFound = 0;
@@ -160,7 +206,7 @@ export default function MyRides() {
                  r.from?.lat && r.to?.lat && 
                  (!r.status || r.status !== 'completed' || data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(data.id)) &&
                  isValidGeographicProxy(data, r) &&
-                 isValidTemporalProxy(data, r)
+                 isValidTemporalProxy(data, r, false)
              );
              
              let matchesFound = 0;
@@ -188,6 +234,54 @@ export default function MyRides() {
 
         setRides(mergedRides);
         setLoading(false);
+
+        // Enrich passengers with Firestore photos where userProfilePic is missing
+        // Enrich passengers with latest Firestore profile data (photo + name)
+        const enrichProfiles = async () => {
+            const profileCache = {};
+            let updated = false;
+            const enriched = await Promise.all(mergedRides.map(async (ride) => {
+                if (!ride.passengers || ride.passengers.length === 0) return ride;
+                const enrichedPassengers = await Promise.all(ride.passengers.map(async (p) => {
+                    if (!p.userId) return p;
+                    if (profileCache[p.userId] !== undefined) {
+                        const cached = profileCache[p.userId];
+                        const patches = {};
+                        if (cached.photo) patches.userProfilePic = cached.photo;
+                        if (cached.name) patches.userName = cached.name;
+                         if (cached.rating) patches.userRating = parseFloat(cached.rating).toFixed(1);
+                         patches.userReviews = cached.reviews || 0;
+                         if (cached.plateNumber) patches.userPlateNumber = cached.plateNumber;
+                         if (cached.carMake) patches.userCarMake = cached.carMake;
+                         if (cached.carModel) patches.userCarModel = cached.carModel;
+                         if (cached.carColor) patches.userCarColor = cached.carColor;
+                        if (Object.keys(patches).length > 0) { updated = true; return { ...p, ...patches }; }
+                        return p;
+                    }
+                    try {
+                        const uSnap = await getDoc(doc(db, 'users', p.userId));
+                        if (uSnap.exists()) {
+                            const uData = uSnap.data();
+                            profileCache[p.userId] = { photo: uData.photoURL || '', name: uData.fullName || '', rating: uData.rating || '0.0', reviews: uData.reviewsCount !== undefined ? uData.reviewsCount : (uData.reviews || 0), plateNumber: uData.plateNumber || '', carMake: uData.carMake || '', carModel: uData.carModel || '', carColor: uData.carColor || '' };
+                            const patches = {};
+                            if (uData.photoURL) patches.userProfilePic = uData.photoURL;
+                            if (uData.fullName) patches.userName = uData.fullName;
+                            if (uData.rating) patches.userRating = parseFloat(uData.rating).toFixed(1);
+                            patches.userReviews = uData.reviewsCount !== undefined ? uData.reviewsCount : (uData.reviews || 0);
+                            if (uData.plateNumber) patches.userPlateNumber = uData.plateNumber;
+                            if (uData.carMake) patches.userCarMake = uData.carMake;
+                            if (uData.carModel) patches.userCarModel = uData.carModel;
+                            if (uData.carColor) patches.userCarColor = uData.carColor;
+                            if (Object.keys(patches).length > 0) { updated = true; return { ...p, ...patches }; }
+                        } else { profileCache[p.userId] = { photo: '', name: '' }; }
+                    } catch (e) { profileCache[p.userId] = { photo: '', name: '' }; }
+                    return p;
+                }));
+                return { ...ride, passengers: enrichedPassengers };
+            }));
+            if (updated) setRides(enriched);
+        };
+        enrichProfiles();
     };
 
     setLoading(true);
@@ -222,11 +316,49 @@ export default function MyRides() {
     return '';
   };
 
+  const getRideDateStr = (ride) => {
+    if (ride.date) {
+       return dayjs(ride.date).format('MMM D, YYYY');
+    }
+    return '';
+  };
+
+  const getRideDateParts = (ride) => {
+    if (ride.date) {
+      const d = dayjs(ride.date);
+      return { month: d.format('MMM').toUpperCase(), day: d.format('DD'), year: d.format('YYYY') };
+    }
+    return { month: '', day: '--', year: '' };
+  };
+
+  const isExpiredLocally = (ride) => {
+    if (['in_progress', 'completed', 'cancelled', 'expired'].includes(ride.status)) return false;
+    
+    let scheduledTime;
+    if (ride.date && ride.time) {
+         const datePart = dayjs(ride.date).format('YYYY-MM-DD');
+         const timePart = dayjs(ride.time).format('HH:mm:ss');
+         scheduledTime = dayjs(`${datePart}T${timePart}`);
+    } else if (ride.time || ride.date) {
+         scheduledTime = dayjs(ride.time || ride.date);
+    } else {
+         return false;
+    }
+    
+    if (!scheduledTime.isValid()) return false;
+    return dayjs().diff(scheduledTime, 'hour') >= 8;
+  };
+
   const filteredRides = rides.filter(ride => {
-     const status = ride.computedStatus || ride.status || 'open';
-     if (activeTab === 'Pending') return !['in_progress', 'completed', 'cancelled'].includes(status);
+     let status = ride.computedStatus || ride.status || 'open';
+     if (!['in_progress', 'completed', 'cancelled', 'expired'].includes(status) && isExpiredLocally(ride)) {
+         status = 'expired';
+         ride.computedStatus = 'expired'; // Inject locally so other renders treat it as expired
+     }
+     
+     if (activeTab === 'Pending') return !['in_progress', 'completed', 'cancelled', 'expired'].includes(status);
      if (activeTab === 'Active') return status === 'in_progress';
-     if (activeTab === 'History') return ['completed', 'cancelled'].includes(status);
+     if (activeTab === 'History') return ['completed', 'cancelled', 'expired'].includes(status);
      return false;
   });
 
@@ -245,118 +377,122 @@ export default function MyRides() {
       });
   }
 
-  const groupedRides = [];
-  filteredRides.forEach(ride => {
-     const dateStr = ride.date ? dayjs(ride.date).format('ddd, MMM D, YYYY') : 'Unknown Date';
-     let group = groupedRides.find(g => g.dateStr === dateStr);
-     if (!group) {
-        group = { dateStr, items: [] };
-        groupedRides.push(group);
-     }
-     group.items.push(ride);
-  });
-
   const hasActiveRide = rides.some(ride => {
       const status = ride.computedStatus || ride.status || 'open';
       return status === 'in_progress';
   });
 
   return (
-    <div className="home-container" style={{ display: 'flex', flexDirection: 'column', background: 'rgba(40,45,50,0.9)', height: '100vh', overflow: 'hidden' }}>
+    <div className="home-container" style={{ display: 'flex', flexDirection: 'column', background: '#0f172a', height: '100vh', overflow: 'hidden' }}>
       
-      {/* Dark Header Strip (Matching FindRide page) */}
-      <div style={{ background: 'rgba(40,45,50,0.9)', zIndex: 10 }}>
+      {/* Dark Header Strip */}
+      <div style={{ background: '#1e293b', zIndex: 10 }}>
         {/* Top Bar Navigation */}
-        <div style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '16px', color: '#fff' }}>
-          <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
+        <div style={{ padding: '1.5rem 1rem 1rem', display: 'flex', alignItems: 'center', gap: '16px', color: '#f8fafc' }}>
+          <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', color: '#f8fafc', cursor: 'pointer', padding: 0 }}>
             <ArrowLeft size={24} />
           </button>
           <div>
-            <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: '#fff' }}>Activity Log</h1>
-            <p style={{ margin: 0, fontSize: '0.85rem', color: '#bbb' }}>Track your rides and matches</p>
+            <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: '#f8fafc' }}>My Rides</h1>
           </div>
         </div>
 
-        {/* Physical Folder Tabs seamlessly merged to the white content below */}
-        <div style={{ display: 'flex', padding: '0', background: 'rgba(0,0,0,0.15)', paddingTop: '10px' }}>
-          {['Pending', 'Active', 'History'].map((tab, tabIndex) => (
-            <div
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                position: 'relative',
-                zIndex: activeTab === tab ? 10 : 1,
-                flex: 1, textAlign: 'center', padding: '14px 0', fontWeight: 600, fontSize: '0.95rem',
-                color: activeTab === tab ? '#333' : '#aaa',
-                background: activeTab === tab ? '#fff' : 'transparent',
-                borderRadius: '12px 12px 0 0', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
-              }}
-            >
-              {tab}
-              {tab === 'Active' && hasActiveRide && (
-                <span style={{ width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%' }}></span>
-              )}
-              {/* Seamless corner merge effects */}
-              {activeTab === tab && tabIndex === 0 && (
-                <div style={{ position: 'absolute', bottom: 0, right: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top right, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
-              )}
-              {activeTab === tab && tabIndex === 1 && (
-                <>
-                  <div style={{ position: 'absolute', bottom: 0, left: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top left, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
-                  <div style={{ position: 'absolute', bottom: 0, right: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top right, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
-                </>
-              )}
-              {activeTab === tab && tabIndex === 2 && (
-                <div style={{ position: 'absolute', bottom: 0, left: '-12px', width: '12px', height: '12px', background: 'radial-gradient(circle at top left, transparent 12px, #fff 12.5px)', pointerEvents: 'none' }}></div>
-              )}
-            </div>
-          ))}
+        {/* Text Tabs */}
+        <div style={{ padding: '0 1rem', display: 'flex', borderBottom: '1px solid #334155' }}>
+          {['Pending', 'Active', 'History'].map((tab) => {
+            const isActive = activeTab === tab;
+            return (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  flex: 1,
+                  padding: '12px 0 16px 0',
+                  border: 'none',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  background: 'transparent',
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  WebkitTapHighlightColor: 'transparent'
+                }}
+              >
+                <div style={{ 
+                  fontSize: '0.95rem', 
+                  fontWeight: isActive ? 600 : 500, 
+                  color: isActive ? '#f8fafc' : '#94a3b8', 
+                  transition: 'color 0.2s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  {tab}
+                  {tab === 'Active' && hasActiveRide && (
+                    <span style={{ width: '6px', height: '6px', background: '#ef4444', borderRadius: '50%', flexShrink: 0 }}></span>
+                  )}
+                </div>
+                
+                {/* Active Indicator Underline */}
+                <div style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: isActive ? '60px' : '0px',
+                  height: '4px',
+                  background: '#0ea5e9',
+                  borderRadius: '4px 4px 0 0',
+                  transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease',
+                  opacity: isActive ? 1 : 0
+                }} />
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {/* RIDES LIST */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', background: '#fff', paddingBottom: '100px', marginTop: '-1px', position: 'relative', zIndex: 5 }}>
+      {/* CONTENT AREA */}
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '100px' }}>
+
+        {/* RIDES LIST */}
+        <div style={{ padding: '1rem 1.5rem' }}>
       {loading ? (
         <div style={{ height: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
           <Loader2 size={40} color="#999" style={{ animation: 'spin 1.2s linear infinite' }} />
           <h3 style={{ color: '#888', margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Loading your rides...</h3>
         </div>
-      ) : groupedRides.length === 0 ? (
-          <div style={{ textAlign: 'center', marginTop: '4rem', color: '#888' }}>
-            <div style={{ background: '#eee', width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
-               <MapPin size={32} color="#aaa" />
+      ) : filteredRides.length === 0 ? (
+          <div style={{ textAlign: 'center', marginTop: '4rem', color: '#94a3b8' }}>
+            <div style={{ background: '#1e293b', width: '80px', height: '80px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+               <MapPin size={32} color="#64748b" />
             </div>
-            <h3 style={{ color: '#555', margin: '0 0 8px 0' }}>No {activeTab.toLowerCase()} rides</h3>
+            <h3 style={{ color: '#e2e8f0', margin: '0 0 8px 0' }}>No {activeTab.toLowerCase()} rides</h3>
             <p style={{ margin: 0, fontSize: '0.9rem' }}>You don't have any {activeTab.toLowerCase()} rides at the moment.</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0', paddingBottom: '2rem' }}>
-            {groupedRides.map(group => (
-              <div key={group.dateStr} style={{ marginBottom: '2rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', paddingBottom: '1rem', color: '#999', fontSize: '0.9rem', fontWeight: 600 }}>
-                  <span style={{ whiteSpace: 'nowrap', color: '#aaa' }}>{group.dateStr}</span>
-                  <div style={{ height: '1px', background: '#e0e0e0', flex: 1 }}></div>
-                </div>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                   {group.items.map(ride => {
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '2rem' }}>
+                   {filteredRides.map(ride => {
                      const isDriver = ride.collectionType === 'offer';
                      const activeColor = '#00b0f0';
                      let badgeText = isDriver ? 'Offer Ride' : 'Find Ride';
                      if (activeTab !== 'History') {
                         if (ride.status === 'cancelled') {
                            badgeText = `${badgeText} (Cancelled)`;
+                        } else if (ride.status === 'expired') {
+                           badgeText = `${badgeText} (Expired)`;
                         } else if (ride.status === 'completed') {
                            badgeText = `${badgeText} (Completed)`;
                         }
                      }
                      
-                     let ribbonLeftColor = isDriver ? '#1fd954' : '#00b0f0';
-                     let ribbonRightColor = isDriver ? '#16b944' : '#0090c0';
+                     let ribbonLeftColor = isDriver ? '#9cc93a' : '#00b0f0';
+                     let ribbonRightColor = isDriver ? '#8ab528' : '#0090c0';
 
                      if (activeTab === 'History') {
-                        if (ride.status === 'cancelled') {
+                        if (ride.status === 'cancelled' || ride.status === 'expired') {
                            ribbonLeftColor = '#888';
                            ribbonRightColor = '#777';
                         } else {
@@ -369,8 +505,8 @@ export default function MyRides() {
                         const hasOffered = ride.passengers.some(p => p.pStatus === 'Offered' || p.pStatus === 'Sent Request');
 
                         if (hasConfirmed) {
-                           ribbonLeftColor = '#1fd954'; // Green
-                           ribbonRightColor = '#16b944';
+                           ribbonLeftColor = '#9cc93a'; // Green
+                           ribbonRightColor = '#8ab528';
                         } else if (hasRequest) {
                            ribbonLeftColor = '#ff0043'; // Red
                            ribbonRightColor = '#d00035';
@@ -384,187 +520,182 @@ export default function MyRides() {
                      }
 
                      return (
-                       <div 
-                         key={ride.id}
-                         onClick={() => {
-                           if (isDriver) {
-                             if (ride.status === 'in_progress') {
-                               navigate('/active-ride', { state: { ride, fromTab: activeTab } });
-                             } else {
-                               navigate('/offer-matches', { state: { ride, fromTab: activeTab } });
-                             }
-                           } else {
-                             const effStatus = ride.computedStatus || ride.status;
-                             if ((effStatus === 'confirmed' || effStatus === 'in_progress') && activeTab !== 'History') {
-                               navigate('/passenger-tracking', { state: { ride, fromTab: activeTab } });
-                             } else {
-                               navigate('/find-matches', { state: { ride, fromTab: activeTab } });
-                             }
-                           }
-                         }}
-                         style={{ 
-                           background: '#fff', 
-                           borderRadius: '12px', 
-                           boxShadow: '0 12px 32px rgba(0,0,0,0.06)',
-                           display: 'flex',
-                           flexDirection: 'column',
-                           cursor: 'pointer',
-                           position: 'relative'
-                         }}
-                       >
-                         {/* SECTION 1: HEADER & ROUTE */}
-                         <div style={{ position: 'relative', padding: '16px 20px 24px 20px' }}>
-                            
-                            {/* TOP ROW: BADGE & MORE ICON */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                               
-                               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                  {/* LEFT BADGE: Ribbon */}
-                                  <div style={{ display: 'flex', marginLeft: '-24px', marginTop: '-4px' }}>
-                                     <div style={{ background: ribbonLeftColor, padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '2px 2px 8px rgba(0,0,0,0.1)', transition: 'background 0.3s' }}>
-                                        {isDriver ? <Car size={16} color="#fff" /> : <Search size={16} color="#fff" strokeWidth={2.5} />}
-                                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{badgeText}</span>
-                                     </div>
-                                     <div style={{ background: ribbonRightColor, padding: '6px 12px', display: 'flex', alignItems: 'center', borderTopRightRadius: '4px', borderBottomRightRadius: '4px', boxShadow: '2px 2px 8px rgba(0,0,0,0.1)', transition: 'background 0.3s' }}>
-                                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#fff' }}>{getRideTimeOnly(ride).replace('at ', '')}</span>
-                                     </div>
-                                  </div>
-                                  
-                                  {/* SEAT INDICATOR */}
-                                  <div style={{ display: 'flex', gap: '0px', marginTop: '-4px', flexShrink: 0 }}>
+                        <div 
+                          key={ride.id}
+                          onClick={() => {
+                            if (isDriver) {
+                              if (ride.status === 'in_progress') {
+                                navigate('/active-ride', { state: { ride, fromTab: activeTab } });
+                              } else {
+                                navigate('/offer-matches', { state: { ride, fromTab: activeTab } });
+                              }
+                            } else {
+                              const effStatus = ride.computedStatus || ride.status;
+                              if (effStatus === 'in_progress' && activeTab !== 'History') {
+                                navigate('/passenger-tracking', { state: { ride, fromTab: activeTab } });
+                              } else {
+                                navigate('/find-matches', { state: { ride, fromTab: activeTab } });
+                              }
+                            }
+                          }}
+                          style={{ 
+                            background: '#1e293b', 
+                            borderRadius: '10px',
+                            border: 'none',
+                            boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            cursor: 'pointer',
+                            position: 'relative',
+                            overflow: 'hidden'
+                          }}
+                        >
+                          {/* UNIFIED HEADER + ROUTE WITH VERTICAL CONNECTOR */}
+                          <div style={{ padding: '18px 20px 16px 20px', display: 'flex', flexDirection: 'column' }}>
+                            {/* ROW 1: Icon circle + Title/Date/Time */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0' }}>
+                              <div style={{ width: '50px', display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+                                <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                  {isDriver ? <Car size={20} color="#e2e8f0" /> : <Search size={18} color="#e2e8f0" strokeWidth={2.5} />}
+                                </div>
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0, paddingLeft: '10px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', letterSpacing: '-0.3px' }}>{badgeText}</span>
+                                  <div style={{ display: 'flex', gap: '1px', flexShrink: 0, marginTop: '2px' }}>
                                     {Array.from({ length: ride.seats || 1 }).map((_, i) => {
-                                       const fillStatus = isDriver ? i < (ride.seatsTaken || 0) : true;
-                                       return (
-                                          <User key={i} size={18} color={fillStatus ? ribbonLeftColor : '#e0e0e0'} fill={fillStatus ? ribbonLeftColor : '#e0e0e0'} transition="fill 0.3s, color 0.3s" />
-                                       );
+                                      const fillStatus = isDriver ? i < (ride.seatsTaken || 0) : true;
+                                      return (
+                                        <User key={i} size={15} color={fillStatus ? '#9cc93a' : '#475569'} fill={fillStatus ? '#9cc93a' : '#475569'} />
+                                      );
                                     })}
                                   </div>
-                               </div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '4px' }}>
+                                  <Calendar size={13} color="#94a3b8" />
+                                  <span style={{ fontSize: '0.78rem', fontWeight: 500, color: '#94a3b8' }}>{getRideDateStr(ride)}</span>
+                                  {getRideTimeOnly(ride) && (
+                                    <>
+                                      <span style={{ fontSize: '0.78rem', color: '#475569', margin: '0 1px' }}>|</span>
+                                      <Clock size={13} color="#94a3b8" />
+                                      <span style={{ fontSize: '0.78rem', fontWeight: 500, color: '#94a3b8' }}>{getRideTimeOnly(ride).replace('at ', '')}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
 
-                               {/* RIGHT EDIT ICON */}
-                               {activeTab !== 'History' && (
-                                  <div onClick={e => e.stopPropagation()}>
-                                    <Edit size={20} color="#ccc" />
-                                  </div>
-                               )}
+                            {/* ROUTE: Two columns, seamless connector */}
+                            <div style={{ display: 'flex', gap: '0', marginTop: '0' }}>
+                              {/* Left: continuous connector strip */}
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '50px', flexShrink: 0, gap: '0' }}>
+                                <div style={{ width: '1.5px', height: '18px', background: '#475569' }}></div>
+                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#94a3b8', flexShrink: 0 }}></div>
+                                <div style={{ width: '1.5px', height: '18px', background: '#475569' }}></div>
+                                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#1e293b', border: '2.5px solid #94a3b8', flexShrink: 0, boxSizing: 'border-box' }}></div>
+                              </div>
+                              {/* Right: address labels aligned with dots */}
+                              <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, paddingLeft: '10px', justifyContent: 'space-between' }}>
+                                <span style={{ fontSize: '0.88rem', color: '#f8fafc', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', paddingTop: '16px' }}>
+                                  {ride.from?.address || 'Unknown origin'}
+                                </span>
+                                <span style={{ fontSize: '0.88rem', color: '#94a3b8', fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>
+                                  {ride.to?.address || 'Unknown destination'}
+                                </span>
+                              </div>
                             </div>
-                            
-                            {/* LOCATIONS WITH DOT CONNECTOR */}
-                            <div style={{ display: 'flex', gap: '16px', position: 'relative', alignItems: 'stretch' }}>
-                               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '6px', paddingBottom: '6px' }}>
-                                  <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
-                                  <div style={{ width: 1, flex: 1, background: '#555', margin: '4px 0' }}></div>
-                                  <div style={{ minWidth: 8, height: 8, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
-                               </div>
-                               
-                               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: 0 }}>
-                                  <span style={{ fontSize: '0.9rem', color: '#111', fontWeight: 600, lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {ride.from?.address || 'Unknown origin'}
-                                  </span>
-                                  
-                                  <span style={{ fontSize: '0.9rem', color: '#666', lineHeight: '1.3', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {ride.to?.address || 'Unknown destination'}
-                                  </span>
-                               </div>
-                            </div>
-                         </div>
-      
-                         {/* SECTION 2: PASSENGERS / DRIVER RECORD LIST */}
-                         {ride.passengers && ride.passengers.filter(p => activeTab !== 'History' || ['Completed', 'Confirmed'].includes(p.pStatus)).length > 0 && (
-                           <div style={{ padding: '0 20px 24px 20px' }}>
-                             <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px', background: '#f8fafc', borderRadius: '10px' }}>
-                               {ride.passengers.filter(p => activeTab !== 'History' || ['Completed', 'Confirmed'].includes(p.pStatus)).map((p, idx) => (
-                                 <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', position: 'relative' }}>
-                                    
-                                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#e2e8f0', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                       {p.userProfilePic ? <img src={p.userProfilePic} alt="P" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <User size={20} color="#64748b" />}
-                                    </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                       <span style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', lineHeight: '1.2', letterSpacing: '-0.3px' }}>
+                          </div>
+
+                          {/* SECTION 3: PASSENGERS */}
+                          {ride.passengers && ride.passengers.filter(p => activeTab !== 'History' || ['Completed', 'Confirmed'].includes(p.pStatus)).length > 0 && (
+                            <>
+                              <div style={{ width: '100%', height: '1px', background: '#334155' }}></div>
+                              <div style={{ padding: '16px 20px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                  {ride.passengers.filter(p => activeTab !== 'History' || ['Completed', 'Confirmed'].includes(p.pStatus)).map((p, idx) => (
+                                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#334155', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: '2px solid #475569' }}>
+                                        <AvatarFallback src={p.userProfilePic} name={p.userName} />
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                        <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#f8fafc' }}>
                                           {p.userName || 'Passenger'}
-                                       </span>
-                                       
-                                       {(p.pStatus === 'Confirmed' || p.pStatus === 'Completed') && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                                             {activeTab !== 'History' && (
-                                                <div style={{ background: '#22c55e', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                   <Check size={10} color="#fff" strokeWidth={4} />
-                                                </div>
-                                             )}
-                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: activeTab === 'History' ? '#84cc16' : '#22c55e' }}>{p.pStatus}</span>
+                                        </span>
+                                        {/* Star Rating & Reviews */}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '3px' }}>
+                                          {[1, 2, 3, 4, 5].map(starNum => {
+                                            const ratingVal = parseFloat(p.userRating) || 0;
+                                            const isFilled = starNum <= Math.round(ratingVal);
+                                            return <Star key={starNum} size={11} fill={isFilled ? "#ffb800" : "#475569"} color={isFilled ? "#ffb800" : "#475569"} />;
+                                          })}
+                                          <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginLeft: '3px', fontWeight: 600 }}>{p.userRating || '0.0'} <span style={{ fontWeight: 400 }}>({p.userReviews || 0})</span></span>
+                                        </div>
+                                        {/* Car Details (passenger POV - viewing driver info) */}
+                                        {!isDriver && p.userPlateNumber && (
+                                          <div style={{ marginTop: '2px', fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                            <span style={{ fontWeight: 600 }}>{p.userPlateNumber}</span> | {p.userCarMake} {p.userCarModel} ({p.userCarColor})
                                           </div>
-                                       )}
-                                       
-                                       {p.pStatus === 'Request' && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ef4444' }}>Accept Request</span>
-                                          </div>
-                                       )}
-                                       {p.pStatus === 'Accept Offer' && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#ef4444' }}>Accept Offer</span>
-                                          </div>
-                                       )}
-                                       
-                                       {p.pStatus === 'Offered' && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f59e0b' }}>Ride Offered</span>
-                                          </div>
-                                       )}
-
-                                       {p.pStatus === 'Sent Request' && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                                             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f59e0b' }}>Sent Request</span>
-                                          </div>
-                                       )}
+                                        )}
+                                        {/* Status */}
+                                        {(p.pStatus === 'Confirmed' || p.pStatus === 'Completed') && (
+                                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#9cc93a', marginTop: '3px' }}>{p.pStatus}</span>
+                                        )}
+                                        {p.pStatus === 'Request' && (
+                                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#ef4444', marginTop: '3px' }}>Accept Request</span>
+                                        )}
+                                        {p.pStatus === 'Accept Offer' && (
+                                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#ef4444', marginTop: '3px' }}>Accept Offer</span>
+                                        )}
+                                        {p.pStatus === 'Offered' && (
+                                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#f59e0b', marginTop: '3px' }}>Ride Offered</span>
+                                        )}
+                                        {p.pStatus === 'Sent Request' && (
+                                          <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#f59e0b', marginTop: '3px' }}>Sent Request</span>
+                                        )}
+                                      </div>
                                     </div>
-                                 </div>
-                               ))}
-                             </div>
-                           </div>
-                         )}
-      
-                         {/* SECTION 3: MATCHES COUNT / HISTORY STAMP */}
-                         {activeTab !== 'History' ? (
-                           <>
-                             <div style={{ width: '100%', height: '1px', background: '#f1f5f9' }}></div>
-                             <div style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, borderRadius: '50%', background: '#e0f2fe', flexShrink: 0 }}>
-                                     <User size={22} color="#0284c7" />
-                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                   <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0ea5e9', letterSpacing: '-0.3px', marginBottom: '2px' }}>
-                                      {ride.matchesCount || 0} Ride Match{(ride.matchesCount || 0) > 1 ? 'es' : ''}
-                                   </span>
-                                   <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 600 }}>
-                                      available on your route
-                                   </span>
+                                  ))}
                                 </div>
-                             </div>
-                           </>
-                         ) : (
-                           <>
-                             <div style={{ width: '100%', height: '1px', background: '#f1f5f9' }}></div>
-                             <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ride.status === 'cancelled' ? '#f8fafc' : '#f0fdf4', borderBottomLeftRadius: '12px', borderBottomRightRadius: '12px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                   <span style={{ fontSize: '0.95rem', fontWeight: 800, color: ride.status === 'cancelled' ? '#94a3b8' : '#22c55e', letterSpacing: '0.5px' }}>
-                                      {ride.status === 'cancelled' ? 'Ride Cancelled' : 'Ride Completed'}
-                                   </span>
-                                </div>
-                             </div>
-                           </>
-                         )}
-                       </div>
+                              </div>
+                            </>
+                          )}
 
+                          {/* SECTION 4: MATCH COUNT / HISTORY STAMP */}
+                          {activeTab !== 'History' ? (
+                            <div style={{ padding: '6px 16px 14px 16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '14px', background: 'rgba(14, 165, 233, 0.15)', borderRadius: '16px', padding: '12px 16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 42, height: 42, borderRadius: '50%', background: 'rgba(14, 165, 233, 0.25)', flexShrink: 0 }}>
+                                  <Users size={20} color="#0ea5e9" />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                                  <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0ea5e9', letterSpacing: '-0.2px' }}>
+                                    {ride.matchesCount || 0} ride match{(ride.matchesCount || 0) > 1 ? 'es' : ''}
+                                  </span>
+                                  <span style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 500 }}>
+                                    available on your route
+                                  </span>
+                                </div>
+                                <ChevronRight size={22} color="#0ea5e9" />
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{ width: '100%', height: '1px', background: '#334155' }}></div>
+                              <div style={{ padding: '0 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50px', background: ((ride.computedStatus || ride.status) === 'cancelled' || (ride.computedStatus || ride.status) === 'expired') ? '#334155' : '#8ab528', borderBottomLeftRadius: '10px', borderBottomRightRadius: '10px' }}>
+                                <span style={{ fontSize: '1rem', fontWeight: 700, color: ((ride.computedStatus || ride.status) === 'cancelled' || (ride.computedStatus || ride.status) === 'expired') ? '#94a3b8' : '#fff', letterSpacing: '0.3px' }}>
+                                  {(ride.computedStatus || ride.status) === 'cancelled' ? 'Ride Cancelled' : (ride.computedStatus || ride.status) === 'expired' ? 'Ride Expired' : 'Ride Completed'}
+                                </span>
+                              </div>
+                            </>
+                          )}
+                        </div>
                      );
                   })}
-                </div>
-              </div>
-            ))}
           </div>
         )}
+        </div>
       </div>
-      
+
     </div>
   );
 }

@@ -3,10 +3,10 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2, Play } from 'lucide-react';
+import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2, Play, Calendar, Clock, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
-import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, increment, arrayRemove, where } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, increment, arrayRemove, arrayUnion, where } from 'firebase/firestore';
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371; // km
@@ -82,6 +82,34 @@ const getMeetDropSpotIcon = (type) => new L.DivIcon({
   iconAnchor: [11, 11]
 });
 
+const AvatarFallback = ({ src, name, size = 40 }) => {
+    const [imgError, setImgError] = useState(false);
+    const getInitials = (name) => {
+        if (!name) return '';
+        const parts = name.split(' ');
+        if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+        return name.substring(0, 2).toUpperCase();
+    };
+
+    if (src && !imgError) {
+        return <img src={src} alt={name || 'Avatar'} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} onError={() => setImgError(true)} />;
+    }
+
+    if (name) {
+        return (
+            <div style={{ width: size, height: size, borderRadius: '50%', backgroundColor: '#00b0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: size * 0.4, flexShrink: 0 }}>
+                {getInitials(name)}
+            </div>
+        );
+    }
+
+    return (
+        <div style={{ width: size, height: size, borderRadius: '50%', backgroundColor: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <User size={size * 0.6} color="#555" />
+        </div>
+    );
+};
+
 // Map Focus Adjuster Component
 function MapAdjuster({ route1, route2 }) {
   const map = useMap();
@@ -123,6 +151,23 @@ export default function OfferMatches() {
   const [confirmedMatchToCancel, setConfirmedMatchToCancel] = useState(null);
   const [showStartRideModal, setShowStartRideModal] = useState(false);
   const [showActiveRideWarningModal, setShowActiveRideWarningModal] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const [dynamicRideState, setDynamicRideState] = useState(ride);
+  const dynamicRideStateRef = useRef(ride);
+
+  useEffect(() => {
+    if (!ride?.id) return;
+    const unsub = onSnapshot(doc(db, 'rideOffers', ride.id), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = { id: docSnap.id, ...docSnap.data() };
+        setDynamicRideState(data);
+        dynamicRideStateRef.current = data;
+      }
+    });
+    return () => unsub();
+  }, [ride?.id]);
 
   // Parse exact driver coordinates bound intrinsically to real ride payloads
   const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
@@ -154,6 +199,11 @@ export default function OfferMatches() {
   // Matching Engine: Fetch and filter passengers dynamically
   useEffect(() => {
     if (driverRoute.length === 0) return;
+    if (['cancelled', 'expired'].includes(dynamicRideStateRef.current?.status)) {
+        setIsLoadingMatches(false);
+        setMatches([]);
+        return;
+    }
 
     setIsLoadingMatches(true);
     const reqRef = collection(db, 'rideRequests');
@@ -167,27 +217,37 @@ export default function OfferMatches() {
            if (ride?.userId && req.userId === ride.userId) return null; // Prevent self-matching
            
            // TEMPORAL CHECK LAUNCH
-           if (!ride?.date || !req.date || !ride?.time || !req.time) return null;
-           const dRide = dayjs(ride.date).format('YYYY-MM-DD');
+           if (!dynamicRideStateRef.current?.date || !req.date || !dynamicRideStateRef.current?.time || !req.time) return null;
+           const dRide = dayjs(dynamicRideStateRef.current.date).format('YYYY-MM-DD');
            const dReq = dayjs(req.date).format('YYYY-MM-DD');
            if (dRide !== dReq) return null;
-           if (dRide < dayjs().format('YYYY-MM-DD')) return null;
-           const mRide = dayjs(ride.time).hour() * 60 + dayjs(ride.time).minute();
+           const isLinkedMatch = req.offeredByRideId === dynamicRideStateRef.current?.id || 
+                                 (dynamicRideStateRef.current?.requestedByPassengerIds || []).includes(req.id) || 
+                                 (dynamicRideStateRef.current?.offeredToPassengerIds || []).includes(req.id);
+           if (!isLinkedMatch && dRide < dayjs().subtract(1, 'day').format('YYYY-MM-DD')) return null;
+           const mRide = dayjs(dynamicRideStateRef.current.time).hour() * 60 + dayjs(dynamicRideStateRef.current.time).minute();
            const mReq = dayjs(req.time).hour() * 60 + dayjs(req.time).minute();
-           if (Math.abs(mRide - mReq) > 90) return null;
+           const timeDiff = mRide - mReq;
+           if (!isLinkedMatch && (timeDiff < -60 || timeDiff > 180)) return null;
            // CRITICAL FIX: Hide passengers who are already locked into other drivers' carpools natively!
-           if (req.status !== 'open' && req.offeredByRideId && req.offeredByRideId !== ride?.id) return null;
+           if (['confirmed', 'in_progress', 'completed'].includes(req.status) && req.offeredByRideId && req.offeredByRideId !== dynamicRideStateRef.current?.id) return null;
 
            // CRITICAL FIX: Hide passengers who structurally completely cancelled their own ride requests globally!
            if (req.status === 'cancelled') return null;
 
            // CRITICAL FIX: If the driver's OWN ride is already historically completed or cancelled, do not evaluate or show any new unrelated open passenger requests!
-           if ((ride?.status === 'completed' || ride?.status === 'cancelled') && req.offeredByRideId !== ride?.id) return null;
+           if ((dynamicRideStateRef.current?.status === 'completed' || dynamicRideStateRef.current?.status === 'cancelled' || dynamicRideStateRef.current?.status === 'in_progress') && req.offeredByRideId !== dynamicRideStateRef.current?.id) return null;
 
-           const typeStatus = (req.status === 'completed' && req.offeredByRideId === ride?.id) ? 'completed' :
-                              (req.status === 'confirmed' && req.offeredByRideId === ride?.id) ? 'confirmed' : 
-                              (req.status === 'request'   && req.offeredByRideId === ride?.id) ? 'request' : 
-                              (req.status === 'offered'   && req.offeredByRideId === ride?.id) ? 'offered' : 'match';
+           let typeStatus = 'match';
+           const driverIsConfirmedWithThisPassenger = ['confirmed', 'completed', 'in_progress'].includes(req.status) && req.offeredByRideId === dynamicRideStateRef.current?.id;
+
+           if (driverIsConfirmedWithThisPassenger) {
+               typeStatus = req.status;
+           } else if ((dynamicRideStateRef.current?.offeredToPassengerIds || []).includes(req.id)) {
+               typeStatus = 'offered';
+           } else if ((dynamicRideStateRef.current?.requestedByPassengerIds || []).includes(req.id)) {
+               typeStatus = 'request';
+           }
            const nameParams = req.userName || 'Passenger';
            const timeParams = req.time ? dayjs(req.time).format('h:mma') : 'Any time';
            let userRating = req.userRating || '0.0';
@@ -200,6 +260,7 @@ export default function OfferMatches() {
                      const uData = uSnap.data();
                      if (uData.rating) userRating = parseFloat(uData.rating).toFixed(1);
                      if (uData.reviews) userReviews = uData.reviews;
+                     if (uData.photoURL) req.userProfilePic = uData.photoURL;
                   }
               } catch (e) {}
            }
@@ -268,12 +329,16 @@ export default function OfferMatches() {
               const bestPickup = await findBestNetworkNode(passengerFromPos);
               const bestDropoff = await findBestNetworkNode(passengerToPos);
 
-              if (!bestPickup || !bestDropoff || bestPickup.idx >= bestDropoff.idx) return null;
+              if (!isLinkedMatch && (!bestPickup || !bestDropoff || bestPickup.idx >= bestDropoff.idx)) return null;
 
-              let pickupIdx = bestPickup.idx;
-              let dropIdx = bestDropoff.idx;
-              let meetPickup = driverRoute[pickupIdx];
-              let meetDropoff = driverRoute[dropIdx];
+              let pickupIdx = bestPickup?.idx || 0;
+              let dropIdx = bestDropoff?.idx || (driverRoute.length - 1);
+              if (isLinkedMatch && pickupIdx >= dropIdx) {
+                  pickupIdx = 0;
+                  dropIdx = Math.max(0, driverRoute.length - 1);
+              }
+              let meetPickup = driverRoute[pickupIdx] || [driverFrom.lat, driverFrom.lon];
+              let meetDropoff = driverRoute[dropIdx] || [driverTo.lat, driverTo.lon];
               
               let interceptPaths = {
                  pickupPath: [[passengerFromPos.lat, passengerFromPos.lon], [meetPickup[0], meetPickup[1]]],
@@ -299,7 +364,7 @@ export default function OfferMatches() {
               }
 
               // Final sequential sanity check
-              if (pickupIdx >= dropIdx) return null;
+              if (!isLinkedMatch && pickupIdx >= dropIdx) return null;
 
               const geometricPayload = {
                  id: req.id,
@@ -337,7 +402,27 @@ export default function OfferMatches() {
         const results = await Promise.all(matchPromises);
         const validMatches = results.filter(m => m !== null);
         
-        setMatches(validMatches);
+        // Re-apply the absolute freshest dynamicRideStateRef synchronously before commit to prevent async stale overwrites
+        const fullyFreshMatches = validMatches.map(m => {
+            let finalType = m.type;
+            const req = m.rawRequest;
+            if (!req) return m;
+
+            const driverIsConfirmedWithThisPassenger = ['confirmed', 'completed', 'in_progress'].includes(req.status) && req.offeredByRideId === dynamicRideStateRef.current?.id;
+            if (driverIsConfirmedWithThisPassenger) {
+                finalType = req.status;
+            } else if ((dynamicRideStateRef.current?.offeredToPassengerIds || []).includes(m.id)) {
+                finalType = 'offered';
+            } else if ((dynamicRideStateRef.current?.requestedByPassengerIds || []).includes(m.id)) {
+                finalType = 'request';
+            } else {
+                finalType = 'match';
+            }
+            
+            return { ...m, type: finalType };
+        });
+        
+        setMatches(fullyFreshMatches);
         setIsLoadingMatches(false);
         setActivePassengerId(currentId => {
            if (validMatches.length > 0 && !validMatches.find(m => m.id === currentId)) {
@@ -352,9 +437,31 @@ export default function OfferMatches() {
     });
 
     return () => unsubscribe();
-  }, [driverRoute, ride?.userId]);
+  }, [driverRoute, ride?.userId, refreshKey]);
 
+  // Synchronize matches when the driver's own live database document updates
+  useEffect(() => {
+    if (!dynamicRideState) return;
+    setMatches(prev => prev.map(m => {
+        let newType = m.type;
+        const req = m.rawRequest;
+        if (!req) return m;
 
+        const driverIsConfirmedWithThisPassenger = ['confirmed', 'completed', 'in_progress'].includes(req.status) && req.offeredByRideId === dynamicRideState.id;
+        
+        if (driverIsConfirmedWithThisPassenger) {
+            newType = req.status;
+        } else if ((dynamicRideState.offeredToPassengerIds || []).includes(m.id)) {
+            newType = 'offered';
+        } else if ((dynamicRideState.requestedByPassengerIds || []).includes(m.id)) {
+            newType = 'request';
+        } else {
+            newType = 'match';
+        }
+        
+        return m.type !== newType ? { ...m, type: newType } : m;
+    }));
+  }, [dynamicRideState]);
 
   // Carousel Scroll Intersection Logic detecting centered card
   const handleScroll = () => {
@@ -374,6 +481,12 @@ export default function OfferMatches() {
     const requestedPassenger = matches.find(m => m.id === matchId);
     if (!requestedPassenger) return;
 
+    if (['confirmed', 'in_progress', 'completed'].includes(requestedPassenger?.rawRequest?.status)) {
+      setCapacityModalText("This passenger already has an active or confirmed booking. You cannot offer them a ride.");
+      setShowCapacityFullModal(true);
+      return;
+    }
+
     const passengerSeats = parseInt(requestedPassenger?.seats) || 1;
     const currentTakenSeats = confirmedPassengers.reduce((acc, m) => acc + (parseInt(m.seats)||1), 0);
     const driverMaxSeats = parseInt(ride?.seats) || 4;
@@ -390,6 +503,13 @@ export default function OfferMatches() {
     );
     // Force backend synchronization
     try {
+      if (ride?.id) {
+          const driverDocRef = doc(db, 'rideOffers', ride.id);
+          await updateDoc(driverDocRef, {
+              offeredToPassengerIds: arrayUnion(matchId)
+          });
+      }
+
       const matchDocRef = doc(db, 'rideRequests', matchId);
       await updateDoc(matchDocRef, { 
         status: 'offered', 
@@ -402,6 +522,13 @@ export default function OfferMatches() {
 
   const handleAcceptRequest = async (matchId) => {
     const requestedPassenger = matches.find(m => m.id === matchId);
+    
+    if (['confirmed', 'in_progress', 'completed'].includes(requestedPassenger?.rawRequest?.status)) {
+      setCapacityModalText("This passenger already has an active or confirmed booking. You cannot accept this request.");
+      setShowCapacityFullModal(true);
+      return;
+    }
+    
     const passengerSeats = parseInt(requestedPassenger?.seats) || 1;
     const currentTakenSeats = confirmedPassengers.reduce((acc, m) => acc + (parseInt(m.seats)||1), 0);
     const driverMaxSeats = parseInt(ride?.seats) || 4;
@@ -450,6 +577,16 @@ export default function OfferMatches() {
   };
 
   const confirmedPassengers = matches.filter(m => m.type === 'confirmed' || m.type === 'completed');
+
+  const handleManualRefresh = () => {
+    setIsRefreshing(true);
+    setRefreshKey(prev => prev + 1);
+    
+    // Auto-remove the spinning animation class after 1 second
+    setTimeout(() => {
+        setIsRefreshing(false);
+    }, 1000);
+  };
 
   return (
     <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
@@ -505,11 +642,7 @@ export default function OfferMatches() {
                  >
                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                      <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                       {activePassenger.profilePic ? (
-                          <img src={activePassenger.profilePic} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                       ) : (
-                          <User size={14} color="#555" />
-                       )}
+                       <AvatarFallback src={activePassenger.profilePic} name={activePassenger.name} size={24} />
                      </div>
                      <span style={{ fontWeight: 600, color: '#333' }}>Meet around here</span>
                    </div>
@@ -572,7 +705,7 @@ export default function OfferMatches() {
                    );
                 })}
               </div>
-              {rideStatus !== 'completed' && rideStatus !== 'cancelled' && (
+              {![ 'completed', 'cancelled', 'expired' ].includes(dynamicRideState?.status || ride?.computedStatus || rideStatus) && (
                 <button disabled={isLoadingMatches} onClick={() => { setDrawerMode('ride'); setIsBottomPanelExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: isLoadingMatches ? 'not-allowed' : 'pointer', marginLeft: 4, transition: 'background 0.3s, opacity 0.3s', opacity: isLoadingMatches ? 0.5 : 1 }}>
                   <Play size={16} fill="#fff" style={{ marginLeft: 2 }} />
                 </button>
@@ -620,10 +753,17 @@ export default function OfferMatches() {
           </div>
         </div>
         
-        {/* Floating Menu Button positioned OUTSIDE the grey background logically */}
+        {/* Floating Menu Button */}
         <div style={{ padding: '0 1rem 1rem', marginTop: '1rem', pointerEvents: 'none' }}>
-          <div style={{ background: '#fff', width: 40, height: 40, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', cursor: 'pointer', pointerEvents: 'auto' }}>
-            <List size={20} color="#555" />
+          <div 
+            onClick={handleManualRefresh}
+            style={{ background: '#fff', width: 40, height: 40, borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', cursor: 'pointer', pointerEvents: 'auto' }}
+          >
+            <RefreshCw 
+              size={20} 
+              color="#555" 
+              style={{ animation: isRefreshing ? 'spin 1s linear infinite' : 'none' }}
+            />
           </div>
         </div>
       </div>
@@ -661,9 +801,19 @@ export default function OfferMatches() {
             <p style={{ margin: '8px 0 0', color: '#888', fontSize: '0.9rem', lineHeight: '1.4' }}>We couldn't find any passengers looking for a ride along your planned route right now.</p>
           </div>
         ) : (
-          matches.map((match) => (
+          matches.map((match, index) => (
           <div 
             key={match.id}
+            onClick={() => {
+               if (activePassengerId !== match.id) {
+                  setActivePassengerId(match.id);
+                  if (carouselRef.current) {
+                      carouselRef.current.scrollTo({ left: index * (window.innerWidth * 0.85), behavior: 'smooth' });
+                  }
+               }
+               setDrawerMode('passenger');
+               setIsBottomPanelExpanded(prev => activePassengerId === match.id ? !prev : true);
+            }}
             style={{ 
               minWidth: '85vw', 
               maxWidth: '85vw',
@@ -673,19 +823,15 @@ export default function OfferMatches() {
               scrollSnapAlign: 'center',
               display: 'flex',
               flexDirection: 'column',
-              overflow: 'hidden'
+              overflow: 'hidden',
+              cursor: 'pointer'
             }}
           >
             {/* Top Info Row */}
             <div style={{ padding: '16px', display: 'flex', gap: '16px', alignItems: 'center', position: 'relative' }}>
                
                <div>
-                 <img 
-                   src={match.profilePic || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"} 
-                   alt="" 
-                   onError={(e) => { e.target.onerror = null; e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"; }}
-                   style={{ width: 50, height: 50, borderRadius: '50%', objectFit: 'cover' }} 
-                 />
+                 <AvatarFallback src={match.profilePic} name={match.name} size={50} />
                </div>
                
                <div style={{ flex: 1 }}>
@@ -720,7 +866,7 @@ export default function OfferMatches() {
             </div>
 
             {/* Bottom Button Row */}
-            <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto' }}>
+            <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto' }} onClick={(e) => e.stopPropagation()}>
                
                {/* State 1: Confirmed or Completed Match */}
                {(match.type === 'confirmed' || match.type === 'completed') && (
@@ -825,14 +971,14 @@ export default function OfferMatches() {
           bottom: 0,
           left: 0,
           width: '100%',
-          background: '#f2f4f7', 
+          background: isBottomPanelExpanded ? 'rgba(40,45,50,0.98)' : 'rgba(40,45,50,0.9)', 
           borderTopLeftRadius: '8px',
           borderTopRightRadius: '8px',
-          boxShadow: '0 -4px 15px rgba(0,0,0,0.1)',
-          padding: '16px 24px 32px 24px',
+          boxShadow: '0 -4px 15px rgba(0,0,0,0.5)',
+          padding: '16px 24px 16px 24px',
           zIndex: 2000,
-          transform: isBottomPanelExpanded ? 'translateY(0)' : (matches.length > 0 ? 'translateY(calc(100% - 40px))' : 'translateY(100%)'),
-          transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+          transform: isBottomPanelExpanded ? 'translateY(0)' : (matches.length > 0 ? 'translateY(calc(100% - 34px))' : 'translateY(100%)'),
+          transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.3s',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -845,29 +991,29 @@ export default function OfferMatches() {
           style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}
         >
            {/* Center Pill */}
-           <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s' }}></div>
+           <ChevronUp size={28} color="#888" style={{ position: 'absolute', top: '2px', left: '50%', transform: 'translateX(-50%)', opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s' }} />
            
            {/* Top Right Close Applet */}
            <div onClick={(e) => { e.stopPropagation(); setIsBottomPanelExpanded(false); }} style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', cursor: 'pointer' }}>
-             <X size={24} color="#bbb" strokeWidth={2} />
+             <X size={24} color="#888" strokeWidth={2} />
            </div>
         </div>
 
         {/* Content (only visible fully when expanded) */}
         <div style={{ width: '100%', marginTop: '16px', display: 'flex', flexDirection: 'column', opacity: isBottomPanelExpanded ? 1 : 0, transition: 'opacity 0.2s', pointerEvents: isBottomPanelExpanded ? 'auto' : 'none' }}>
-           <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '24px' }}>
+           <div style={{ display: 'flex', flexDirection: 'column', width: '100%', marginBottom: '8px' }}>
               {drawerMode === 'ride' ? (
                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                    <h3 style={{ margin: '0 0 16px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
+                    <h3 style={{ margin: '0 0 16px', fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>
                       {rideStatus === 'completed' ? 'This ride has gracefully concluded.' : 'Ready to start your ride?'}
                     </h3>
                     
                     {rideStatus === 'completed' ? (
-                       <p style={{ margin: 0, color: '#888', fontSize: '0.9rem' }}>
+                       <p style={{ margin: 0, color: '#ccc', fontSize: '0.9rem' }}>
                          Your historical records are stored permanently.
                        </p>
                     ) : (
-                       <p style={{ margin: '0 0 24px', color: '#888', fontSize: '0.9rem' }}>
+                       <p style={{ margin: '0 0 24px', color: '#ccc', fontSize: '0.9rem' }}>
                          {confirmedPassengers.length === 0 
                            ? "You don't have any confirmed passenger yet."
                            : `You have ${confirmedPassengers.length} confirmed passenger(s).`}
@@ -878,17 +1024,17 @@ export default function OfferMatches() {
                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px' }}>
                           {confirmedPassengers.length > 0 ? (
                              confirmedPassengers.map((cp, idx) => (
-                                <div key={cp.id} style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', marginLeft: idx > 0 ? '-16px' : 0, overflow: 'hidden', background: '#e0e0e0', zIndex: 10 - idx }}>
+                                <div key={cp.id} style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid rgba(28,32,36,0.98)', marginLeft: idx > 0 ? '-16px' : 0, overflow: 'hidden', background: '#333', zIndex: 10 - idx }}>
                                     <img src={cp.profilePic} alt="confirmed user" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 </div>
                              ))
                           ) : (
                              <>
-                                <div style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', background: '#dbdbdb', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                   <User size={28} color="#fff" strokeWidth={2.5} />
+                                <div style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid rgba(28,32,36,0.98)', background: '#444', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                   <User size={28} color="#bbb" strokeWidth={2.5} />
                                 </div>
-                                <div style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid #f2f4f7', marginLeft: '-20px', background: '#dbdbdb', zIndex: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                   <User size={28} color="#fff" strokeWidth={2.5} />
+                                <div style={{ width: 56, height: 56, borderRadius: '50%', border: '4px solid rgba(28,32,36,0.98)', marginLeft: '-20px', background: '#444', zIndex: 9, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                   <User size={28} color="#bbb" strokeWidth={2.5} />
                                 </div>
                              </>
                           )}
@@ -896,81 +1042,100 @@ export default function OfferMatches() {
                     )}
                  </div>
               ) : activePassenger ? (
-                 <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
-                      <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#eaeaea', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {activePassenger.profilePic ? (
-                           <img 
-                             src={activePassenger.profilePic} 
-                             alt="passenger"
-                             onError={(e) => { e.target.onerror = null; e.target.src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23a0d2ff'/%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z' fill='%235bb1ff'/%3E%3C/svg%3E"; }}
-                             style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                           />
-                        ) : (
-                           <span style={{ fontSize: '1.4rem', fontWeight: 800, color: '#888' }}>{activePassenger.name?.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase()}</span>
-                        )}
-                      </div>
-                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                           <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 600, color: '#111' }}>{activePassenger.name}</h2>
-                        </div>
-                        
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                          {[1, 2, 3, 4, 5].map(starNum => {
-                             const ratingVal = parseFloat(activePassenger.rating || '5.0') || 0;
-                             const isFilled = starNum <= Math.round(ratingVal);
-                             return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#bbb"} color={isFilled ? "#ffb800" : "#bbb"} />;
-                          })}
-                          <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 700, marginLeft: '4px' }}>{activePassenger.rating || '5.0'} <span style={{ fontWeight: 500 }}>({activePassenger.reviews || '5'})</span></span>
-                        </div>
-                      </div>
-                    </div>
+                 <div style={{ display: 'flex', flexDirection: 'column', width: '100%', alignItems: 'center', textAlign: 'center', paddingBottom: '0' }}>
+                     <div style={{ width: 80, height: 80, borderRadius: '50%', background: '#333', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '12px', border: '3px solid #444', boxShadow: '0 4px 12px rgba(0,0,0,0.5)' }}>
+                         {activePassenger.profilePic ? (
+                            <img src={activePassenger.profilePic} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="passenger" />
+                         ) : (
+                            <span style={{ fontSize: '1.8rem', fontWeight: 800, color: '#ccc' }}>{getInitials(activePassenger.name, 'P')}</span>
+                         )}
+                     </div>
+                     <h2 style={{ margin: '0 0 4px', fontSize: '1.3rem', fontWeight: 600, color: '#fff' }}>{activePassenger.name}</h2>
+                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', marginBottom: '24px' }}>
+                       {[1, 2, 3, 4, 5].map(starNum => {
+                          const ratingVal = parseFloat(activePassenger.rating || '5.0') || 0;
+                          const isFilled = starNum <= Math.round(ratingVal);
+                          return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#444"} color={isFilled ? "#ffb800" : "#444"} />;
+                       })}
+                       <span style={{ fontSize: '0.9rem', color: '#eee', fontWeight: 600, marginLeft: '4px' }}>{activePassenger.rating || '5.0'} <span style={{ fontWeight: 400 }}>({activePassenger.reviews || '0'})</span></span>
+                     </div>
 
-                   {activePassenger.rawRequest?.note && activePassenger.rawRequest.note.trim() !== '' && (
-                     <p style={{ margin: '0 0 16px', fontSize: '0.95rem', color: '#444', fontStyle: 'italic', background: '#fff', padding: '12px', borderRadius: '8px', borderLeft: `4px solid ${activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888'}`, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-                       "{activePassenger.rawRequest.note}"
-                     </p>
-                   )}
+                     {/* "Ride Details" divider */}
+                     <div style={{ display: 'flex', alignItems: 'center', width: '100%', marginBottom: '16px' }}>
+                        <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+                        <span style={{ padding: '0 16px', fontWeight: 700, fontSize: '1.1rem', color: '#f1f1f1' }}>Ride Details</span>
+                        <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+                     </div>
 
-                   <div style={{ width: '100%', height: '1px', background: '#e5e7eb', marginBottom: '16px' }}></div>
-
-                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '8px' }}>
-                      {/* Date and Time and Seats displayed below the divider */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                         <span style={{ fontSize: '0.95rem', color: '#555', fontWeight: 600 }}>
-                            {activePassenger.rawRequest?.date ? `${dayjs(activePassenger.rawRequest.date).format('MMM. D')}, ${activePassenger.time}` : activePassenger.time}
-                         </span>
-                         <span style={{ fontSize: '0.95rem', color: '#ccc' }}>•</span>
-                         <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-                             {Array.from({ length: activePassenger.seats || 1 }).map((_, i) => (
-                                 <User key={i} size={14} fill="#bbb" color="#bbb" />
-                              ))}
-                         </div>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch' }}>
-                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '4px', paddingBottom: '4px' }}>
-                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: 'transparent', border: '2px solid #888', zIndex: 2 }}></div>
-                           <div style={{ width: 1, flex: 1, background: '#ccc', margin: '4px 0' }}></div>
-                           <div style={{ minWidth: 10, height: 10, borderRadius: '50%', background: '#888', zIndex: 2 }}></div>
-                         </div>
-                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
-                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
-                             {activePassenger.rawRequest?.from?.address || 'Unknown Pickup Address'}
+                     {/* Date, Time, Seats */}
+                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#8da4bd' }}>
+                              <Calendar size={14} />
+                              <span style={{ fontSize: '0.9rem', fontWeight: 400 }}>
+                                 {(activePassenger.rawRequest?.date || activePassenger.rawRequest?.time) ? dayjs(activePassenger.rawRequest?.date || activePassenger.rawRequest?.time).format('MMMM D, YYYY') : 'Unknown Date'}
+                              </span>
                            </div>
-                           <div style={{ fontSize: '0.9rem', color: '#222', lineHeight: '1.3' }}>
-                             {activePassenger.rawRequest?.to?.address || 'Unknown Dropoff Address'}
+                           <span style={{ color: '#444' }}>|</span>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#8da4bd' }}>
+                              <Clock size={14} />
+                              <span style={{ fontSize: '0.9rem', fontWeight: 400 }}>
+                                 {activePassenger.rawRequest?.time ? dayjs(activePassenger.rawRequest.time).format('h:mm A') : activePassenger.time}
+                              </span>
                            </div>
-                         </div>
-                      </div>
-                   </div>
+                        </div>
+                        <span style={{ fontSize: '1rem', fontWeight: 700, color: activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888' }}>{activePassenger.seats} seat{activePassenger.seats > 1 ? 's' : ''} requested</span>
+                     </div>
+
+                     {/* Locations */}
+                     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '20px', alignItems: 'center', marginBottom: '16px' }}>
+                        {/* Origin */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                           <span style={{ fontSize: '0.9rem', fontWeight: 500, color: '#aaa', marginBottom: '4px' }}>From:</span>
+                           {(() => {
+                              const addrStr = activePassenger.rawRequest?.from?.address || 'Unknown Pickup Address';
+                              const parts = addrStr.split(',');
+                              const mainAddr = parts[0] ? parts[0].trim() : addrStr;
+                              const subAddr = parts.length > 1 ? parts.slice(1).join(',').trim() : '';
+                              return (
+                                 <>
+                                    <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>{mainAddr}</span>
+                                    {subAddr && <span style={{ fontSize: '0.9rem', color: '#bbb' }}>{subAddr}</span>}
+                                 </>
+                              );
+                           })()}
+                        </div>
+
+                        {/* Destination */}
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                           <span style={{ fontSize: '0.9rem', fontWeight: 500, color: '#aaa', marginBottom: '4px' }}>To:</span>
+                           {(() => {
+                              const addrStr = activePassenger.rawRequest?.to?.address || 'Unknown Dropoff Address';
+                              const parts = addrStr.split(',');
+                              const mainAddr = parts[0] ? parts[0].trim() : addrStr;
+                              const subAddr = parts.length > 1 ? parts.slice(1).join(',').trim() : '';
+                              return (
+                                 <>
+                                    <span style={{ fontSize: '1.3rem', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>{mainAddr}</span>
+                                    {subAddr && <span style={{ fontSize: '0.9rem', color: '#bbb' }}>{subAddr}</span>}
+                                 </>
+                              );
+                           })()}
+                        </div>
+                     </div>
+
+                     {activePassenger.rawRequest?.note && activePassenger.rawRequest.note.trim() !== '' && (
+                       <p style={{ margin: '0', fontSize: '0.95rem', color: '#ddd', fontStyle: 'italic', background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.2)', width: '100%', textAlign: 'left' }}>
+                         <strong style={{ fontStyle: 'normal', color: '#aaa', fontWeight: 600, marginRight: '4px' }}>Note:</strong>"{activePassenger.rawRequest.note}"
+                       </p>
+                     )}
                  </div>
               ) : (
                  <div style={{ textAlign: 'center', padding: '24px 0' }}>
-                    <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#111' }}>
+                    <h3 style={{ margin: '0 0 8px', fontSize: '1.2rem', fontWeight: 800, color: '#fff' }}>
                       Passenger Overlay
                     </h3>
-                    <p style={{ margin: 0, color: '#888', fontSize: '0.9rem' }}>No active passenger overlay.</p>
+                    <p style={{ margin: 0, color: '#ccc', fontSize: '0.9rem' }}>No active passenger overlay.</p>
                  </div>
               )}
            </div>
@@ -980,7 +1145,7 @@ export default function OfferMatches() {
              <>
                <button 
                  onClick={() => setShowCancelModal(true)}
-                 style={{ width: '100%', padding: '16px', background: '#dbdbdb', border: 'none', borderRadius: '8px', color: '#555', fontWeight: 700, fontSize: '1rem', marginBottom: '16px', cursor: 'pointer' }}
+                 style={{ width: '100%', padding: '16px', background: '#333', border: 'none', borderRadius: '8px', color: '#ccc', fontWeight: 700, fontSize: '1rem', marginBottom: '16px', cursor: 'pointer' }}
                >
                  Cancel Carpool
                </button>
@@ -1018,6 +1183,14 @@ export default function OfferMatches() {
                )}
              </>
            )}
+
+           {/* Collapse Drawer Button */}
+           <div 
+              onClick={() => setIsBottomPanelExpanded(false)} 
+              style={{ display: 'flex', justifyContent: 'center', marginTop: '8px', cursor: 'pointer', marginBottom: '-8px' }}
+           >
+              <ChevronDown size={32} color="#888" style={{ opacity: 0.8 }} />
+           </div>
         </div>
       </div>
 
@@ -1155,6 +1328,13 @@ export default function OfferMatches() {
                   try {
                       if (matchToRetract) {
                          setMatches(prev => prev.map(m => m.id === matchToRetract ? { ...m, type: 'match' } : m));
+                         
+                         if (ride?.id) {
+                            await updateDoc(doc(db, 'rideOffers', ride.id), {
+                                offeredToPassengerIds: arrayRemove(matchToRetract)
+                            });
+                         }
+
                          await updateDoc(doc(db, 'rideRequests', matchToRetract), { status: 'open', offeredByRideId: null });
                       }
                       setShowRetractOfferModal(false);

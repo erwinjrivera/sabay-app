@@ -79,7 +79,7 @@ export default function AddSavedPlace() {
   const wrapperStyle = {
     display: 'flex',
     alignItems: 'center',
-    borderBottom: '1px solid #eaeaea',
+    borderBottom: '1px solid #334155',
     padding: '0.5rem 0 1rem',
   };
 
@@ -87,7 +87,7 @@ export default function AddSavedPlace() {
     flex: 1,
     border: 'none',
     fontSize: '1rem',
-    color: '#333',
+    color: '#f8fafc',
     outline: 'none',
     background: 'transparent',
     padding: 0,
@@ -97,22 +97,22 @@ export default function AddSavedPlace() {
   const labelStyle = {
     display: 'block',
     fontSize: '0.85rem',
-    color: '#333',
+    color: '#94a3b8',
     marginTop: '1.5rem',
     marginBottom: '0.2rem'
   };
 
   return (
-    <div style={{ backgroundColor: '#fff', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ backgroundColor: '#0f172a', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
        {/* HEADER */}
-       <div style={{ padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', borderBottom: '1px solid #eaeaea' }}>
+       <div style={{ padding: '1rem 1.5rem', display: 'flex', alignItems: 'center', borderBottom: '1px solid #1e293b' }}>
           <button 
              onClick={() => navigate(-1)}
              style={{ background: 'transparent', border: 'none', padding: 0, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
           >
-            <ArrowLeft size={24} color="#333" />
+            <ArrowLeft size={24} color="#f8fafc" />
           </button>
-          <h2 style={{ margin: '0 auto', fontSize: '1.2rem', fontWeight: 600, color: '#111', paddingRight: '24px' }}>
+          <h2 style={{ margin: '0 auto', fontSize: '1.2rem', fontWeight: 600, color: '#f8fafc', paddingRight: '24px' }}>
              {editMode ? 'Edit Saved Place' : 'Add to Saved Places'}
           </h2>
        </div>
@@ -121,7 +121,7 @@ export default function AddSavedPlace() {
        <div style={{ padding: '0 1.5rem', flex: 1 }}>
           
           {errorMsg && (
-             <div style={{ marginTop: '1rem', padding: '0.8rem', background: '#ffebee', color: '#c62828', borderRadius: '8px', fontSize: '0.9rem' }}>
+             <div style={{ marginTop: '1rem', padding: '0.8rem', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', borderRadius: '8px', fontSize: '0.9rem' }}>
                 {errorMsg}
              </div>
           )}
@@ -141,14 +141,14 @@ export default function AddSavedPlace() {
                }}
             />
             {name && (
-               <button onClick={() => setName('')} style={{ background: '#ccc', border: 'none', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, marginLeft: '8px' }}>
-                 <X size={12} color="#fff" strokeWidth={3} />
+               <button onClick={() => setName('')} style={{ background: '#475569', border: 'none', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, marginLeft: '8px' }}>
+                 <X size={12} color="#f8fafc" strokeWidth={3} />
                </button>
             )}
           </div>
 
           <label style={labelStyle}>Address</label>
-          <div style={{ padding: '0.5rem 0 1rem', borderBottom: '1px solid #eaeaea', fontSize: '1rem', color: '#333', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div style={{ padding: '0.5rem 0 1rem', borderBottom: '1px solid #334155', fontSize: '1rem', color: '#f8fafc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {fullAddress}
           </div>
 
@@ -162,8 +162,8 @@ export default function AddSavedPlace() {
                onChange={(e) => setDetails(e.target.value)}
             />
             {details && (
-               <button onClick={() => setDetails('')} style={{ background: '#ccc', border: 'none', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, marginLeft: '8px' }}>
-                 <X size={12} color="#fff" strokeWidth={3} />
+               <button onClick={() => setDetails('')} style={{ background: '#475569', border: 'none', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, marginLeft: '8px' }}>
+                 <X size={12} color="#f8fafc" strokeWidth={3} />
                </button>
             )}
           </div>
@@ -179,8 +179,8 @@ export default function AddSavedPlace() {
                    onChange={(e) => setNote(e.target.value)}
                 />
                 {note && (
-                   <button onClick={() => setNote('')} style={{ background: '#ccc', border: 'none', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, marginLeft: '8px' }}>
-                     <X size={12} color="#fff" strokeWidth={3} />
+                   <button onClick={() => setNote('')} style={{ background: '#475569', border: 'none', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, marginLeft: '8px' }}>
+                     <X size={12} color="#f8fafc" strokeWidth={3} />
                    </button>
                 )}
               </div>
@@ -190,7 +190,7 @@ export default function AddSavedPlace() {
        </div>
 
        {/* ACTION BUTTON */}
-       <div style={{ padding: '1.5rem', paddingBottom: '2.5rem', background: '#fff', position: 'sticky', bottom: 0, marginTop: 'auto' }}>
+       <div style={{ padding: '1.5rem', paddingBottom: '2.5rem', background: '#0f172a', position: 'sticky', bottom: 0, marginTop: 'auto' }}>
            <button 
               className="fr-submit-btn" 
               onClick={handleSave}

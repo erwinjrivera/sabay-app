@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -12,15 +12,19 @@ import {
   Plus,
   Minus,
   Check,
-  X
+  X,
+  Camera,
+  Loader2,
+  Trash2
 } from 'lucide-react';
 
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { updateProfile, deleteUser } from 'firebase/auth';
 import { db } from '../firebase';
 
 export default function Profile() {
   const navigate = useNavigate();
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, setUserPhotoURL } = useAuth();
   
   // React State mapping directly to the new Inspiration Data Schema
   const [fullName, setFullName] = useState("");
@@ -35,6 +39,11 @@ export default function Profile() {
   const [imgError, setImgError] = useState(false);
   const [prompt, setPrompt] = useState(null);
   const [initialState, setInitialState] = useState({});
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const fileInputRef = useRef(null);
 
   const getInitials = (nameStr) => {
     if (!nameStr) return '';
@@ -92,6 +101,116 @@ export default function Profile() {
     }
   };
 
+  const triggerDeleteConfirm = () => {
+    setPrompt({ message: "Are you sure you want to permanently delete your account? This action cannot be undone.", type: "confirmDeleteAccount" });
+  };
+
+  const executeDeleteAccount = async () => {
+    try {
+      setIsDeleting(true);
+      // Mask sensitive fields in Firestore to avoid null-related errors for historical rides
+      await setDoc(doc(db, 'users', currentUser.uid), { 
+        phoneNumber: '*******', 
+        plateNumber: '*******' 
+      }, { merge: true });
+      
+      await deleteUser(currentUser);
+      await logout();
+      navigate('/login');
+    } catch (err) {
+      console.error("Failed to delete account", err);
+      setIsDeleting(false);
+      if (err.code === 'auth/requires-recent-login') {
+        setPrompt({ message: "For security reasons, please sign out and sign back in before deleting your account.", type: "error" });
+      } else {
+        setPrompt({ message: "Failed to delete account. Please try again.", type: "error" });
+      }
+    }
+  };
+
+  // Compress image and return as base64 data URL
+  const compressImageToDataURL = (file, maxWidth = 256, quality = 0.7) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let w = img.width;
+          let h = img.height;
+          if (w > maxWidth) {
+            h = (maxWidth / w) * h;
+            w = maxWidth;
+          }
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          const dataURL = canvas.toDataURL('image/jpeg', quality);
+          resolve(dataURL);
+        };
+        img.onerror = () => reject(new Error('Failed to load image'));
+        img.src = e.target.result;
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handlePhotoSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setPrompt({ message: 'Please select a valid image file.', type: 'error' });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setPrompt({ message: 'Image must be under 5MB.', type: 'error' });
+      return;
+    }
+
+    setPhotoFile(file);
+    const previewUrl = URL.createObjectURL(file);
+    setPhotoPreview(previewUrl);
+    setImgError(false);
+  };
+
+  const handlePhotoUpload = async () => {
+    if (!photoFile || !currentUser) return;
+    setIsUploadingPhoto(true);
+    try {
+      // Compress to small base64 data URL (~20-50KB)
+      const dataURL = await compressImageToDataURL(photoFile);
+
+      // Store in Firestore only (data URLs exceed Auth's 2048-char photoURL limit)
+      await setDoc(doc(db, 'users', currentUser.uid), { photoURL: dataURL }, { merge: true });
+
+      // Update local state so avatar refreshes immediately
+      setInitialState(prev => ({ ...prev, photoURL: dataURL }));
+      // Sync to AuthContext so other pages (Home, etc.) see the new photo
+      setUserPhotoURL(dataURL);
+      setPhotoPreview(null);
+      setPhotoFile(null);
+      setImgError(false);
+      setPrompt({ message: 'Profile photo updated!', type: 'success' });
+    } catch (err) {
+      console.error('Photo upload error:', err);
+      setPrompt({ message: 'Failed to save photo. Please try again.', type: 'error' });
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
+  const cancelPhotoPreview = () => {
+    setPhotoPreview(null);
+    setPhotoFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleSave = async () => {
     if (!currentUser) return;
     
@@ -133,10 +252,13 @@ export default function Profile() {
         carColor,
         plateNumber,
         seats,
+        onboardingComplete: true,
         updatedAt: new Date().toISOString()
       };
       await setDoc(doc(db, 'users', currentUser.uid), payload, { merge: true });
-      setInitialState(payload); // Update reference snapshot point
+      // Sync Auth displayName so ride creation uses the latest name
+      try { await updateProfile(currentUser, { displayName: fullName }); } catch (e) {}
+      setInitialState(prev => ({ ...prev, ...payload })); // Preserve photoURL from previous state
       setPrompt({ message: "Profile successfully saved!", type: "success" });
     } catch (err) {
       console.error("Failed to save profile", err);
@@ -149,10 +271,10 @@ export default function Profile() {
   if (!currentUser) return null;
 
   return (
-    <div style={{ height: '100vh', width: '100vw', background: '#fff', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100vh', width: '100vw', background: '#0f172a', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
       
       {/* HEADER */}
-      <div style={{ background: '#3c3f4a', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
+      <div style={{ background: '#161a1e', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, boxShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
                <ArrowLeft size={24} color="#fff" />
@@ -160,45 +282,107 @@ export default function Profile() {
             <span style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 600 }}>Profile</span>
          </div>
          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <button onClick={triggerLogoutConfirm} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.3s' }}>
-               <LogOut size={16} color="#fff" />
-            </button>
+             <button onClick={handleSave} disabled={isSaving} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', border: 'none', cursor: isSaving ? 'not-allowed' : 'pointer', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.3s', opacity: isSaving ? 0.6 : 1 }}>
+                <Save size={16} color="#fff" />
+             </button>
          </div>
       </div>
 
-      {/* TOP USER RATING CARD (Retained for visual continuity of profile layout) */}
-      <div style={{ display: 'flex', alignItems: 'center', padding: '24px 20px', borderBottom: '1px solid #f1f5f9' }}>
-          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f1f5f9', marginRight: '16px', overflow: 'hidden', flexShrink: 0 }}>
-             {currentUser.photoURL && !imgError ? (
-               <img 
-                 src={currentUser.photoURL} 
-                 alt="Avatar" 
-                 style={{width: '100%', height: '100%', objectFit: 'cover'}} 
-                 referrerPolicy="no-referrer"
-                 onError={() => setImgError(true)}
-               />
-             ) : (
-               <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize: '1.4rem', fontWeight: 700, color: '#94a3b8'}}>
-                  {getInitials(fullName || currentUser.displayName) || <User color="#94a3b8" />}
-               </div>
-             )}
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handlePhotoSelect}
+      />
+
+      {/* TOP USER RATING CARD */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '24px 20px', borderBottom: '1px solid #1e293b' }}>
+          {/* Avatar with camera overlay */}
+          <div style={{ position: 'relative', width: 64, height: 64, marginRight: '16px', flexShrink: 0 }}>
+             <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#1e293b', overflow: 'hidden' }}>
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Preview" style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                ) : (initialState.photoURL || currentUser.photoURL) && !imgError ? (
+                  <img 
+                    src={initialState.photoURL || currentUser.photoURL} 
+                    alt="Avatar" 
+                    style={{width: '100%', height: '100%', objectFit: 'cover'}} 
+                    referrerPolicy="no-referrer"
+                    onError={() => setImgError(true)}
+                  />
+                ) : (
+                  <div style={{width:'100%', height:'100%', display:'flex', alignItems:'center', justifyContent:'center', fontSize: '1.4rem', fontWeight: 700, color: '#94a3b8'}}>
+                     {getInitials(fullName || currentUser.displayName) || <User color="#94a3b8" />}
+                  </div>
+                )}
+             </div>
+             {/* Camera button overlay */}
+             <button
+               onClick={() => fileInputRef.current?.click()}
+               style={{
+                 position: 'absolute', bottom: -2, right: -2,
+                 width: 26, height: 26, borderRadius: '50%',
+                 background: '#00b0f0', border: '2px solid #fff',
+                 display: 'flex', alignItems: 'center', justifyContent: 'center',
+                 cursor: 'pointer', padding: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+               }}
+             >
+               <Camera size={13} color="#fff" strokeWidth={2.5} />
+             </button>
           </div>
-         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 700, color: '#1e293b' }}>
+
+         <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', flex: 1, minWidth: 0 }}>
+            <h2 style={{ margin: '0 0 4px', fontSize: '1.2rem', fontWeight: 700, color: '#f8fafc' }}>
                {fullName || currentUser.displayName || 'Gabriel Rivera'}
             </h2>
-            <span style={{ fontSize: '0.90rem', color: '#64748b', marginBottom: '6px' }}>
+            <span style={{ fontSize: '0.90rem', color: '#94a3b8', marginBottom: '6px' }}>
                {currentUser.email}
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
                {[1, 2, 3, 4, 5].map(starNum => {
                    const ratingVal = parseFloat(initialState.rating) || 0;
                    const isFilled = starNum <= Math.round(ratingVal);
-                   return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#e2e8f0"} color={isFilled ? "#ffb800" : "#e2e8f0"} />;
+                   return <Star key={starNum} size={14} fill={isFilled ? "#ffb800" : "#334155"} color={isFilled ? "#ffb800" : "#334155"} />;
                })}
-               <span style={{ marginLeft: '8px', fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>{(parseFloat(initialState.rating) || 0).toFixed(1)}</span>
-               <span style={{ marginLeft: '4px', fontSize: '0.85rem', color: '#94a3b8' }}>({initialState.completedRides || 0})</span>
+               <span style={{ marginLeft: '8px', fontSize: '0.85rem', fontWeight: 700, color: '#f8fafc' }}>{(parseFloat(initialState.rating) || 0).toFixed(1)}</span>
+               <span style={{ marginLeft: '4px', fontSize: '0.85rem', color: '#64748b' }}>({initialState.completedRides || 0})</span>
             </div>
+
+            {/* Photo action buttons (only show when a photo is previewed) */}
+            {photoPreview && (
+              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+                <button
+                  onClick={handlePhotoUpload}
+                  disabled={isUploadingPhoto}
+                  style={{
+                    padding: '6px 14px', borderRadius: '6px', border: 'none',
+                    background: '#00b0f0', color: '#fff', fontSize: '0.8rem', fontWeight: 700,
+                    cursor: isUploadingPhoto ? 'not-allowed' : 'pointer',
+                    opacity: isUploadingPhoto ? 0.7 : 1,
+                    display: 'flex', alignItems: 'center', gap: '5px'
+                  }}
+                >
+                  {isUploadingPhoto ? (
+                    <><Loader2 size={13} style={{ animation: 'spin 1.2s linear infinite' }} /> Uploading...</>
+                  ) : (
+                    <><Check size={13} strokeWidth={3} /> Save Photo</>
+                  )}
+                </button>
+                <button
+                  onClick={cancelPhotoPreview}
+                  disabled={isUploadingPhoto}
+                  style={{
+                    padding: '6px 14px', borderRadius: '6px', border: 'none',
+                    background: '#334155', color: '#cbd5e1', fontSize: '0.8rem', fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
          </div>
       </div>
 
@@ -210,10 +394,10 @@ export default function Profile() {
             
             {/* Full Name */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-               <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>Full Name</label>
+               <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8' }}>Full Name</label>
                <div className="input-wrapper" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                   <div style={{ position: 'absolute', left: '14px', pointerEvents: 'none' }}>
-                     <User size={18} color="#94a3b8" />
+                     <User size={18} color="#64748b" />
                   </div>
                   <input 
                      type="text" 
@@ -223,22 +407,22 @@ export default function Profile() {
                      maxLength={30}
                      style={{
                         width: '100%', padding: '14px 14px 14px 44px', borderRadius: '10px',
-                        border: '1px solid #cbd5e1', fontSize: '0.95rem', color: '#1e293b',
-                        outline: 'none', background: '#fff', fontFamily: 'inherit',
+                        border: '1px solid #334155', fontSize: '0.95rem', color: '#f8fafc',
+                        outline: 'none', background: '#1e293b', fontFamily: 'inherit',
                         transition: 'border-color 0.2s'
                      }}
                      onFocus={(e) => e.target.style.borderColor = '#00b0f0'}
-                     onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
+                     onBlur={(e) => e.target.style.borderColor = '#334155'}
                   />
                </div>
             </div>
 
             {/* Phone Number */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-               <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>Phone Number</label>
+               <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8' }}>Phone Number</label>
                <div className="input-wrapper" style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                   <div style={{ position: 'absolute', left: '14px', pointerEvents: 'none' }}>
-                     <Phone size={18} color="#94a3b8" />
+                     <Phone size={18} color="#64748b" />
                   </div>
                   <input 
                      type="tel" 
@@ -248,12 +432,12 @@ export default function Profile() {
                      maxLength={13}
                      style={{
                         width: '100%', padding: '14px 14px 14px 44px', borderRadius: '10px',
-                        border: '1px solid #cbd5e1', fontSize: '0.95rem', color: '#1e293b',
-                        outline: 'none', background: '#fff', fontFamily: 'inherit',
+                        border: '1px solid #334155', fontSize: '0.95rem', color: '#f8fafc',
+                        outline: 'none', background: '#1e293b', fontFamily: 'inherit',
                         transition: 'border-color 0.2s'
                      }}
                      onFocus={(e) => e.target.style.borderColor = '#00b0f0'}
-                     onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
+                     onBlur={(e) => e.target.style.borderColor = '#334155'}
                   />
                </div>
                <span style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: '1.4', marginTop: '2px' }}>
@@ -263,7 +447,7 @@ export default function Profile() {
 
             {/* About Me */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-               <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>About Me (Optional)</label>
+               <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8' }}>About Me (Optional)</label>
                <textarea 
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
@@ -271,26 +455,26 @@ export default function Profile() {
                   maxLength={150}
                   style={{ 
                      width: '100%', padding: '14px', borderRadius: '10px',
-                     border: '1px solid #cbd5e1', fontSize: '0.95rem', color: '#1e293b',
-                     outline: 'none', background: '#fff', fontFamily: 'inherit',
+                     border: '1px solid #334155', fontSize: '0.95rem', color: '#f8fafc',
+                     outline: 'none', background: '#1e293b', fontFamily: 'inherit',
                      resize: 'none', minHeight: '100px', lineHeight: '1.5',
                      transition: 'border-color 0.2s'
                   }}
                   onFocus={(e) => e.target.style.borderColor = '#00b0f0'}
-                  onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
+                  onBlur={(e) => e.target.style.borderColor = '#334155'}
                />
             </div>
 
          </div>
 
          {/* VISUAL SEPARATOR */}
-         <div style={{ height: '1px', background: '#f1f5f9', margin: '4px 0' }} />
+         <div style={{ height: '1px', background: '#1e293b', margin: '4px 0' }} />
 
          {/* CAR DETAILS SECTION */}
          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }}>Car Details (Optional)</h3>
+               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#f8fafc' }}>Car Details (Optional)</h3>
                <span style={{ fontSize: '0.80rem', color: '#64748b', lineHeight: '1.4' }}>
                   Add your vehicle details so passengers know what to look for when joining your ride.
                </span>
@@ -309,7 +493,7 @@ export default function Profile() {
             </div>
 
             {/* Retained Passengers Counter adapted to Light Theme block styling */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 14px', borderRadius: '10px', border: '1px solid #e2e8f0', background: '#fff', marginTop: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 14px', borderRadius: '10px', border: '1px solid #334155', background: '#1e293b', marginTop: '4px' }}>
                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <Users size={18} color="#94a3b8" />
                   <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>Passengers</span>
@@ -321,15 +505,15 @@ export default function Profile() {
                      disabled={(parseInt(seats) || 3) <= 1}
                      style={{ 
                         width: 32, height: 32, borderRadius: '6px', 
-                        background: (parseInt(seats) || 3) <= 1 ? '#e2e8f0' : '#cbd5e1', 
+                        background: (parseInt(seats) || 3) <= 1 ? '#1e293b' : '#334155', 
                         border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', 
                         cursor: (parseInt(seats) || 3) <= 1 ? 'not-allowed' : 'pointer',
                         transition: 'background 0.2s'
                      }}>
-                     <Minus size={16} color={(parseInt(seats) || 3) <= 1 ? '#fff' : '#475569'} />
+                     <Minus size={16} color={(parseInt(seats) || 3) <= 1 ? '#334155' : '#cbd5e1'} />
                   </button>
                   
-                  <span style={{ fontSize: '1.05rem', fontWeight: 500, color: '#1e293b', width: '20px', textAlign: 'center' }}>
+                  <span style={{ fontSize: '1.05rem', fontWeight: 500, color: '#f8fafc', width: '20px', textAlign: 'center' }}>
                      {parseInt(seats) || 3}
                   </span>
                   
@@ -337,12 +521,12 @@ export default function Profile() {
                      onClick={() => setSeats((Math.min(4, (parseInt(seats) || 3) + 1)).toString())}
                      style={{ 
                         width: 32, height: 32, borderRadius: '6px', 
-                        background: '#334155', border: 'none', display: 'flex', 
+                        background: '#475569', border: 'none', display: 'flex', 
                         alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                         transition: 'background 0.2s'
                      }}
-                     onMouseOver={(e) => e.currentTarget.style.background = '#0f172a'}
-                     onMouseOut={(e) => e.currentTarget.style.background = '#334155'}
+                     onMouseOver={(e) => e.currentTarget.style.background = '#64748b'}
+                     onMouseOut={(e) => e.currentTarget.style.background = '#475569'}
                   >
                      <Plus size={16} color="#fff" />
                   </button>
@@ -351,75 +535,123 @@ export default function Profile() {
 
          </div>
 
-         {/* BOTTOM SAVE ACTION */}
-         <div style={{ marginTop: '16px' }}>
+         {/* BOTTOM ACTIONS */}
+         <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
              <button 
-               onClick={handleSave}
-               disabled={isSaving}
-               style={{
-                  width: '100%',
-                  padding: '16px',
-                  background: '#00b0f0',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  cursor: isSaving ? 'not-allowed' : 'pointer',
-                  opacity: isSaving ? 0.7 : 1,
-                  boxShadow: '0 4px 12px rgba(0,176,240,0.2)',
-                  transition: 'background 0.3s, transform 0.1s'
-               }}
-               onMouseOver={(e) => { if(!isSaving) e.currentTarget.style.background = '#0099d1' }}
-               onMouseOut={(e) => { if(!isSaving) e.currentTarget.style.background = '#00b0f0' }}
-               onMouseDown={(e) => { if(!isSaving) e.currentTarget.style.transform = 'scale(0.98)' }}
-               onMouseUp={(e) => { if(!isSaving) e.currentTarget.style.transform = 'scale(1)' }}
-             >
-                {isSaving ? "Saving details..." : "Save Profile"}
-             </button>
+                 onClick={triggerLogoutConfirm}
+                 style={{
+                    width: '100%',
+                    padding: '16px',
+                    background: 'transparent',
+                    color: '#ef4444',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    cursor: 'pointer',
+                    transition: 'background 0.3s, transform 0.1s'
+                 }}
+                 onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
+                 onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                 <LogOut size={18} />
+                 Sign Out
+              </button>
+
+              <button 
+                 onClick={triggerDeleteConfirm}
+                 disabled={isDeleting}
+                 style={{
+                    width: '100%',
+                    padding: '16px',
+                    background: 'transparent',
+                    color: '#ef4444',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    cursor: isDeleting ? 'not-allowed' : 'pointer',
+                    transition: 'background 0.3s, transform 0.1s',
+                    opacity: isDeleting ? 0.7 : 1
+                 }}
+                 onMouseOver={(e) => { if(!isDeleting) e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'; }}
+                 onMouseOut={(e) => { if(!isDeleting) e.currentTarget.style.background = 'transparent'; }}
+               >
+                 {isDeleting ? <Loader2 size={18} style={{ animation: 'spin 1.2s linear infinite' }} /> : <Trash2 size={18} />}
+                 {isDeleting ? "Deleting..." : "Delete Account"}
+              </button>
+
+             <button 
+                onClick={handleSave}
+                disabled={isSaving}
+                style={{
+                   width: '100%',
+                   padding: '16px',
+                   background: '#00b0f0',
+                   color: '#fff',
+                   border: 'none',
+                   borderRadius: '8px',
+                   fontSize: '1rem',
+                   fontWeight: 700,
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   gap: '8px',
+                   cursor: isSaving ? 'not-allowed' : 'pointer',
+                   transition: 'background 0.3s, transform 0.1s',
+                   opacity: isSaving ? 0.7 : 1
+                }}
+              >
+                 {isSaving ? <Loader2 size={18} style={{ animation: 'spin 1.2s linear infinite' }} /> : <Save size={18} />}
+                 {isSaving ? "Saving..." : "Save Profile"}
+              </button>
          </div>
 
       </div>
 
       {/* CUSTOM PROMPT MODAL */}
       {prompt && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
-          <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#1e293b', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.5)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
             <style>{`@keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }`}</style>
             
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: prompt.type === 'success' ? '#dcfce7' : prompt.type === 'confirmLogout' ? '#e0f2fe' : '#fee2e2', color: prompt.type === 'success' ? '#16a34a' : prompt.type === 'confirmLogout' ? '#00b0f0' : '#ff2744', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-              {prompt.type === 'success' ? <Check size={24} strokeWidth={3} /> : prompt.type === 'confirmLogout' ? <LogOut size={24} strokeWidth={2} /> : <X size={24} strokeWidth={3} />}
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: prompt.type === 'success' ? 'rgba(22, 163, 74, 0.15)' : prompt.type === 'confirmLogout' ? 'rgba(0, 176, 240, 0.15)' : 'rgba(255, 39, 68, 0.15)', color: prompt.type === 'success' ? '#4ade80' : prompt.type === 'confirmLogout' ? '#00b0f0' : '#ff2744', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              {prompt.type === 'success' ? <Check size={24} strokeWidth={3} /> : prompt.type === 'confirmLogout' ? <LogOut size={24} strokeWidth={2} /> : prompt.type === 'confirmDeleteAccount' ? <Trash2 size={24} strokeWidth={2} /> : <X size={24} strokeWidth={3} />}
             </div>
             
-            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>
-               {prompt.type === 'success' ? "Success" : prompt.type === 'confirmLogout' ? "Sign Out" : "Error"}
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }}>
+               {prompt.type === 'success' ? "Success" : prompt.type === 'confirmLogout' ? "Sign Out" : prompt.type === 'confirmDeleteAccount' ? "Delete Account" : "Error"}
             </h3>
             
-            <p style={{ margin: '0 0 24px', color: '#555', fontSize: '0.95rem', lineHeight: 1.4 }}>{prompt.message}</p>
+            <p style={{ margin: '0 0 24px', color: '#cbd5e1', fontSize: '0.95rem', lineHeight: 1.4 }}>{prompt.message}</p>
             
-            {prompt.type === 'confirmLogout' ? (
+            {prompt.type === 'confirmLogout' || prompt.type === 'confirmDeleteAccount' ? (
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button 
                   onClick={() => setPrompt(null)}
-                  style={{ flex: 1, padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#111', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
+                  style={{ flex: 1, padding: '14px', background: '#334155', border: 'none', borderRadius: '8px', color: '#f8fafc', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
                 >
                   Cancel
                 </button>
                 <button 
-                  onClick={executeLogout}
+                  onClick={prompt.type === 'confirmDeleteAccount' ? executeDeleteAccount : executeLogout}
                   style={{ flex: 1, padding: '14px', background: '#ff2744', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
                 >
-                  Sign Out
+                  {prompt.type === 'confirmDeleteAccount' ? "Delete" : "Sign Out"}
                 </button>
               </div>
             ) : (
                 <button 
                   onClick={() => setPrompt(null)}
-                  style={{ width: '100%', padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#111', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
+                  style={{ width: '100%', padding: '14px', background: '#334155', border: 'none', borderRadius: '8px', color: '#f8fafc', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}
                 >
                   Okay
                 </button>
@@ -436,7 +668,7 @@ export default function Profile() {
 function LightInput({ label, placeholder, value, onChange, maxLength }) {
    return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-         <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>{label}</label>
+         <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#94a3b8' }}>{label}</label>
          <input 
             type="text"
             value={value}
@@ -445,12 +677,12 @@ function LightInput({ label, placeholder, value, onChange, maxLength }) {
             maxLength={maxLength}
             style={{
                width: '100%', padding: '14px', borderRadius: '10px',
-               border: '1px solid #cbd5e1', fontSize: '0.95rem', color: '#1e293b',
-               outline: 'none', background: '#fff', fontFamily: 'inherit',
+               border: '1px solid #334155', fontSize: '0.95rem', color: '#f8fafc',
+               outline: 'none', background: '#1e293b', fontFamily: 'inherit',
                transition: 'border-color 0.2s'
             }}
             onFocus={(e) => e.target.style.borderColor = '#00b0f0'}
-            onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
+            onBlur={(e) => e.target.style.borderColor = '#334155'}
          />
       </div>
    );

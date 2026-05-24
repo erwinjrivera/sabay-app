@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { ArrowLeft, User, List, Star, Navigation2, MapPin, MessageCircle, X, Check, Loader2, Play, Calendar, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, User, List, Star, Navigation2, MapPin, MessageCircle, X, Check, Loader2, Play, Calendar, Clock, ChevronDown, ChevronUp, Compass } from 'lucide-react';
+import 'leaflet-rotate';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, setDoc, increment, deleteField } from 'firebase/firestore';
@@ -103,6 +104,20 @@ const getMeetSpotIcon = (color = '#00b0f0') => new L.DivIcon({
 });
 
 
+function MapRotationHandler({ setMapBearing }) {
+  const map = useMap();
+  useEffect(() => {
+    const handleRotate = () => {
+      if (typeof map.getBearing === 'function') {
+         setMapBearing(map.getBearing());
+      }
+    };
+    map.on('rotate', handleRotate);
+    return () => map.off('rotate', handleRotate);
+  }, [map, setMapBearing]);
+  return null;
+}
+
 function AutoFollower({ currentLat, currentLon, isAutoFollowing, setIsAutoFollowing }) {
   const map = useMap();
   const isFirstRender = useRef(true);
@@ -111,9 +126,11 @@ function AutoFollower({ currentLat, currentLon, isAutoFollowing, setIsAutoFollow
     const handleInteract = () => setIsAutoFollowing(false);
     map.on('dragstart', handleInteract);
     map.on('zoomstart', handleInteract);
+    map.on('rotatestart', handleInteract);
     return () => {
       map.off('dragstart', handleInteract);
       map.off('zoomstart', handleInteract);
+      map.off('rotatestart', handleInteract);
     };
   }, [map, setIsAutoFollowing]);
 
@@ -151,6 +168,8 @@ export default function ActiveRide() {
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [showFinishCarpoolPrompt, setShowFinishCarpoolPrompt] = useState(false);
   const [isAutoFollowing, setIsAutoFollowing] = useState(true);
+  const [mapBearing, setMapBearing] = useState(0);
+  const [mapRef, setMapRef] = useState(null);
   const finishCarpoolPromptFiredRef = useRef(false);
   const geometryCache = useRef({});
 
@@ -521,6 +540,7 @@ export default function ActiveRide() {
               const result = {
                  id: req.id,
                  userId: req.userId,
+                 rawRequest: req,
                  name: req.userName || 'Passenger',
                  time: req.time ? dayjs(req.time).format('h:mma') : 'Any time',
                  rating: userRating ? parseFloat(userRating).toFixed(1) : (req.userRating || '0.0'),
@@ -659,8 +679,12 @@ export default function ActiveRide() {
         center={[driverFrom.lat, driverFrom.lon]} 
         zoom={14} 
         zoomControl={false}
+        rotate={true}
+        touchRotate={true}
         style={{ height: '100%', width: '100%' }}
+        ref={setMapRef}
       >
+        <MapRotationHandler setMapBearing={setMapBearing} />
         <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
         
         {driverRoute.length > 0 && (
@@ -738,14 +762,28 @@ export default function ActiveRide() {
         <AutoFollower currentLat={currentLat} currentLon={currentLon} isAutoFollowing={isAutoFollowing} setIsAutoFollowing={setIsAutoFollowing} />
       </MapContainer>
 
-      {/* Recenter Button */}
+      {/* Reset Orientation Button */}
+      {Math.abs(mapBearing) > 0.1 && (
+        <button 
+          onClick={() => {
+            if (mapRef && typeof mapRef.setBearing === 'function') {
+               mapRef.setBearing(0);
+               setMapBearing(0);
+            }
+          }}
+          style={{ position: 'absolute', bottom: '280px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000, animation: 'scaleIn 0.3s ease-out' }}
+        >
+           <Compass size={20} color="#555" />
+        </button>
+      )}
+
+      {/* Re-center Map Button */}
       {!isAutoFollowing && (
         <button 
           onClick={() => setIsAutoFollowing(true)}
-          style={{ position: 'absolute', bottom: '230px', left: '20px', background: '#fff', border: '1px solid rgba(0,0,0,0.1)', borderRadius: '24px', padding: '11px 18px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 1000, fontWeight: 600, color: '#00b0f0', fontSize: '0.9rem', gap: '8px' }}
+          style={{ position: 'absolute', bottom: '230px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000, animation: 'scaleIn 0.3s ease-out' }}
         >
-           <Navigation2 size={18} color="#00b0f0" />
-           Re-center
+           <Navigation2 size={20} color="#555" />
         </button>
       )}
 
@@ -782,7 +820,7 @@ export default function ActiveRide() {
                    );
                 })}
               </div>
-               <button onClick={() => { setDrawerMode('ride'); setIsDrawerExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: 'pointer', transition: 'background 0.3s' }}>
+               <button disabled={isFetchingMatches} onClick={() => { setDrawerMode('ride'); setIsDrawerExpanded(true); }} style={{ background: 'rgba(255,255,255,0.2)', height: 32, width: 32, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: '#fff', cursor: isFetchingMatches ? 'not-allowed' : 'pointer', transition: 'background 0.3s', opacity: isFetchingMatches ? 0.5 : 1, pointerEvents: isFetchingMatches ? 'none' : 'auto' }}>
                   <Play size={16} fill="#fff" style={{ marginLeft: 2 }} />
                </button>
             </div>
@@ -837,7 +875,7 @@ export default function ActiveRide() {
         onScroll={handleScroll}
         style={{ 
           position: 'absolute', 
-          bottom: '36px', 
+          bottom: '48px', 
           width: '100%', 
           display: 'flex', 
           overflowX: 'auto', 
@@ -862,12 +900,22 @@ export default function ActiveRide() {
              <p style={{ margin: 0, color: '#888', fontWeight: 600 }}>No active passengers.</p>
           </div>
         ) : (
-          matches.map((match) => {
+          matches.map((match, index) => {
             const phase = passengerStates[match.id] || 0;
             
             return (
               <div 
                 key={match.id}
+                onClick={() => {
+                   if (activePassengerId !== match.id) {
+                      setActivePassengerId(match.id);
+                      if (carouselRef.current) {
+                          carouselRef.current.scrollTo({ left: index * (window.innerWidth * 0.85), behavior: 'smooth' });
+                      }
+                   }
+                   setDrawerMode('passenger');
+                   setIsDrawerExpanded(prev => activePassengerId === match.id ? !prev : true);
+                }}
                 style={{ 
                   minWidth: '85vw', 
                   maxWidth: '85vw',
@@ -878,7 +926,8 @@ export default function ActiveRide() {
                   scrollSnapAlign: 'center',
                   display: 'flex',
                   flexDirection: 'column',
-                  overflow: 'hidden'
+                  overflow: 'hidden',
+                  cursor: 'pointer'
                 }}
               >
                 {/* Top Info Row */}
@@ -922,7 +971,7 @@ export default function ActiveRide() {
                 </div>
 
                 {/* Bottom Button Row - Matching OfferMatches layout but with Slider integrated */}
-                <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto', background: '#fcfcfc' }}>
+                <div style={{ display: 'flex', borderTop: '1px solid #f0f0f0', marginTop: 'auto', background: '#fcfcfc' }} onClick={(e) => e.stopPropagation()}>
                    <button 
                      onClick={() => handleMessageContact(match.userId)}
                      style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
@@ -998,8 +1047,8 @@ export default function ActiveRide() {
           boxSizing: 'border-box'
         }}
       >
-        <div onClick={() => { setDrawerMode('passenger'); setIsDrawerExpanded(!isDrawerExpanded); }} style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
-           <ChevronUp size={28} color="#888" style={{ position: 'absolute', top: '2px', left: '50%', transform: 'translateX(-50%)', opacity: isDrawerExpanded ? 0 : 1, transition: 'opacity 0.2s' }} />
+        <div onClick={() => { if(!isFetchingMatches) { setDrawerMode('passenger'); setIsDrawerExpanded(!isDrawerExpanded); } }} style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: isFetchingMatches ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+           <ChevronUp size={28} color="#888" style={{ position: 'absolute', top: '2px', left: '50%', transform: 'translateX(-50%)', opacity: isDrawerExpanded ? 0 : (isFetchingMatches ? 0.3 : 1), transition: 'opacity 0.2s' }} />
            <div style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center', opacity: isDrawerExpanded ? 1 : 0, transition: 'opacity 0.2s', cursor: 'pointer' }}>
              <X size={24} color="#888" strokeWidth={2.5} />
            </div>
@@ -1214,17 +1263,17 @@ export default function ActiveRide() {
 
       {/* CUSTOM FINISH CARPOOL PROMPT MODAL */}
       {showFinishCarpoolPrompt && (
-        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.5)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
-          <div style={{ background: '#fff', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#e0f6ff', color: '#00b0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#1e293b', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.4)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(0, 176, 240, 0.15)', color: '#00b0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
               <Check size={24} strokeWidth={3} />
             </div>
-            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#111' }}>All Passengers Dropped Off!</h3>
-            <p style={{ margin: '0 0 24px', color: '#666', fontSize: '0.95rem', lineHeight: 1.4 }}>You have successfully completed all passenger routes. Would you like to finish this carpool session now?</p>
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#fff' }}>All Passengers Dropped Off!</h3>
+            <p style={{ margin: '0 0 24px', color: '#cbd5e1', fontSize: '0.95rem', lineHeight: 1.4 }}>You have successfully completed all passenger routes. Would you like to finish this carpool session now?</p>
             <div style={{ display: 'flex', gap: '12px' }}>
               <button 
                 onClick={() => setShowFinishCarpoolPrompt(false)} 
-                style={{ flex: 1, padding: '14px', background: '#f5f5f5', border: 'none', borderRadius: '8px', color: '#444', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
+                style={{ flex: 1, padding: '14px', background: '#334155', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
                 Not Yet
               </button>
               <button 
@@ -1247,12 +1296,12 @@ export default function ActiveRide() {
       ></div>
       
       <div 
-        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#fff', borderTopLeftRadius: '8px', borderTopRightRadius: '8px', boxShadow: '0 -4px 20px rgba(0,0,0,0.15)', padding: '16px 24px 32px 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
+        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#282d32', borderTopLeftRadius: '16px', borderTopRightRadius: '16px', boxShadow: '0 -4px 20px rgba(0,0,0,0.5)', padding: '16px 24px 32px 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
       >
         <div onClick={() => setShowRatingModal(false)} style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
-           <div style={{ width: '48px', height: '6px', background: '#ccc', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: showRatingModal ? 0 : 1, transition: 'opacity 0.2s' }}></div>
+           <div style={{ width: '48px', height: '6px', background: '#555', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: showRatingModal ? 0 : 1, transition: 'opacity 0.2s' }}></div>
            <div style={{ position: 'absolute', top: '20px', right: '16px', display: 'flex', alignItems: 'center' }}>
-             <X size={24} color="#555" strokeWidth={2.5} />
+             <X size={24} color="#ccc" strokeWidth={2.5} />
            </div>
         </div>
 
@@ -1263,7 +1312,7 @@ export default function ActiveRide() {
                alt="" 
                style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', marginBottom: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} 
              />
-             <h3 style={{ margin: '0 0 24px', fontSize: '1.4rem', fontWeight: 800, color: '#111', textAlign: 'center' }}>
+             <h3 style={{ margin: '0 0 24px', fontSize: '1.4rem', fontWeight: 800, color: '#fff', textAlign: 'center' }}>
                How was your carpool with {ratingPassenger.name.split(' ')[0]}?
              </h3>
              
@@ -1272,8 +1321,8 @@ export default function ActiveRide() {
                   <Star 
                     key={star} 
                     size={40} 
-                    fill={star <= tempRating ? "#ffb800" : "#eaeaea"} 
-                    color={star <= tempRating ? "#ffb800" : "#eaeaea"} 
+                    fill={star <= tempRating ? "#ffb800" : "#444"} 
+                    color={star <= tempRating ? "#ffb800" : "#444"} 
                     style={{ cursor: 'pointer', transition: 'all 0.2s' }}
                     onClick={() => setTempRating(star)}
                   />
