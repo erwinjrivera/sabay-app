@@ -16,6 +16,7 @@ import PassengerTracking from './pages/PassengerTracking';
 import Profile from './pages/Profile';
 import TermsOfUse from './pages/TermsOfUse';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import AdminDashboard from './pages/AdminDashboard';
 import NetworkWrapper from './components/NetworkWrapper';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -29,6 +30,25 @@ function ProtectedRoute({ children }) {
   
   if (!profileReady) {
     return <Navigate to="/onboarding" replace />;
+  }
+  
+  return children;
+}
+
+// Gate: requires auth + completed onboarding + isAdmin === true
+function AdminRoute({ children }) {
+  const { currentUser, profileReady, isAdmin } = useAuth();
+  
+  if (!currentUser || currentUser.emailVerified === false) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  if (!profileReady) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  if (!isAdmin) {
+    return <Navigate to="/" replace />;
   }
   
   return children;
@@ -56,6 +76,9 @@ function AppRoutes() {
       <Route path="/passenger-tracking" element={<ProtectedRoute><PassengerTracking /></ProtectedRoute>} />
       <Route path="/my-rides" element={<ProtectedRoute><MyRides /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+      
+      {/* Admin Route */}
+      <Route path="/admin" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
     </Routes>
   );
 }

@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 
 export default function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
 
   return (
     <>
@@ -20,6 +21,12 @@ export default function Sidebar({ isOpen, onClose }) {
           <div className="sidebar-item" onClick={() => { navigate('/find'); onClose(); }}><Search size={20} color="#00b0f0" /> Find a ride</div>
           <div className="sidebar-item" onClick={() => { navigate('/offer'); onClose(); }}><Car size={20} color="#ffb400" /> Offer a ride</div>
           <div className="sidebar-item" onClick={() => { navigate('/my-rides'); onClose(); }}><ClipboardList size={20} color="#9c27b0" /> My Rides</div>
+          
+          {isAdmin && (
+             <div className="sidebar-item" onClick={() => { navigate('/admin'); onClose(); }} style={{ marginTop: '16px', borderTop: '1px solid #333', paddingTop: '16px' }}>
+                <Settings size={20} color="#00ffcc" /> Admin Panel
+             </div>
+          )}
         </div>
         <div className="sidebar-item settings"><Settings size={20} color="#555" /> Settings</div>
       </div>

@@ -11,6 +11,7 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [profileReady, setProfileReady] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [userPhotoURL, setUserPhotoURL] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -33,6 +34,11 @@ export const AuthProvider = ({ children }) => {
              setUserPhotoURL(user.photoURL);
           } catch(e) {}
         }
+        if (data.isAdmin === true) {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(false);
+        }
         if (data.onboardingComplete === true) {
           setProfileReady(true);
           return true;
@@ -40,6 +46,7 @@ export const AuthProvider = ({ children }) => {
       }
       // If doc doesn't exist or onboarding isn't complete:
       setProfileReady(false);
+      setIsAdmin(false);
       return false;
     } catch (err) {
       console.error("Error checking onboarding status:", err);
@@ -170,6 +177,7 @@ export const AuthProvider = ({ children }) => {
         cleanupStaleRides(user);
       } else {
         setProfileReady(false);
+        setIsAdmin(false);
       }
       setLoading(false);
     });
@@ -208,7 +216,7 @@ export const AuthProvider = ({ children }) => {
     return sendPasswordResetEmail(auth, email);
   };
 
-  const value = { currentUser, profileReady, userPhotoURL, setUserPhotoURL, loginGoogle, loginEmail, signupEmail, logout, resetPassword, refreshProfile, cleanupStaleRides };
+  const value = { currentUser, profileReady, isAdmin, userPhotoURL, setUserPhotoURL, loginGoogle, loginEmail, signupEmail, logout, resetPassword, refreshProfile, cleanupStaleRides };
 
   return (
     <AuthContext.Provider value={value}>
