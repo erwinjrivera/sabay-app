@@ -226,7 +226,7 @@ export default function LocationDetails() {
        </div>
 
        {/* ACTION DRAWER */}
-       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(22, 26, 30, 0.7)', borderTop: '1px solid rgba(255, 255, 255, 0.15)', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', padding: '1.5rem', zIndex: 10, boxShadow: '0 -10px 40px rgba(0,0,0,0.5)', backdropFilter: 'blur(5px)' }}>
+       <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(22, 26, 30, 0.7)', borderTop: '1px solid rgba(255, 255, 255, 0.15)', borderTopLeftRadius: '24px', borderTopRightRadius: '24px', padding: '1.5rem 1.5rem calc(1.5rem + env(safe-area-inset-bottom)) 1.5rem', zIndex: 10, boxShadow: '0 -10px 40px rgba(0,0,0,0.5)', backdropFilter: 'blur(5px)' }}>
           {/* Details Circle Icon */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
              <div style={{ width: '60px', height: '60px', background: '#334155', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

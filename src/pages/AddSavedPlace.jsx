@@ -190,7 +190,7 @@ export default function AddSavedPlace() {
        </div>
 
        {/* ACTION BUTTON */}
-       <div style={{ padding: '1.5rem', paddingBottom: '2.5rem', background: '#0f172a', position: 'sticky', bottom: 0, marginTop: 'auto' }}>
+       <div style={{ padding: '1.5rem', paddingBottom: 'calc(2.5rem + env(safe-area-inset-bottom))', background: '#0f172a', position: 'sticky', bottom: 0, marginTop: 'auto' }}>
            <button 
               className="fr-submit-btn" 
               onClick={handleSave}

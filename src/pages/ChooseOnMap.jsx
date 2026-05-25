@@ -168,7 +168,7 @@ export default function ChooseOnMap() {
       </div>
 
       {/* BOTTOM ACTION DRAWER */}
-      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#fff', borderTopLeftRadius: '16px', borderTopRightRadius: '16px', padding: '1.5rem', zIndex: 100, boxShadow: '0 -4px 20px rgba(0,0,0,0.15)', textAlign: 'center' }}>
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: '#fff', borderTopLeftRadius: '16px', borderTopRightRadius: '16px', padding: '1.5rem 1.5rem calc(1.5rem + env(safe-area-inset-bottom)) 1.5rem', zIndex: 100, boxShadow: '0 -4px 20px rgba(0,0,0,0.15)', textAlign: 'center' }}>
           <h2 style={{ fontSize: '1.3rem', margin: '0 0 0.2rem', color: '#111', fontWeight: 700 }}>{addressData.title}</h2>
           <p style={{ fontSize: '0.9rem', color: '#777', margin: '0 0 1.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{addressData.sub}</p>
           

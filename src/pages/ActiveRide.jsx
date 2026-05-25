@@ -1037,9 +1037,9 @@ export default function ActiveRide() {
           borderTopLeftRadius: '8px',
           borderTopRightRadius: '8px',
           boxShadow: '0 -4px 15px rgba(0,0,0,0.5)',
-          padding: '16px 24px 16px 24px',
+          padding: '16px 24px calc(16px + env(safe-area-inset-bottom)) 24px',
           zIndex: 2000,
-          transform: isDrawerExpanded ? 'translateY(0)' : 'translateY(calc(100% - 34px))',
+          transform: isDrawerExpanded ? 'translateY(0)' : 'translateY(calc(100% - 34px - env(safe-area-inset-bottom)))',
           transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.3s',
           display: 'flex',
           flexDirection: 'column',
@@ -1296,7 +1296,7 @@ export default function ActiveRide() {
       ></div>
       
       <div 
-        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#282d32', borderTopLeftRadius: '16px', borderTopRightRadius: '16px', boxShadow: '0 -4px 20px rgba(0,0,0,0.5)', padding: '16px 24px 32px 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
+        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#282d32', borderTopLeftRadius: '16px', borderTopRightRadius: '16px', boxShadow: '0 -4px 20px rgba(0,0,0,0.5)', padding: '16px 24px calc(32px + env(safe-area-inset-bottom)) 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
       >
         <div onClick={() => setShowRatingModal(false)} style={{ width: '100%', height: '40px', position: 'absolute', top: 0, left: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
            <div style={{ width: '48px', height: '6px', background: '#555', borderRadius: '3px', position: 'absolute', left: '50%', transform: 'translateX(-50%)', opacity: showRatingModal ? 0 : 1, transition: 'opacity 0.2s' }}></div>

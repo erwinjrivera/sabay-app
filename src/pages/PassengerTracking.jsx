@@ -662,8 +662,8 @@ export default function PassengerTracking() {
           position: 'absolute', bottom: 0, left: 0, width: '100%',
           background: isBottomPanelExpanded ? 'rgba(40,45,50,0.98)' : 'rgba(40,45,50,0.9)', 
           borderTopLeftRadius: '8px', borderTopRightRadius: '8px',
-          boxShadow: '0 -4px 15px rgba(0,0,0,0.5)', padding: '16px 24px 16px 24px', zIndex: 2000,
-          transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 34px))',
+          boxShadow: '0 -4px 15px rgba(0,0,0,0.5)', padding: '16px 24px calc(16px + env(safe-area-inset-bottom)) 24px', zIndex: 2000,
+          transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 34px - env(safe-area-inset-bottom)))',
           transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.3s',
           display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box'
         }}
@@ -822,7 +822,7 @@ export default function PassengerTracking() {
       
       <div 
         onClick={(e) => e.stopPropagation()}
-        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#282d32', borderTopLeftRadius: '16px', borderTopRightRadius: '16px', boxShadow: showRatingModal ? '0 -4px 20px rgba(0,0,0,0.5)' : 'none', padding: '16px 24px 32px 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
+        style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', background: '#282d32', borderTopLeftRadius: '16px', borderTopRightRadius: '16px', boxShadow: showRatingModal ? '0 -4px 20px rgba(0,0,0,0.5)' : 'none', padding: '16px 24px calc(32px + env(safe-area-inset-bottom)) 24px', zIndex: 10001, transform: showRatingModal ? 'translateY(0)' : 'translateY(100%)', transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)', display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box' }}
       >
         <div onClick={() => {
            setShowRatingModal(false);
