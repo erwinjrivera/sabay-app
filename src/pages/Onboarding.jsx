@@ -103,7 +103,7 @@ export default function Onboarding() {
   const hasGooglePhoto = currentUser.photoURL && !imgError;
 
   return (
-    <div className="home-container" style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    <div className="home-container" style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <MapBackground />
 
       {/* Glass overlay */}
@@ -280,7 +280,7 @@ export default function Onboarding() {
       {/* Error/Success Prompt Modal */}
       {prompt && (
         <div style={{
-          position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh',
+          position: 'fixed', top: 0, left: 0, width: '100%', height: '100dvh',
           background: 'rgba(0,0,0,0.5)', zIndex: 9999,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: '0 24px', boxSizing: 'border-box'

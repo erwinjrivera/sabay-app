@@ -79,7 +79,7 @@ export default function Home() {
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1, background: 'rgba(15, 23, 42, 0.1)' }}></div>
 
       {/* TOP NAVBAR */}
-      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', zIndex: 100, background: 'linear-gradient(to bottom, rgba(15,23,42,0.8), rgba(15,23,42,0))' }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(16px + env(safe-area-inset-top)) 20px 16px 20px', zIndex: 100, background: 'linear-gradient(to bottom, rgba(15,23,42,0.8), rgba(15,23,42,0))' }}>
          <div style={{ width: 44 }}>
             {isAdmin && (
                <button onClick={() => setSidebarOpen(true)} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
@@ -181,7 +181,7 @@ export default function Home() {
 
       {/* VEHICLE DETAILS INCOMPLETE MODAL */}
       {vehiclePrompt && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100dvh', background: 'rgba(0,0,0,0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
           <div style={{ background: '#1e293b', width: '100%', maxWidth: '360px', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.4)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)', position: 'relative' }}>
             <style>{`@keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }`}</style>
 

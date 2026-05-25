@@ -271,10 +271,10 @@ export default function Profile() {
   if (!currentUser) return null;
 
   return (
-    <div style={{ height: '100vh', width: '100vw', background: '#0f172a', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100dvh', width: '100vw', background: '#0f172a', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
       
       {/* HEADER */}
-      <div style={{ background: '#161a1e', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, boxShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+      <div style={{ background: '#161a1e', padding: 'calc(16px + env(safe-area-inset-top)) 20px 16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, boxShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
                <ArrowLeft size={24} color="#fff" />
@@ -619,7 +619,7 @@ export default function Profile() {
 
       {/* CUSTOM PROMPT MODAL */}
       {prompt && (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100dvh', background: 'rgba(0,0,0,0.7)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
           <div style={{ background: '#1e293b', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.5)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
             <style>{`@keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }`}</style>
             

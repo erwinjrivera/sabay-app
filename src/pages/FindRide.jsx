@@ -387,12 +387,12 @@ export default function FindRide() {
     <ThemeProvider theme={theme}>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
 
-        <div className="find-ride-container" style={{ background: '#0f172a', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="find-ride-container" style={{ background: '#0f172a', minHeight: '100dvh', display: 'flex', flexDirection: 'column' }}>
           
           {/* Dark Header Strip (Matches OfferMatches.jsx style exactly) */}
           <div style={{ background: '#161a1e', zIndex: 10 }}>
             {/* Top Bar Navigation */}
-            <div style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '16px', color: '#fff' }}>
+            <div style={{ padding: 'calc(1rem + env(safe-area-inset-top)) 1rem 1rem 1rem', display: 'flex', alignItems: 'center', gap: '16px', color: '#fff' }}>
               <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
                 <ArrowLeft size={24} />
               </button>
@@ -828,7 +828,7 @@ export default function FindRide() {
 
           {/* CUSTOM ERROR PROMPT MODAL */}
           {errorMsg && (
-            <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', background: 'rgba(0,0,0,0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+            <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100dvh', background: 'rgba(0,0,0,0.75)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
               <div style={{ background: '#1e293b', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.5)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
                 <style>{`@keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }`}</style>
                 <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>

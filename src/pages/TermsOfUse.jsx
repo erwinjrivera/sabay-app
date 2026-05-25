@@ -6,10 +6,10 @@ export default function TermsOfUse() {
   const navigate = useNavigate();
 
   return (
-    <div style={{ height: '100vh', width: '100vw', background: '#0f172a', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100dvh', width: '100vw', background: '#0f172a', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
       
       {/* HEADER */}
-      <div style={{ background: '#161a1e', padding: '16px 20px', display: 'flex', alignItems: 'center', flexShrink: 0, boxShadow: '0 2px 4px rgba(0,0,0,0.3)', position: 'sticky', top: 0, zIndex: 10 }}>
+      <div style={{ background: '#161a1e', padding: 'calc(16px + env(safe-area-inset-top)) 20px 16px 20px', display: 'flex', alignItems: 'center', flexShrink: 0, boxShadow: '0 2px 4px rgba(0,0,0,0.3)', position: 'sticky', top: 0, zIndex: 10 }}>
          <button onClick={() => navigate(-1)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', marginRight: '16px' }}>
             <ArrowLeft size={24} color="#fff" />
          </button>

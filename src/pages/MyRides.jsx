@@ -383,12 +383,12 @@ export default function MyRides() {
   });
 
   return (
-    <div className="home-container" style={{ display: 'flex', flexDirection: 'column', background: '#0f172a', height: '100vh', overflow: 'hidden' }}>
+    <div className="home-container" style={{ display: 'flex', flexDirection: 'column', background: '#0f172a', height: '100dvh', overflow: 'hidden' }}>
       
       {/* Dark Header Strip */}
       <div style={{ background: '#1e293b', zIndex: 10 }}>
         {/* Top Bar Navigation */}
-        <div style={{ padding: '1.5rem 1rem 1rem', display: 'flex', alignItems: 'center', gap: '16px', color: '#f8fafc' }}>
+        <div style={{ padding: 'calc(1.5rem + env(safe-area-inset-top)) 1rem 1rem', display: 'flex', alignItems: 'center', gap: '16px', color: '#f8fafc' }}>
           <button onClick={() => navigate('/')} style={{ background: 'transparent', border: 'none', color: '#f8fafc', cursor: 'pointer', padding: 0 }}>
             <ArrowLeft size={24} />
           </button>

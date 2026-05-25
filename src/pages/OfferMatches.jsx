@@ -589,7 +589,7 @@ export default function OfferMatches() {
   };
 
   return (
-    <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
+    <div style={{ height: '100dvh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
       
       {/* BACKGROUND MAP */}
       {isLoadingMatches && (
@@ -685,7 +685,7 @@ export default function OfferMatches() {
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
         <div style={{ background: 'rgba(40,45,50,0.9)', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
           {/* Dark Navbar */}
-          <div style={{ padding: '1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', color: '#fff' }}>
+          <div style={{ padding: 'calc(1rem + env(safe-area-inset-top)) 1rem 1rem 1rem', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', color: '#fff' }}>
             <div style={{ display: 'flex', gap: '1rem' }}>
               <button onClick={() => navigate('/my-rides', { state: { initialTab: location.state?.fromTab || location.state?.initialTab || 'Pending' } })} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
                 <ArrowLeft size={24} />

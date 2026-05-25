@@ -380,7 +380,7 @@ export default function PassengerTracking() {
 
   if (isInitializing || !driverRide || !passengerState) {
      return (
-        <div style={{ height: '100vh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#eaeaea' }}>
+        <div style={{ height: '100dvh', width: '100vw', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#eaeaea' }}>
            <Loader2 size={40} color="#00b0f0" className="spin" />
            <style>{`.spin { animation: spin 1s linear infinite; } @keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
         </div>
@@ -419,7 +419,7 @@ export default function PassengerTracking() {
     const passName = passengerState?.name || passengerState?.userName || 'Passenger';
 
   return (
-    <div style={{ height: '100vh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
+    <div style={{ height: '100dvh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
       <style>{`@keyframes pulseGlow { 0% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(119,119,119,0); } 50% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 8px rgba(119,119,119,0.7); } 100% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(119,119,119,0); } }`}</style>
       
       <MapContainer 
@@ -504,7 +504,7 @@ export default function PassengerTracking() {
       {/* TOP HEADER */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
         <div style={{ background: 'rgba(40,45,50,0.95)', boxShadow: '0 2px 10px rgba(0,0,0,0.2)' }}>
-          <div style={{ padding: '1rem', display: 'flex', alignItems: 'center', color: '#fff' }}>
+          <div style={{ padding: 'calc(1rem + env(safe-area-inset-top)) 1rem 1rem 1rem', display: 'flex', alignItems: 'center', color: '#fff' }}>
             <button onClick={() => navigate('/my-rides', { state: { initialTab: location.state?.fromTab || location.state?.initialTab || 'Active' } })} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0, marginRight: '1rem' }}>
               <ArrowLeft size={24} />
             </button>

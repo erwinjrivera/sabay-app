@@ -126,7 +126,7 @@ export default function ChooseOnMap() {
   };
 
   return (
-    <div style={{ position: 'relative', height: '100vh', width: '100vw', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', height: '100dvh', width: '100vw', overflow: 'hidden' }}>
       {/* HEADER OVERLAY */}
       <div style={{ position: 'absolute', top: '1.5rem', left: '1.5rem', zIndex: 1000}}>
         <button 

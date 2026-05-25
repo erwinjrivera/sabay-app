@@ -152,11 +152,11 @@ export default function LocationDetails() {
   };
 
   return (
-    <div style={{ backgroundColor: '#0f172a', minHeight: '100vh', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ backgroundColor: '#0f172a', minHeight: '100dvh', position: 'relative', overflow: 'hidden' }}>
        {/* Background FULLSCREEN map */}
        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, background: '#0f172a' }}>
           {isFetchingMap ? (
-             <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+             <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <p style={{ color: '#94a3b8' }}>Scanning map coordinates...</p>
              </div>
           ) : coords.lat && coords.lon ? (
@@ -164,7 +164,7 @@ export default function LocationDetails() {
                center={[coords.lat, coords.lon]} 
                zoom={18} 
                zoomControl={false}
-               style={{ width: '100%', height: '100vh' }}
+               style={{ width: '100%', height: '100dvh' }}
              >
                <TileLayer
                  url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
