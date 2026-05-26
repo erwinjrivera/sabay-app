@@ -152,6 +152,8 @@ export default function ActiveRide() {
   const ride = location.state?.ride;
   
   const [driverRoute, setDriverRoute] = useState([]);
+  const [recalculatedRoute, setRecalculatedRoute] = useState(null);
+  const isRecalculatingRef = useRef(false);
   const [matches, setMatches] = useState([]);
   const [activePassengerId, setActivePassengerId] = useState(null);
   const [passengerStates, setPassengerStates] = useState({}); // id -> 0 (arrive), 1 (complete), 2 (completed)
@@ -328,6 +330,43 @@ export default function ActiveRide() {
     };
     fetchDriverRoute();
   }, [driverFrom.lon, driverFrom.lat, driverTo.lon, driverTo.lat]);
+
+  // Dynamic Route Deviation Recalculation
+  useEffect(() => {
+    if (!currentLocation || driverRoute.length === 0) return;
+    
+    const activeRoute = recalculatedRoute || driverRoute;
+    
+    // Find closest distance to the active route
+    let minDist = Infinity;
+    for (let i = 0; i < activeRoute.length; i++) {
+        const d = getDistanceKM(currentLocation.lat, currentLocation.lon, activeRoute[i][0], activeRoute[i][1]);
+        if (d < minDist) minDist = d;
+    }
+    
+    if (minDist > 0.075 && !isRecalculatingRef.current) {
+        // Trigger recalculation!
+        isRecalculatingRef.current = true;
+        const fetchNewRoute = async () => {
+            try {
+                const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${currentLocation.lon},${currentLocation.lat};${driverTo.lon},${driverTo.lat}?geometries=geojson&overview=full`);
+                const data = await res.json();
+                if (data.routes && data.routes.length > 0) {
+                    const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                    setRecalculatedRoute(coords);
+                }
+            } catch (err) {
+                console.error("OSRM Recalculation Error", err);
+            } finally {
+                // allow another recalculation later if they deviate again
+                setTimeout(() => {
+                    isRecalculatingRef.current = false;
+                }, 5000); 
+            }
+        };
+        fetchNewRoute();
+    }
+  }, [currentLocation, driverRoute, recalculatedRoute, driverTo]);
 
   useEffect(() => {
     if (driverRoute.length === 0 || !ride?.id) return;
@@ -689,7 +728,13 @@ export default function ActiveRide() {
         
         {driverRoute.length > 0 && (
           <>
-            <Polyline positions={driverRoute} pathOptions={{ color: '#555', weight: 5, opacity: 0.8 }} />
+            <Polyline 
+              positions={driverRoute} 
+              pathOptions={recalculatedRoute ? { color: '#94a3b8', weight: 4, opacity: 0.6, dashArray: '5, 10' } : { color: '#555', weight: 5, opacity: 0.8 }} 
+            />
+            {recalculatedRoute && (
+              <Polyline positions={recalculatedRoute} pathOptions={{ color: '#555', weight: 5, opacity: 0.8 }} />
+            )}
             <Marker position={[driverFrom.lat, driverFrom.lon]} icon={driverStartIcon} />
             <Marker position={[driverTo.lat, driverTo.lon]} icon={driverIcon} />
           </>
