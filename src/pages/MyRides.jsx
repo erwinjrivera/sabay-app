@@ -170,13 +170,12 @@ export default function MyRides() {
                  return 0;
              });
 
-             const eligibleReqs = allReqs.filter(r => 
-                 r.userId !== currentUser.uid && 
-                 r.from?.lat && r.to?.lat && 
-                 (r.status === 'open' || r.offeredByRideId === data.id || (data.requestedByPassengerIds || []).includes(r.id)) &&
-                 isValidGeographicProxy(data, r) &&
-                 isValidTemporalProxy(data, r, true)
-             );
+             const eligibleReqs = allReqs.filter(r => {
+                 if (r.userId === currentUser.uid || !r.from?.lat || !r.to?.lat) return false;
+                 const isLinked = r.offeredByRideId === data.id || (data.requestedByPassengerIds || []).includes(r.id);
+                 if (isLinked) return true;
+                 return r.status === 'open' && isValidGeographicProxy(data, r) && isValidTemporalProxy(data, r, true);
+             });
              
              let matchesFound = 0;
              if (data.from?.lat && data.to?.lat) {
@@ -201,13 +200,14 @@ export default function MyRides() {
                  }
              }
 
-             const eligibleOffers = allOffers.filter(r => 
-                 r.userId !== currentUser.uid && 
-                 r.from?.lat && r.to?.lat && 
-                 (!r.status || r.status !== 'completed' || data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(data.id)) &&
-                 isValidGeographicProxy(data, r) &&
-                 isValidTemporalProxy(data, r, false)
-             );
+             const eligibleOffers = allOffers.filter(r => {
+                 if (r.userId === currentUser.uid || !r.from?.lat || !r.to?.lat) return false;
+                 const isLinked = data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(data.id);
+                 if (isLinked) return true;
+                 return (!r.status || (r.status !== 'completed' && r.status !== 'cancelled' && r.status !== 'expired')) && 
+                        isValidGeographicProxy(data, r) && 
+                        isValidTemporalProxy(data, r, false);
+             });
              
              let matchesFound = 0;
              if (data.from?.lat && data.to?.lat) {
