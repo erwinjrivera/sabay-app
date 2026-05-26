@@ -120,7 +120,7 @@ export default function Onboarding() {
       }}>
 
         {/* Header */}
-        <div style={{ textAlign: 'center', paddingTop: '48px', marginBottom: '32px' }}>
+        <div style={{ textAlign: 'center', paddingTop: 'calc(48px + env(safe-area-inset-top))', marginBottom: '32px' }}>
           <h1 style={{ color: '#00b0f0', fontWeight: 800, fontSize: '2rem', margin: '0 0 4px' }}>Welcome!</h1>
           <p style={{ color: '#64748b', fontSize: '0.95rem', margin: 0, lineHeight: 1.4 }}>
             Let's set up your profile so others<br/>can recognize and contact you.
@@ -246,7 +246,7 @@ export default function Onboarding() {
         </div>
 
         {/* Submit */}
-        <div style={{ marginTop: '32px', paddingBottom: '48px' }}>
+        <div style={{ marginTop: '32px', paddingBottom: 'calc(48px + env(safe-area-inset-bottom))' }}>
           <button
             onClick={handleSubmit}
             disabled={isSaving}
