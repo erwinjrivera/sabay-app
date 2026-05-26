@@ -313,6 +313,8 @@ export default function ActiveRide() {
 
   const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
   const driverTo = ride?.to ? { lat: ride.to.lat, lon: ride.to.lon } : { lat: 14.5547, lon: 121.0244 };
+  const driverToLat = driverTo.lat;
+  const driverToLon = driverTo.lon;
   
   const rideTimeStr = ride?.time ? dayjs(ride.time).format('h:mma') : 'Time';
   const rideDateStr = ride?.date ? dayjs(ride.date).format('MMM. D') : 'Date';
@@ -349,7 +351,7 @@ export default function ActiveRide() {
         isRecalculatingRef.current = true;
         const fetchNewRoute = async () => {
             try {
-                const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${currentLocation.lon},${currentLocation.lat};${driverTo.lon},${driverTo.lat}?geometries=geojson&overview=full`);
+                const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${currentLocation.lon},${currentLocation.lat};${driverToLon},${driverToLat}?geometries=geojson&overview=full`);
                 const data = await res.json();
                 if (data.routes && data.routes.length > 0) {
                     const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
@@ -366,7 +368,7 @@ export default function ActiveRide() {
         };
         fetchNewRoute();
     }
-  }, [currentLocation, driverRoute, recalculatedRoute, driverTo]);
+  }, [currentLocation, driverRoute, recalculatedRoute, driverToLat, driverToLon]);
 
   useEffect(() => {
     if (driverRoute.length === 0 || !ride?.id) return;
