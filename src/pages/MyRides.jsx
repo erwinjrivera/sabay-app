@@ -127,8 +127,9 @@ export default function MyRides() {
     let allReqs = [];
     let offersReady = false;
     let reqsReady = false;
+    const profileCache = {};
 
-    const processRides = () => {
+    const processRides = async () => {
         if (!offersReady || !reqsReady) return;
         
         const myOffers = allOffers.filter(r => r.userId === currentUser.uid);
@@ -232,14 +233,7 @@ export default function MyRides() {
            return timeB - timeA; 
         });
 
-        setRides(mergedRides);
-        setLoading(false);
-
-        // Enrich passengers with Firestore photos where userProfilePic is missing
-        // Enrich passengers with latest Firestore profile data (photo + name)
         const enrichProfiles = async () => {
-            const profileCache = {};
-            let updated = false;
             const enriched = await Promise.all(mergedRides.map(async (ride) => {
                 if (!ride.passengers || ride.passengers.length === 0) return ride;
                 const enrichedPassengers = await Promise.all(ride.passengers.map(async (p) => {
@@ -249,14 +243,13 @@ export default function MyRides() {
                         const patches = {};
                         if (cached.photo) patches.userProfilePic = cached.photo;
                         if (cached.name) patches.userName = cached.name;
-                         if (cached.rating) patches.userRating = parseFloat(cached.rating).toFixed(1);
-                         patches.userReviews = cached.reviews || 0;
-                         if (cached.plateNumber) patches.userPlateNumber = cached.plateNumber;
-                         if (cached.carMake) patches.userCarMake = cached.carMake;
-                         if (cached.carModel) patches.userCarModel = cached.carModel;
-                         if (cached.carColor) patches.userCarColor = cached.carColor;
-                        if (Object.keys(patches).length > 0) { updated = true; return { ...p, ...patches }; }
-                        return p;
+                        if (cached.rating) patches.userRating = parseFloat(cached.rating).toFixed(1);
+                        patches.userReviews = cached.reviews || 0;
+                        if (cached.plateNumber) patches.userPlateNumber = cached.plateNumber;
+                        if (cached.carMake) patches.userCarMake = cached.carMake;
+                        if (cached.carModel) patches.userCarModel = cached.carModel;
+                        if (cached.carColor) patches.userCarColor = cached.carColor;
+                        return { ...p, ...patches };
                     }
                     try {
                         const uSnap = await getDoc(doc(db, 'users', p.userId));
@@ -272,16 +265,18 @@ export default function MyRides() {
                             if (uData.carMake) patches.userCarMake = uData.carMake;
                             if (uData.carModel) patches.userCarModel = uData.carModel;
                             if (uData.carColor) patches.userCarColor = uData.carColor;
-                            if (Object.keys(patches).length > 0) { updated = true; return { ...p, ...patches }; }
+                            return { ...p, ...patches };
                         } else { profileCache[p.userId] = { photo: '', name: '' }; }
                     } catch (e) { profileCache[p.userId] = { photo: '', name: '' }; }
                     return p;
                 }));
                 return { ...ride, passengers: enrichedPassengers };
             }));
-            if (updated) setRides(enriched);
+            return enriched;
         };
-        enrichProfiles();
+        const finalRides = await enrichProfiles();
+        setRides(finalRides);
+        setLoading(false);
     };
 
     setLoading(true);
