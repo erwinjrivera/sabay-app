@@ -495,9 +495,9 @@ export default function PassengerTracking() {
       {/* Recenter Button */}
       {(!isRideCompleted && !isRideCancelled) && (
         <button 
-          onClick={() => { setPanToCar(true); setTimeout(() => setPanToCar(false), 1000); }}           style={{ position: 'absolute', bottom: '184px', right: '20px', background: '#fff', border: 'none', borderRadius: '50%', width: '50px', height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 1000 }}
+          onClick={() => { setPanToCar(true); setTimeout(() => setPanToCar(false), 1000); }}           style={{ position: 'absolute', bottom: '200px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000 }}
         >
-           <CarFront size={22} color={activeColor} />
+           <CarFront size={20} color="#555" />
         </button>
       )}
 
@@ -557,7 +557,7 @@ export default function PassengerTracking() {
 
       {/* BOTTOM CARD HUD */}
       <div style={{ 
-          position: 'absolute', bottom: '32px', left: 0, width: '100%', 
+          position: 'absolute', bottom: '50px', left: 0, width: '100%', 
           display: 'flex', justifyContent: 'center', zIndex: 1000,
           opacity: isBottomPanelExpanded ? 0 : 1, transition: 'opacity 0.2s',
           pointerEvents: isBottomPanelExpanded ? 'none' : 'auto'
