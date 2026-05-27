@@ -82,9 +82,17 @@ export default function FindRide() {
        if (location.state.originalFindState.dateVal) setDateVal(dayjs(location.state.originalFindState.dateVal));
        if (location.state.originalFindState.timeVal) setTimeVal(dayjs(location.state.originalFindState.timeVal));
        
+       if (location.state.originalFindState.fromCoords) setFromCoords(location.state.originalFindState.fromCoords);
+       if (location.state.originalFindState.toCoords) setToCoords(location.state.originalFindState.toCoords);
+       
        if (location.state.restoreOnly) {
           if (location.state.activeField) {
              setActiveField(location.state.activeField);
+             // Ensure the input regains focus
+             setTimeout(() => {
+                if (location.state.activeField === 'from') fromRef.current?.focus();
+                else if (location.state.activeField === 'to') toRef.current?.focus();
+             }, 100);
           }
        } else {
            if (location.state.updatedField === 'from') {
@@ -529,6 +537,8 @@ export default function FindRide() {
                             findState: { 
                               fromLocation, 
                               toLocation, 
+                              fromCoords,
+                              toCoords,
                               dateVal: dateVal ? dateVal.toISOString() : null, 
                               timeVal: timeVal ? timeVal.toISOString() : null 
                             }
@@ -570,7 +580,7 @@ export default function FindRide() {
                                 item,
                                 activeField,
                                 sourceMode: 'find',
-                                findState: { fromLocation, toLocation, dateVal: dateVal ? dateVal.toISOString() : null, timeVal: timeVal ? timeVal.toISOString() : null }
+                                findState: { fromLocation, toLocation, fromCoords, toCoords, dateVal: dateVal ? dateVal.toISOString() : null, timeVal: timeVal ? timeVal.toISOString() : null }
                               }
                            });
                         }}>
@@ -618,7 +628,7 @@ export default function FindRide() {
                             item,
                             activeField,
                             sourceMode: 'find',
-                            findState: { fromLocation, toLocation, dateVal: dateVal ? dateVal.toISOString() : null, timeVal: timeVal ? timeVal.toISOString() : null }
+                            findState: { fromLocation, toLocation, fromCoords, toCoords, dateVal: dateVal ? dateVal.toISOString() : null, timeVal: timeVal ? timeVal.toISOString() : null }
                           }
                        });
                     }}>
@@ -657,7 +667,7 @@ export default function FindRide() {
                               item,
                               activeField,
                               sourceMode: 'find',
-                              findState: { fromLocation, toLocation, dateVal: dateVal ? dateVal.toISOString() : null, timeVal: timeVal ? timeVal.toISOString() : null }
+                              findState: { fromLocation, toLocation, fromCoords, toCoords, dateVal: dateVal ? dateVal.toISOString() : null, timeVal: timeVal ? timeVal.toISOString() : null }
                             }
                          });
                       }}>

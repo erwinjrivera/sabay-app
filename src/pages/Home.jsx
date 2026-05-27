@@ -6,6 +6,7 @@ import Sidebar from '../components/Sidebar';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { requestNotificationPermission } from '../utils/notifications';
 
 export default function Home() {
   const [isSidebarOpen, setSidebarOpen] = useState(false);
@@ -25,6 +26,9 @@ export default function Home() {
   useEffect(() => {
     if (!currentUser) {
       navigate('/login');
+    } else {
+      // Request notifications permission gracefully when user lands on home
+      requestNotificationPermission();
     }
   }, [currentUser, navigate]);
 

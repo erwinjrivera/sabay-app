@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import Map, { Source, Layer, Marker } from 'react-map-gl/maplibre';
@@ -7,6 +7,7 @@ import { ArrowLeft, User, Phone, MessageCircle, Star, Loader2, CarFront, Check, 
 
 import { db } from '../firebase';
 import { doc, onSnapshot, getDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { sendRideNotification } from '../utils/notifications';
 
 
 function toGeoJSON(coords) {
@@ -221,6 +222,8 @@ export default function PassengerTracking() {
         setShowDriverArrivedModal(true);
         setHasSeenArrivalModal(true);
         sessionStorage.setItem(`seen_arrival_${passengerRequest?.id}`, 'true');
+        
+        sendRideNotification(`driver_arrived_${passengerRequest?.id}`, 'Your driver has arrived at the pickup location.');
     }
   }, [passengerState?.phase, passengerState?.status, hasSeenArrivalModal, passengerRequest?.id]);
 

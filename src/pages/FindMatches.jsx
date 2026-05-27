@@ -7,6 +7,7 @@ import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phon
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, getDoc, updateDoc, onSnapshot, increment, arrayUnion, arrayRemove, where } from 'firebase/firestore';
+import { sendRideNotification } from '../utils/notifications';
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371; // km
@@ -445,6 +446,17 @@ export default function FindMatches() {
             return { ...m, type: finalType };
         });
         
+        // Trigger browser notifications for important events securely tracked via session
+        fullyFreshMatches.forEach(m => {
+            if (m.type === 'match') {
+                sendRideNotification(`new_match_${ride?.id}_${m.id}`, 'New ride match found!');
+            } else if (m.type === 'offered') {
+                sendRideNotification(`offer_${ride?.id}_${m.id}`, `You received a ride offer from ${m.name}`);
+            } else if (m.type === 'confirmed') {
+                sendRideNotification(`accepted_req_${ride?.id}_${m.id}`, `Your ride request was accepted by ${m.name}`);
+            }
+        });
+
         setMatches(fullyFreshMatches);
         setIsLoadingMatches(false);
         setActiveDriverId(currentId => {
