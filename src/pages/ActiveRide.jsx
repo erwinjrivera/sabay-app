@@ -851,7 +851,7 @@ export default function ActiveRide() {
             mapRef.getMap().easeTo({ pitch: !is3DMode ? 60 : 0 });
           }
         }}
-        style={{ position: 'absolute', bottom: '330px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000 }}
+        style={{ position: 'absolute', bottom: '230px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000 }}
       >
         <Layers size={20} color={is3DMode ? "#00b0f0" : "#555"} />
       </button>
@@ -868,7 +868,7 @@ export default function ActiveRide() {
                setMapBearing(0);
             }
           }}
-          style={{ position: 'absolute', bottom: '280px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000, animation: 'scaleIn 0.3s ease-out' }}
+          style={{ position: 'absolute', bottom: '330px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000, animation: 'scaleIn 0.3s ease-out' }}
         >
            <Compass size={20} color="#555" />
         </button>
@@ -878,7 +878,7 @@ export default function ActiveRide() {
       {!isAutoFollowing && (
         <button 
           onClick={() => setIsAutoFollowing(true)}
-          style={{ position: 'absolute', bottom: '230px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000, animation: 'scaleIn 0.3s ease-out' }}
+          style={{ position: 'absolute', bottom: '280px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000, animation: 'scaleIn 0.3s ease-out' }}
         >
            <Navigation2 size={20} color="#555" />
         </button>
