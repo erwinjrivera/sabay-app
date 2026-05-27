@@ -118,7 +118,7 @@ function MapRotationHandler({ setMapBearing }) {
   return null;
 }
 
-function AutoFollower({ currentLat, currentLon, isAutoFollowing, setIsAutoFollowing }) {
+function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing, setIsAutoFollowing }) {
   const map = useMap();
   const isFirstRender = useRef(true);
 
@@ -137,9 +137,12 @@ function AutoFollower({ currentLat, currentLon, isAutoFollowing, setIsAutoFollow
   useEffect(() => {
     if (isAutoFollowing && currentLat && currentLon) {
        map.setView([currentLat, currentLon], map.getZoom() || 16, { animate: !isFirstRender.current });
+       if (typeof map.setBearing === 'function' && currentBearing !== null && currentBearing !== undefined) {
+           map.setBearing(currentBearing);
+       }
        isFirstRender.current = false;
     }
-  }, [currentLat, currentLon, isAutoFollowing, map]);
+  }, [currentLat, currentLon, currentBearing, isAutoFollowing, map]);
   return null;
 }
 
@@ -827,7 +830,7 @@ export default function ActiveRide() {
           </>
         )}
 
-        <AutoFollower currentLat={currentLat} currentLon={currentLon} isAutoFollowing={isAutoFollowing} setIsAutoFollowing={setIsAutoFollowing} />
+        <AutoFollower currentLat={currentLat} currentLon={currentLon} currentBearing={currentBearing} isAutoFollowing={isAutoFollowing} setIsAutoFollowing={setIsAutoFollowing} />
       </MapContainer>
 
       {/* Reset Orientation Button */}
