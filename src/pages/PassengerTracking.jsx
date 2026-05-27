@@ -1,12 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
-import L from 'leaflet';
-import { ArrowLeft, User, Phone, MessageCircle, Star, Loader2, CarFront, Check, X, Calendar, Clock, ChevronDown, ChevronUp } from 'lucide-react';
-import 'leaflet/dist/leaflet.css';
+import Map, { Source, Layer, Marker } from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { ArrowLeft, User, Phone, MessageCircle, Star, Loader2, CarFront, Check, X, Calendar, Clock, ChevronDown, ChevronUp, Navigation2, Compass, Layers } from 'lucide-react';
+
 import { db } from '../firebase';
 import { doc, onSnapshot, getDoc, updateDoc, setDoc } from 'firebase/firestore';
+
+
+function toGeoJSON(coords) {
+  if (!coords) return null;
+  return {
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: coords.map(c => [c[1], c[0]]) }
+  };
+}
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -29,76 +38,76 @@ const getInitials = (nameStr, defaultChar = 'U') => {
 };
 
 // Icons
-const getDriverCarIcon = (bearing, photoURL, name, themeColor = '#00b0f0') => {
+const DriverCarIcon = ({ photoURL, name, themeColor = '#00b0f0' }) => {
   const initials = getInitials(name, 'D');
-  const innerContent = photoURL 
-    ? `<img src="${photoURL}" onerror="this.onerror=null; this.outerHTML='<div style=\\'width:34px;height:34px;border-radius:50%;background:#ccc;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;color:#fff;border:2px solid #fff;transform:rotate(-315deg);\\'>${initials}</div>';" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #fff;transform:rotate(-315deg);background:#ccc;" />` 
-    : `<div style="width:34px;height:34px;border-radius:50%;background:#ccc;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:bold;color:#fff;border:2px solid #fff;transform:rotate(-315deg);">${initials}</div>`;
-
-  return new L.DivIcon({
-    className: 'custom-driver-car',
-    html: `<div style="width:50px;height:50px;display:flex;align-items:center;justify-content:center;position:relative; transform: rotate(180deg);">
-             <div style="position:absolute;width:40px;height:40px;background:${themeColor};border-radius:50% 50% 50% 0;transform:rotate(135deg);box-shadow:0 4px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
-                ${innerContent}
-             </div>
-           </div>`,
-    iconSize: [50, 50],
-    iconAnchor: [25, 52]
-  });
+  return (
+    <div style={{ width: 50, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', transform: 'rotate(180deg)' }}>
+      <div style={{ position: 'absolute', width: 40, height: 40, background: themeColor, borderRadius: '50% 50% 50% 0', transform: 'rotate(135deg)', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <img 
+          src={photoURL || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E"} 
+          onError={(e) => { e.target.onerror = null; e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}
+          style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid #fff', transform: 'rotate(-315deg)', background: '#ccc' }} 
+        />
+        <div style={{ display: 'none', width: 34, height: 34, borderRadius: '50%', background: '#ccc', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold', color: '#fff', border: '2px solid #fff', transform: 'rotate(-315deg)' }}>
+          {initials}
+        </div>
+      </div>
+    </div>
+  );
 };
 
-const getPassengerStartIcon = (color = '#00b0f0') => new L.DivIcon({
-  className: 'custom-pass-start-dot',
-  html: `<div style="width:16px;height:16px;background:${color};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${color === '#9cc93a' ? 'rgba(156,201,58,0.6)' : 'rgba(0,176,240,0.6)'};"></div>`,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12]
-});
+const PassengerStartDotIcon = ({ color = '#00b0f0' }) => (
+  <div style={{ width: 16, height: 16, background: color, borderRadius: '50%', border: '4px solid #fff', boxShadow: `0 0 8px ${color === '#9cc93a' ? 'rgba(156,201,58,0.6)' : 'rgba(0,176,240,0.6)'}` }}></div>
+);
 
-const getPassengerEndIcon = (color = '#00b0f0') => new L.DivIcon({
-  className: 'custom-end-pin',
-  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${color}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
-  iconSize: [34, 34],
-  iconAnchor: [17, 34],
-});
+const PassengerEndPinIcon = ({ color = '#00b0f0' }) => (
+  <svg width="34" height="34" viewBox="0 0 24 24" fill={color} stroke="#fff" strokeWidth="1.5" style={{ transform: 'translate(0, -17px)' }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>
+);
 
-const getMeetSpotIcon = (color = '#00b0f0') => new L.DivIcon({
-  className: 'custom-meet-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${color};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
-  iconSize: [22, 22],
-  iconAnchor: [11, 11]
-});
+const MeetSpotIcon = ({ color = '#00b0f0' }) => (
+  <div style={{ width: 14, height: 14, background: '#fff', borderRadius: '50%', border: `4px solid ${color}`, boxShadow: '0 0 6px rgba(0,0,0,0.3)' }}></div>
+);
 
-const getMeetDropSpotIcon = (color = '#00b0f0') => new L.DivIcon({
-  className: 'custom-meet-drop-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${color};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
-  iconSize: [22, 22],
-  iconAnchor: [11, 11]
-});
+const DriverFlagIcon = () => (
+  <div style={{ background: '#fff', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #ddd', boxShadow: '0 3px 6px rgba(0,0,0,0.15)' }}>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#777" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+      <line x1="4" y1="22" x2="4" y2="15"></line>
+    </svg>
+  </div>
+);
 
-const getDriverEndIcon = () => new L.DivIcon({
-  className: 'custom-driver-flag',
-  html: `<div style="background:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:2px solid #ddd;box-shadow:0 3px 6px rgba(0,0,0,0.15);">
-           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-             <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
-             <line x1="4" y1="22" x2="4" y2="15"></line>
-           </svg>
-         </div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 15]
-});
+import { useMap as useMapLibre } from 'react-map-gl/maplibre';
 
-function MapAdjuster({ route1, centerOnLoc }) {
-  const map = useMap();
+function AutoFollower({ panToCar, setPanToCar, currentLat, currentLon, setMapBearing }) {
+  const { current: map } = useMapLibre();
   const hasFittedRef = React.useRef(false);
-  useEffect(() => {
-    if (centerOnLoc) {
-       map.setView([centerOnLoc.lat, centerOnLoc.lon], 16, { animate: true });
-    } else if (route1 && route1.length > 0 && !hasFittedRef.current) {
-       hasFittedRef.current = true;
-       const bounds = L.latLngBounds(route1);
-       map.fitBounds(bounds, { padding: [50, 50], animate: true });
+
+  React.useEffect(() => {
+    if (!map) return;
+    const handleInteract = () => setPanToCar(false);
+    map.on('dragstart', handleInteract);
+    map.on('zoomstart', handleInteract);
+    map.on('pitchstart', handleInteract);
+    map.on('rotatestart', handleInteract);
+    const handleRotate = () => setMapBearing(map.getBearing());
+    map.on('rotate', handleRotate);
+
+    return () => {
+      map.off('dragstart', handleInteract);
+      map.off('zoomstart', handleInteract);
+      map.off('pitchstart', handleInteract);
+      map.off('rotatestart', handleInteract);
+      map.off('rotate', handleRotate);
+    };
+  }, [map, setPanToCar, setMapBearing]);
+
+  React.useEffect(() => {
+    if (panToCar && map) {
+      map.easeTo({ center: [currentLon, currentLat], zoom: 16, duration: 1000 });
     }
-  }, [route1, centerOnLoc, map]);
+  }, [panToCar, currentLat, currentLon, map]);
+
   return null;
 }
 
@@ -127,6 +136,9 @@ export default function PassengerTracking() {
       return !!sessionStorage.getItem(`seen_arrival_${passengerRequest?.id}`);
   });
   const [justRated, setJustRated] = useState(false);
+  const [mapBearing, setMapBearing] = useState(0);
+  const [is3DMode, setIs3DMode] = useState(false);
+  const mapRef = React.useRef();
 
   // 1. Subscribe to Local Passenger State
   useEffect(() => {
@@ -422,82 +434,161 @@ export default function PassengerTracking() {
     <div style={{ height: '100dvh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
       <style>{`@keyframes pulseGlow { 0% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(119,119,119,0); } 50% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 8px rgba(119,119,119,0.7); } 100% { box-shadow: 0 10px 25px rgba(0,0,0,0.15), 0 0 0 0px rgba(119,119,119,0); } }`}</style>
       
-      <MapContainer 
-        center={[driverLiveLat, driverLiveLon]} 
-        zoom={15} 
-        zoomControl={false}
-        style={{ height: '100%', width: '100%' }}
+      <Map
+        ref={mapRef}
+        initialViewState={{
+          longitude: driverLiveLon,
+          latitude: driverLiveLat,
+          zoom: 15,
+          pitch: 0,
+          bearing: 0
+        }}
+        mapStyle={
+          import.meta.env.VITE_MAPTILER_API_KEY 
+            ? `https://api.maptiler.com/maps/basic-v2/style.json?key=${import.meta.env.VITE_MAPTILER_API_KEY}`
+            : {
+                version: 8,
+                sources: {
+                  'carto-light': {
+                    type: 'raster',
+                    tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+                  }
+                },
+                layers: [
+                  {
+                    id: 'carto-light-layer',
+                    type: 'raster',
+                    source: 'carto-light',
+                    minzoom: 0,
+                    maxzoom: 22
+                  }
+                ]
+              }
+        }
+        style={{ width: '100%', height: '100%' }}
+        dragRotate={true}
+        pitchWithRotate={true}
       >
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
-        
         {driverRoute.length > 0 && (
-           <Polyline positions={driverRoute} pathOptions={{ color: '#555', weight: 5, opacity: 0.5 }} />
-        )}
-
-        {driverRoute.length > 0 && (
-           <>
-             <Marker position={[passengerRequest.from.lat, passengerRequest.from.lon]} icon={getPassengerStartIcon(activeColor)} />
-             <Marker position={[passengerRequest.to.lat, passengerRequest.to.lon]} icon={getPassengerEndIcon(activeColor)} />
-           </>
+          <Source id="driver-route" type="geojson" data={toGeoJSON(driverRoute)}>
+            <Layer id="driver-route-line" type="line" paint={{ 'line-color': '#555', 'line-width': 5, 'line-opacity': 0.5 }} />
+          </Source>
         )}
 
         {sharedPath.length > 0 && (
-           <Polyline positions={sharedPath} pathOptions={{ color: activeColor, weight: 6, opacity: 1 }} />
+          <Source id="shared-path" type="geojson" data={toGeoJSON(sharedPath)}>
+            <Layer id="shared-path-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 6, 'line-opacity': 1 }} />
+          </Source>
         )}
 
-        {/* Driver End Marker */}
-        <Marker position={[driverRide.to.lat, driverRide.to.lon]} icon={getDriverEndIcon()} />
+        {driverRoute.length > 0 && (
+          <>
+            <Marker longitude={passengerRequest.from.lon} latitude={passengerRequest.from.lat} anchor="center">
+              <PassengerStartDotIcon color={activeColor} />
+            </Marker>
+            <Marker longitude={passengerRequest.to.lon} latitude={passengerRequest.to.lat} anchor="bottom">
+              <PassengerEndPinIcon color={activeColor} />
+            </Marker>
+          </>
+        )}
 
-        {/* Meet and Dropoff Intercepts */}
+        {driverRide && driverRide.to && (
+          <Marker longitude={driverRide.to.lon} latitude={driverRide.to.lat} anchor="center">
+            <DriverFlagIcon />
+          </Marker>
+        )}
+
         {intercepts && (
            <>
-             <Polyline positions={intercepts.pickupPath} pathOptions={{ color: activeColor, weight: 4, opacity: 1, dashArray: '5, 8' }} />
-             <Marker position={[intercepts.meetPickup.lat, intercepts.meetPickup.lon]} icon={getMeetSpotIcon(activeColor)}>
-                <Tooltip direction="right" offset={[10, 0]} opacity={1} permanent>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {passPhoto ? (
-                      <>
-                          <img 
-                              src={passPhoto} 
-                              alt="avatar" 
-                              style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} 
-                              onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                          />
-                          <div style={{ display: 'none', width: 24, height: 24, borderRadius: '50%', background: '#ccc', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>
-                              {getInitials(passName, 'P')}
-                          </div>
-                      </>
-                  ) : (
-                      <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>
-                          {getInitials(passName, 'P')}
-                      </div>
-                  )}
-                  <span style={{ fontWeight: 600, color: '#333' }}>Meet around here</span>
-              </div>
-                </Tooltip>
+             <Source id="intercept-pickup" type="geojson" data={toGeoJSON(intercepts.pickupPath)}>
+               <Layer id="intercept-pickup-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }} />
+             </Source>
+             <Marker longitude={intercepts.meetPickup.lon} latitude={intercepts.meetPickup.lat} anchor="center">
+               <div style={{ position: 'relative' }}>
+                 <MeetSpotIcon color={activeColor} />
+                 <div style={{ position: 'absolute', left: '100%', top: '50%', transform: 'translateY(-50%)', marginLeft: '10px', background: '#fff', padding: '6px 10px', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {passPhoto ? (
+                            <>
+                                <img src={passPhoto} alt="avatar" style={{ width: 24, height: 24, borderRadius: '50%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                                <div style={{ display: 'none', width: 24, height: 24, borderRadius: '50%', background: '#ccc', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>{getInitials(passName, 'P')}</div>
+                            </>
+                        ) : (
+                            <div style={{ width: 24, height: 24, borderRadius: '50%', background: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>{getInitials(passName, 'P')}</div>
+                        )}
+                        <span style={{ fontWeight: 600, color: '#333' }}>Meet around here</span>
+                    </div>
+                    <div style={{ position: 'absolute', left: '-5px', top: '50%', transform: 'translateY(-50%)', width: 0, height: 0, borderTop: '5px solid transparent', borderBottom: '5px solid transparent', borderRight: '5px solid #fff' }}></div>
+                 </div>
+               </div>
              </Marker>
 
-             <Polyline positions={intercepts.dropoffPath} pathOptions={{ color: activeColor, weight: 4, opacity: 1, dashArray: '5, 8' }} />
-             <Marker position={[intercepts.meetDropoff.lat, intercepts.meetDropoff.lon]} icon={getMeetDropSpotIcon(activeColor)}>
-                <Tooltip direction="left" offset={[-10, 0]} opacity={1} permanent>
+             <Source id="intercept-dropoff" type="geojson" data={toGeoJSON(intercepts.dropoffPath)}>
+               <Layer id="intercept-dropoff-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }} />
+             </Source>
+             <Marker longitude={intercepts.meetDropoff.lon} latitude={intercepts.meetDropoff.lat} anchor="center">
+               <div style={{ position: 'relative' }}>
+                 <MeetSpotIcon color={activeColor} />
+                 <div style={{ position: 'absolute', right: '100%', top: '50%', transform: 'translateY(-50%)', marginRight: '10px', background: '#fff', padding: '6px 10px', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', whiteSpace: 'nowrap' }}>
                    <span style={{ fontWeight: 600, color: '#333' }}>Drop-off point</span>
-                </Tooltip>
+                   <div style={{ position: 'absolute', right: '-5px', top: '50%', transform: 'translateY(-50%)', width: 0, height: 0, borderTop: '5px solid transparent', borderBottom: '5px solid transparent', borderLeft: '5px solid #fff' }}></div>
+                 </div>
+               </div>
              </Marker>
            </>
         )}
 
-        {/* Real-time driver teardrop map marker */}
-        <Marker position={[driverLiveLat, driverLiveLon]} icon={getDriverCarIcon(driverLiveBearing, targetPhotoURL, targetName, activeColor)} zIndexOffset={100} />
+        <Marker longitude={driverLiveLon} latitude={driverLiveLat} anchor="center" style={{ zIndex: 100 }}>
+           <div style={{ transform: `rotate(${driverLiveBearing}deg)`, transition: 'transform 1s linear' }}>
+              <DriverCarIcon photoURL={targetPhotoURL} name={targetName} themeColor={activeColor} />
+           </div>
+        </Marker>
 
-        <MapAdjuster route1={driverRoute} centerOnLoc={panToCar ? { lat: driverLiveLat, lon: driverLiveLon } : null} />
-      </MapContainer>
+        <AutoFollower panToCar={panToCar} setPanToCar={setPanToCar} currentLat={driverLiveLat} currentLon={driverLiveLon} setMapBearing={setMapBearing} />
+      </Map>
 
-      {/* Recenter Button */}
+      {/* Map Mode Toggle (2D/3D) */}
+      <button 
+        onClick={() => {
+          setIs3DMode(prev => !prev);
+          if (mapRef.current && typeof mapRef.current.easeTo === 'function') {
+            mapRef.current.easeTo({ pitch: !is3DMode ? 60 : 0 });
+          } else if (mapRef.current && typeof mapRef.current.getMap === 'function') {
+            mapRef.current.getMap().easeTo({ pitch: !is3DMode ? 60 : 0 });
+          }
+        }}
+        style={{ position: 'absolute', bottom: '230px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000 }}
+      >
+        <Layers size={20} color={is3DMode ? "#00b0f0" : "#555"} />
+      </button>
+
+      {/* Recenter Map Button */}
       {(!isRideCompleted && !isRideCancelled) && (
         <button 
-          onClick={() => { setPanToCar(true); setTimeout(() => setPanToCar(false), 1000); }}           style={{ position: 'absolute', bottom: '230px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000 }}
+          onClick={() => { setPanToCar(true); }}
+          style={{ position: 'absolute', bottom: '280px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000 }}
         >
-           <CarFront size={20} color="#555" />
+           <Navigation2 size={20} color={panToCar ? activeColor : "#555"} />
+        </button>
+      )}
+
+      {/* Reset Orientation Button */}
+      {Math.abs(mapBearing) > 0.1 && (
+        <button 
+          onClick={() => {
+            if (mapRef.current && typeof mapRef.current.easeTo === 'function') {
+               mapRef.current.easeTo({ bearing: 0, pitch: 0 });
+               setMapBearing(0);
+            } else if (mapRef.current && typeof mapRef.current.getMap === 'function') {
+               mapRef.current.getMap().easeTo({ bearing: 0, pitch: 0 });
+               setMapBearing(0);
+            }
+          }}
+          style={{ position: 'absolute', bottom: '330px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000, animation: 'scaleIn 0.3s ease-out' }}
+        >
+           <Compass size={20} color="#555" />
         </button>
       )}
 
