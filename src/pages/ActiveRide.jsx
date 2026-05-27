@@ -731,7 +731,22 @@ export default function ActiveRide() {
           pitch: 60,
           bearing: 0
         }}
-        mapStyle={`https://api.maptiler.com/maps/basic-v2/style.json?key=${import.meta.env.VITE_MAPTILER_API_KEY}`}
+        mapStyle={
+          import.meta.env.VITE_MAPTILER_API_KEY 
+            ? `https://api.maptiler.com/maps/basic-v2/style.json?key=${import.meta.env.VITE_MAPTILER_API_KEY}`
+            : {
+                version: 8,
+                sources: {
+                  osm: {
+                    type: 'raster',
+                    tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'],
+                    tileSize: 256,
+                    attribution: '&copy; OpenStreetMap contributors'
+                  }
+                },
+                layers: [{ id: 'osm', type: 'raster', source: 'osm', minzoom: 0, maxzoom: 22 }]
+              }
+        }
         style={{ width: '100%', height: '100%' }}
       >
         
