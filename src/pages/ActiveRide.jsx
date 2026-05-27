@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import Map, { Source, Layer, Marker } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { ArrowLeft, User, List, Star, Navigation2, MapPin, MessageCircle, X, Check, Loader2, Play, Calendar, Clock, ChevronDown, ChevronUp, Compass } from 'lucide-react';
+import { ArrowLeft, User, List, Star, Navigation2, MapPin, MessageCircle, X, Check, Loader2, Play, Calendar, Clock, ChevronDown, ChevronUp, Compass, Layers } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, setDoc, increment, deleteField } from 'firebase/firestore';
 import { Geolocation } from '@capacitor/geolocation';
@@ -77,7 +77,7 @@ const MeetSpotIcon = ({ color = '#00b0f0' }) => (
 
 import { useMap as useMapLibre } from 'react-map-gl/maplibre';
 
-function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing, setIsAutoFollowing, setMapBearing }) {
+function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing, setIsAutoFollowing, setMapBearing, is3DMode }) {
   const { current: map } = useMapLibre();
   const isFirstRender = useRef(true);
 
@@ -108,13 +108,13 @@ function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing,
        map.easeTo({
            center: [currentLon, currentLat],
            bearing: currentBearing || 0,
-           pitch: 60,
+           pitch: is3DMode ? 60 : 0,
            zoom: 17.5,
            duration: isFirstRender.current ? 0 : 1000
        });
        isFirstRender.current = false;
     }
-  }, [currentLat, currentLon, currentBearing, isAutoFollowing, map]);
+  }, [currentLat, currentLon, currentBearing, isAutoFollowing, map, is3DMode]);
   return null;
 }
 
@@ -138,6 +138,7 @@ export default function ActiveRide() {
   const [showCancelAllModal, setShowCancelAllModal] = useState(false);
   const [showCompleteAllModal, setShowCompleteAllModal] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
+  const [is3DMode, setIs3DMode] = useState(true);
   const [ratingPassenger, setRatingPassenger] = useState(null);
   const [tempRating, setTempRating] = useState(0);
   const [isFetchingMatches, setIsFetchingMatches] = useState(true);
@@ -724,7 +725,7 @@ export default function ActiveRide() {
           longitude: driverFrom.lon,
           latitude: driverFrom.lat,
           zoom: 17.5,
-          pitch: 60,
+          pitch: is3DMode ? 60 : 0,
           bearing: 0
         }}
         mapStyle={
@@ -837,8 +838,23 @@ export default function ActiveRide() {
           </>
         )}
 
-        <AutoFollower currentLat={currentLat} currentLon={currentLon} currentBearing={currentBearing} isAutoFollowing={isAutoFollowing} setIsAutoFollowing={setIsAutoFollowing} setMapBearing={setMapBearing} />
+        <AutoFollower currentLat={currentLat} currentLon={currentLon} currentBearing={currentBearing} isAutoFollowing={isAutoFollowing} setIsAutoFollowing={setIsAutoFollowing} setMapBearing={setMapBearing} is3DMode={is3DMode} />
       </Map>
+
+      {/* Map Mode Toggle (2D/3D) */}
+      <button 
+        onClick={() => {
+          setIs3DMode(prev => !prev);
+          if (mapRef && typeof mapRef.easeTo === 'function') {
+            mapRef.easeTo({ pitch: !is3DMode ? 60 : 0 });
+          } else if (mapRef && typeof mapRef.getMap === 'function') {
+            mapRef.getMap().easeTo({ pitch: !is3DMode ? 60 : 0 });
+          }
+        }}
+        style={{ position: 'absolute', bottom: '330px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000 }}
+      >
+        <Layers size={20} color={is3DMode ? "#00b0f0" : "#555"} />
+      </button>
 
       {/* Reset Orientation Button */}
       {Math.abs(mapBearing) > 0.1 && (
