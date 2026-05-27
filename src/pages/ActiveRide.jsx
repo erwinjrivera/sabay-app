@@ -337,16 +337,27 @@ export default function ActiveRide() {
   useEffect(() => {
     if (!currentLocation || driverRoute.length === 0) return;
     
+    // Find closest point on ORIGINAL route to bridge the gap visually
+    let minDistToOriginal = Infinity;
+    let closestPointOnOriginal = null;
+    for (let i = 0; i < driverRoute.length; i++) {
+        const d = getDistanceKM(currentLocation.lat, currentLocation.lon, driverRoute[i][0], driverRoute[i][1]);
+        if (d < minDistToOriginal) {
+            minDistToOriginal = d;
+            closestPointOnOriginal = driverRoute[i];
+        }
+    }
+
     const activeRoute = recalculatedRoute || driverRoute;
     
-    // Find closest distance to the active route
-    let minDist = Infinity;
+    // Find closest distance to the active route for triggering recalculation
+    let minDistToActive = Infinity;
     for (let i = 0; i < activeRoute.length; i++) {
         const d = getDistanceKM(currentLocation.lat, currentLocation.lon, activeRoute[i][0], activeRoute[i][1]);
-        if (d < minDist) minDist = d;
+        if (d < minDistToActive) minDistToActive = d;
     }
     
-    if (minDist > 0.075 && !isRecalculatingRef.current) {
+    if (minDistToActive > 0.075 && !isRecalculatingRef.current) {
         // Trigger recalculation!
         isRecalculatingRef.current = true;
         const fetchNewRoute = async () => {
@@ -355,6 +366,10 @@ export default function ActiveRide() {
                 const data = await res.json();
                 if (data.routes && data.routes.length > 0) {
                     const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                    if (closestPointOnOriginal) {
+                        // Bridge the visual gap by drawing from the original route's nearest point
+                        coords.unshift(closestPointOnOriginal);
+                    }
                     setRecalculatedRoute(coords);
                 }
             } catch (err) {
