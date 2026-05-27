@@ -347,10 +347,6 @@ export default function ActiveRide() {
                 const data = await res.json();
                 if (data.routes && data.routes.length > 0) {
                     const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-                    if (closestPointOnOriginal) {
-                        // Bridge the visual gap by drawing from the original route's nearest point
-                        coords.unshift(closestPointOnOriginal);
-                    }
                     setRecalculatedRoute(coords);
                 }
             } catch (err) {
