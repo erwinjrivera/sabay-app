@@ -348,6 +348,12 @@ export default function ActiveRide() {
         }
     }
 
+    // Auto-cleanup if driver merges back to the original route
+    if (recalculatedRoute && minDistToOriginal < 0.050) {
+        setRecalculatedRoute(null);
+        return;
+    }
+
     const activeRoute = recalculatedRoute || driverRoute;
     
     // Find closest distance to the active route for triggering recalculation
