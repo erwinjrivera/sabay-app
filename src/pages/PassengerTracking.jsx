@@ -495,7 +495,7 @@ export default function PassengerTracking() {
       {/* Recenter Button */}
       {(!isRideCompleted && !isRideCancelled) && (
         <button 
-          onClick={() => { setPanToCar(true); setTimeout(() => setPanToCar(false), 1000); }}           style={{ position: 'absolute', bottom: '200px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000 }}
+          onClick={() => { setPanToCar(true); setTimeout(() => setPanToCar(false), 1000); }}           style={{ position: 'absolute', bottom: '230px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000 }}
         >
            <CarFront size={20} color="#555" />
         </button>
