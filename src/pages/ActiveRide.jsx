@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
-import L from 'leaflet';
+import Map, { Source, Layer, Marker } from 'react-map-gl/maplibre';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { ArrowLeft, User, List, Star, Navigation2, MapPin, MessageCircle, X, Check, Loader2, Play, Calendar, Clock, ChevronDown, ChevronUp, Compass } from 'lucide-react';
-import 'leaflet-rotate';
-import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, setDoc, increment, deleteField } from 'firebase/firestore';
 import { Geolocation } from '@capacitor/geolocation';
@@ -44,102 +42,76 @@ function getBearing(lat1, lon1, lat2, lon2) {
 }
 
 // Icons
-const getDriverCarIcon = (bearing, photoURL) => new L.DivIcon({
-  className: 'custom-driver-car',
-  html: `<div style="width:50px;height:50px;display:flex;align-items:center;justify-content:center;position:relative; transform: rotate(180deg);">
-           <div style="position:absolute;width:40px;height:40px;background:#00b0f0;border-radius:50% 50% 50% 0;transform:rotate(135deg);box-shadow:0 4px 10px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;">
-              <img src="${photoURL || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E"}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:2px solid #fff;transform:rotate(-315deg);background:#ccc;" />
-           </div>
-         </div>`,
-  iconSize: [50, 50],
-  iconAnchor: [25, 52]
-});
+const DriverCarIcon = ({ photoURL }) => (
+  <div style={{ width: 50, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', transform: 'rotate(180deg)' }}>
+    <div style={{ position: 'absolute', width: 40, height: 40, background: '#00b0f0', borderRadius: '50% 50% 50% 0', transform: 'rotate(135deg)', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <img src={photoURL || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E"} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid #fff', transform: 'rotate(-315deg)', background: '#ccc' }} />
+    </div>
+  </div>
+);
 
-// Other Map Icons
-const driverIcon = new L.DivIcon({
-  className: 'custom-driver-flag',
-  html: `<div style="background:#fff;border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border:2px solid #ddd;box-shadow:0 3px 6px rgba(0,0,0,0.15);">
-           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#777" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-             <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
-             <line x1="4" y1="22" x2="4" y2="15"></line>
-           </svg>
-         </div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 15]
-});
+const DriverFlagIcon = () => (
+  <div style={{ background: '#fff', borderRadius: '50%', width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #ddd', boxShadow: '0 3px 6px rgba(0,0,0,0.15)' }}>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#777" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+      <line x1="4" y1="22" x2="4" y2="15"></line>
+    </svg>
+  </div>
+);
 
-const driverStartIcon = new L.DivIcon({
-  className: 'custom-driver-start-dot',
-  html: `<div style="width:16px;height:16px;background:#555;border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px rgba(85,85,85,0.6);"></div>`,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12]
-});
+const DriverStartDotIcon = () => (
+  <div style={{ width: 16, height: 16, background: '#555', borderRadius: '50%', border: '4px solid #fff', boxShadow: '0 0 8px rgba(85,85,85,0.6)' }}></div>
+);
 
-const getPassengerStartIcon = (color = '#00b0f0') => new L.DivIcon({
-  className: 'custom-pass-start-dot',
-  html: `<div style="width:16px;height:16px;background:${color};border-radius:50%;border:4px solid #fff;box-shadow:0 0 8px ${color === '#9cc93a' ? 'rgba(156,201,58,0.6)' : 'rgba(0,176,240,0.6)'};"></div>`,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12]
-});
+const PassengerStartDotIcon = ({ color = '#00b0f0' }) => (
+  <div style={{ width: 16, height: 16, background: color, borderRadius: '50%', border: '4px solid #fff', boxShadow: `0 0 8px ${color === '#9cc93a' ? 'rgba(156,201,58,0.6)' : 'rgba(0,176,240,0.6)'}` }}></div>
+);
 
-const getPassengerEndIcon = (color = '#00b0f0') => new L.DivIcon({
-  className: 'custom-end-pin',
-  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${color}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
-  iconSize: [34, 34],
-  iconAnchor: [17, 34],
-});
+const PassengerEndPinIcon = ({ color = '#00b0f0' }) => (
+  <svg width="34" height="34" viewBox="0 0 24 24" fill={color} stroke="#fff" strokeWidth="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>
+);
 
-const getMeetDropSpotIcon = (color = '#00b0f0') => new L.DivIcon({
-  className: 'custom-meet-drop-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${color};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
-  iconSize: [22, 22],
-  iconAnchor: [11, 11]
-});
+const MeetSpotIcon = ({ color = '#00b0f0' }) => (
+  <div style={{ width: 14, height: 14, background: '#fff', borderRadius: '50%', border: `4px solid ${color}`, boxShadow: '0 0 6px rgba(0,0,0,0.3)' }}></div>
+);
 
-const getMeetSpotIcon = (color = '#00b0f0') => new L.DivIcon({
-  className: 'custom-meet-dot',
-  html: `<div style="width:14px;height:14px;background:#fff;border-radius:50%;border:4px solid ${color};box-shadow:0 0 6px rgba(0,0,0,0.3);"></div>`,
-  iconSize: [22, 22],
-  iconAnchor: [11, 11]
-});
+import { useMap as useMapLibre } from 'react-map-gl/maplibre';
 
-
-function MapRotationHandler({ setMapBearing }) {
-  const map = useMap();
-  useEffect(() => {
-    const handleRotate = () => {
-      if (typeof map.getBearing === 'function') {
-         setMapBearing(map.getBearing());
-      }
-    };
-    map.on('rotate', handleRotate);
-    return () => map.off('rotate', handleRotate);
-  }, [map, setMapBearing]);
-  return null;
-}
-
-function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing, setIsAutoFollowing }) {
-  const map = useMap();
+function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing, setIsAutoFollowing, setMapBearing }) {
+  const { current: map } = useMapLibre();
   const isFirstRender = useRef(true);
 
   useEffect(() => {
+    if (!map) return;
     const handleInteract = () => setIsAutoFollowing(false);
+    
+    // MapLibre events for interaction
     map.on('dragstart', handleInteract);
     map.on('zoomstart', handleInteract);
+    map.on('pitchstart', handleInteract);
     map.on('rotatestart', handleInteract);
+    
+    const handleRotate = () => setMapBearing(map.getBearing());
+    map.on('rotate', handleRotate);
+
     return () => {
       map.off('dragstart', handleInteract);
       map.off('zoomstart', handleInteract);
+      map.off('pitchstart', handleInteract);
       map.off('rotatestart', handleInteract);
+      map.off('rotate', handleRotate);
     };
-  }, [map, setIsAutoFollowing]);
+  }, [map, setIsAutoFollowing, setMapBearing]);
 
   useEffect(() => {
-    if (isAutoFollowing && currentLat && currentLon) {
-       map.setView([currentLat, currentLon], map.getZoom() || 16, { animate: !isFirstRender.current });
-       if (typeof map.setBearing === 'function' && currentBearing !== null && currentBearing !== undefined) {
-           map.setBearing(currentBearing);
-       }
+    if (isAutoFollowing && currentLat && currentLon && map) {
+       map.easeTo({
+           center: [currentLon, currentLat],
+           bearing: currentBearing || 0,
+           pitch: 60,
+           zoom: map.getZoom() || 16,
+           duration: isFirstRender.current ? 0 : 1000
+       });
        isFirstRender.current = false;
     }
   }, [currentLat, currentLon, currentBearing, isAutoFollowing, map]);
@@ -737,108 +709,154 @@ export default function ActiveRide() {
   // Fallback to calculated bearing if native heading is null
   const currentBearing = (currentLocation && currentLocation.heading !== null && currentLocation.heading !== undefined) ? currentLocation.heading : getBearing(currentLat, currentLon, driverTo.lat, driverTo.lon);
 
+  const toGeoJSON = (coords) => {
+    if (!coords || !Array.isArray(coords)) return { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } };
+    const coordinates = coords.map(c => {
+      if (Array.isArray(c)) return [c[1], c[0]];
+      if (c.lat !== undefined && c.lon !== undefined) return [c.lon, c.lat];
+      return [0, 0];
+    });
+    return { type: 'Feature', geometry: { type: 'LineString', coordinates } };
+  };
+
   return (
     <div style={{ height: '100dvh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
       
-      <MapContainer 
-        center={[driverFrom.lat, driverFrom.lon]} 
-        zoom={14} 
-        zoomControl={false}
-        rotate={true}
-        touchRotate={true}
-        style={{ height: '100%', width: '100%' }}
+      <Map
         ref={setMapRef}
+        initialViewState={{
+          longitude: driverFrom.lon,
+          latitude: driverFrom.lat,
+          zoom: 14,
+          pitch: 60,
+          bearing: 0
+        }}
+        mapStyle={{
+          version: 8,
+          sources: {
+            osm: {
+              type: 'raster',
+              tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'],
+              tileSize: 256,
+              attribution: '&copy; OpenStreetMap contributors'
+            }
+          },
+          layers: [
+            {
+              id: 'osm',
+              type: 'raster',
+              source: 'osm',
+              minzoom: 0,
+              maxzoom: 22
+            }
+          ]
+        }}
+        style={{ width: '100%', height: '100%' }}
       >
-        <MapRotationHandler setMapBearing={setMapBearing} />
-        <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
         
         {driverRoute.length > 0 && (
           <>
-            <Polyline 
-              positions={driverRoute} 
-              pathOptions={recalculatedRoute ? { color: '#94a3b8', weight: 4, opacity: 0.6, dashArray: '5, 10' } : { color: '#555', weight: 5, opacity: 0.8 }} 
-            />
+            <Source id="driver-route" type="geojson" data={toGeoJSON(driverRoute)}>
+              <Layer id="driver-route-line" type="line" paint={{ 'line-color': recalculatedRoute ? '#94a3b8' : '#555', 'line-width': recalculatedRoute ? 4 : 5, 'line-opacity': recalculatedRoute ? 0.6 : 0.8, 'line-dasharray': recalculatedRoute ? [1, 2] : [1] }} />
+            </Source>
             {recalculatedRoute && (
-              <Polyline positions={recalculatedRoute} pathOptions={{ color: '#555', weight: 5, opacity: 0.8 }} />
+              <Source id="recalc-route" type="geojson" data={toGeoJSON(recalculatedRoute)}>
+                <Layer id="recalc-route-line" type="line" paint={{ 'line-color': '#555', 'line-width': 5, 'line-opacity': 0.8 }} />
+              </Source>
             )}
-            <Marker position={[driverFrom.lat, driverFrom.lon]} icon={driverStartIcon} />
-            <Marker position={[driverTo.lat, driverTo.lon]} icon={driverIcon} />
+            <Marker longitude={driverFrom.lon} latitude={driverFrom.lat} anchor="center">
+              <DriverStartDotIcon />
+            </Marker>
+            <Marker longitude={driverTo.lon} latitude={driverTo.lat} anchor="center">
+              <DriverFlagIcon />
+            </Marker>
           </>
         )}
         
         {/* Real-time driver teardrop map marker indicator */}
-        <Marker position={[currentLat, currentLon]} icon={getDriverCarIcon(currentBearing, currentUser?.photoURL)} zIndexOffset={100} />
+        <Marker longitude={currentLon} latitude={currentLat} anchor="bottom" style={{ zIndex: 100 }}>
+          <DriverCarIcon photoURL={currentUser?.photoURL} />
+        </Marker>
 
-        {/* Passenger Route (Dynamic Color based on Status) */}
+        {/* Passenger Route */}
         {activePassRoute.length > 0 && (
           <>
-            <Polyline positions={activePassRoute} pathOptions={{ color: activeColor, weight: 6, opacity: 1 }} />
+            <Source id="pass-route" type="geojson" data={toGeoJSON(activePassRoute)}>
+              <Layer id="pass-route-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 6, 'line-opacity': 1 }} />
+            </Source>
             
-            <Marker position={[activePassenger.pickup.lat, activePassenger.pickup.lon]} icon={getPassengerStartIcon(activeColor)} />
-            <Marker position={[activePassenger.dropoff.lat, activePassenger.dropoff.lon]} icon={getPassengerEndIcon(activeColor)} />
+            <Marker longitude={activePassenger.pickup.lon} latitude={activePassenger.pickup.lat} anchor="center">
+              <PassengerStartDotIcon color={activeColor} />
+            </Marker>
+            <Marker longitude={activePassenger.dropoff.lon} latitude={activePassenger.dropoff.lat} anchor="bottom">
+              <PassengerEndPinIcon color={activeColor} />
+            </Marker>
             
-            {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node */}
+            {/* Dotted theoretical intercept lines */}
             {driverRoute.length > 0 && activePassenger?.meetPickup && (
-               <Polyline 
-                 positions={activePassenger?.interceptPaths?.pickupPath || [[activePassenger.pickup.lat, activePassenger.pickup.lon], [activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]]} 
-                 pathOptions={{ color: activeColor, weight: 4, opacity: 1, dashArray: '5, 8' }}
-               />
+               <Source id="intercept-pickup" type="geojson" data={toGeoJSON(activePassenger?.interceptPaths?.pickupPath || [{lat: activePassenger.pickup.lat, lon: activePassenger.pickup.lon}, {lat: activePassenger.meetPickup.lat, lon: activePassenger.meetPickup.lon}])}>
+                 <Layer id="intercept-pickup-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }} />
+               </Source>
             )}
 
             {activePassenger?.meetPickup && (
-              <Marker position={[activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]} icon={getMeetSpotIcon(activeColor)}>
-                 <Tooltip direction="right" offset={[10, 0]} opacity={1} permanent>
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Marker longitude={activePassenger.meetPickup.lon} latitude={activePassenger.meetPickup.lat} anchor="center">
+                 <div style={{ position: 'relative' }}>
+                   <MeetSpotIcon color={activeColor} />
+                   <div style={{ position: 'absolute', left: '100%', top: '50%', transform: 'translateY(-50%)', marginLeft: '10px', background: '#fff', padding: '6px 10px', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
                      <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>
                        {activePassenger.profilePic ? (
-                          <>
-                             <img 
-                               src={activePassenger.profilePic} 
-                               alt="avatar" 
-                               style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                               onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                             />
-                             <div style={{ display: 'none', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
-                               {getInitials(activePassenger.name, 'P')}
-                             </div>
-                          </>
+                          <img 
+                            src={activePassenger.profilePic} 
+                            alt="avatar" 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                          />
                        ) : (
                           getInitials(activePassenger.name, 'P')
                        )}
                      </div>
                      <span style={{ fontWeight: 600, color: '#333' }}>Meet around here</span>
+                     {/* Triangle arrow */}
+                     <div style={{ position: 'absolute', left: '-5px', top: '50%', transform: 'translateY(-50%)', width: 0, height: 0, borderTop: '5px solid transparent', borderBottom: '5px solid transparent', borderRight: '5px solid #fff' }}></div>
                    </div>
-                 </Tooltip>
+                 </div>
               </Marker>
             )}
 
             {/* Dotted theoretical intercept line from Driver -> Dropoff */}
             {driverRoute.length > 0 && activePassenger?.meetDropoff && (
-               <Polyline 
-                 positions={activePassenger?.interceptPaths?.dropoffPath || [[activePassenger.meetDropoff.lat, activePassenger.meetDropoff.lon], [activePassenger.dropoff.lat, activePassenger.dropoff.lon]]} 
-                 pathOptions={{ color: activeColor, weight: 4, opacity: 1, dashArray: '5, 8' }}
-               />
+               <Source id="intercept-dropoff" type="geojson" data={toGeoJSON(activePassenger?.interceptPaths?.dropoffPath || [{lat: activePassenger.meetDropoff.lat, lon: activePassenger.meetDropoff.lon}, {lat: activePassenger.dropoff.lat, lon: activePassenger.dropoff.lon}])}>
+                 <Layer id="intercept-dropoff-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }} />
+               </Source>
             )}
 
             {activePassenger?.meetDropoff && (
-               <Marker position={[activePassenger.meetDropoff.lat, activePassenger.meetDropoff.lon]} icon={getMeetDropSpotIcon(activeColor)}>
-                 <Tooltip direction="left" offset={[-10, 0]} opacity={1} permanent>
-                   <span style={{ fontWeight: 600, color: '#333' }}>Drop-off point</span>
-                 </Tooltip>
+               <Marker longitude={activePassenger.meetDropoff.lon} latitude={activePassenger.meetDropoff.lat} anchor="center">
+                 <div style={{ position: 'relative' }}>
+                   <MeetSpotIcon color={activeColor} />
+                   <div style={{ position: 'absolute', right: '100%', top: '50%', transform: 'translateY(-50%)', marginRight: '10px', background: '#fff', padding: '6px 10px', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', whiteSpace: 'nowrap' }}>
+                     <span style={{ fontWeight: 600, color: '#333' }}>Drop-off point</span>
+                     <div style={{ position: 'absolute', right: '-5px', top: '50%', transform: 'translateY(-50%)', width: 0, height: 0, borderTop: '5px solid transparent', borderBottom: '5px solid transparent', borderLeft: '5px solid #fff' }}></div>
+                   </div>
+                 </div>
                </Marker>
             )}
           </>
         )}
 
-        <AutoFollower currentLat={currentLat} currentLon={currentLon} currentBearing={currentBearing} isAutoFollowing={isAutoFollowing} setIsAutoFollowing={setIsAutoFollowing} />
-      </MapContainer>
+        <AutoFollower currentLat={currentLat} currentLon={currentLon} currentBearing={currentBearing} isAutoFollowing={isAutoFollowing} setIsAutoFollowing={setIsAutoFollowing} setMapBearing={setMapBearing} />
+      </Map>
 
       {/* Reset Orientation Button */}
       {Math.abs(mapBearing) > 0.1 && (
         <button 
           onClick={() => {
-            if (mapRef && typeof mapRef.setBearing === 'function') {
-               mapRef.setBearing(0);
+            if (mapRef && typeof mapRef.easeTo === 'function') {
+               mapRef.easeTo({ bearing: 0, pitch: 0 });
+               setMapBearing(0);
+            } else if (mapRef && typeof mapRef.getMap === 'function') {
+               mapRef.getMap().easeTo({ bearing: 0, pitch: 0 });
                setMapBearing(0);
             }
           }}
