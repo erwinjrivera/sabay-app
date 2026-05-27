@@ -130,7 +130,15 @@ export default function ChooseOnMap() {
       {/* HEADER OVERLAY */}
       <div style={{ position: 'absolute', top: '1.5rem', left: '1.5rem', zIndex: 1000}}>
         <button 
-           onClick={() => navigate(-1)}
+           onClick={() => {
+             navigate(`/${sourceMode}`, { 
+               state: { 
+                 originalFindState: findState, 
+                 restoreOnly: true, 
+                 activeField 
+               } 
+             });
+           }}
            style={{ background: 'white', border: 'none', borderRadius: '50%', width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', cursor: 'pointer' }}
         >
           <ArrowLeft size={24} color="#333" />
