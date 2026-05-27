@@ -109,7 +109,7 @@ function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing,
            center: [currentLon, currentLat],
            bearing: currentBearing || 0,
            pitch: 60,
-           zoom: map.getZoom() || 16,
+           zoom: 17.5,
            duration: isFirstRender.current ? 0 : 1000
        });
        isFirstRender.current = false;
@@ -723,7 +723,7 @@ export default function ActiveRide() {
         initialViewState={{
           longitude: driverFrom.lon,
           latitude: driverFrom.lat,
-          zoom: 14,
+          zoom: 17.5,
           pitch: 60,
           bearing: 0
         }}
