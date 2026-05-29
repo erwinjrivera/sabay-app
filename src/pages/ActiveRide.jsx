@@ -83,7 +83,11 @@ function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing,
 
   useEffect(() => {
     if (!map) return;
-    const handleInteract = () => setIsAutoFollowing(false);
+    const handleInteract = (e) => {
+        if (e && e.originalEvent) {
+            setIsAutoFollowing(false);
+        }
+    };
     
     // MapLibre events for interaction
     map.on('dragstart', handleInteract);

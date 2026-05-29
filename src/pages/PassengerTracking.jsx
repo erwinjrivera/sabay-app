@@ -86,7 +86,11 @@ function AutoFollower({ panToCar, setPanToCar, currentLat, currentLon, setMapBea
 
   React.useEffect(() => {
     if (!map) return;
-    const handleInteract = () => setPanToCar(false);
+    const handleInteract = (e) => {
+        if (e && e.originalEvent) {
+            setPanToCar(false);
+        }
+    };
     map.on('dragstart', handleInteract);
     map.on('zoomstart', handleInteract);
     map.on('pitchstart', handleInteract);
