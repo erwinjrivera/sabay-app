@@ -102,11 +102,11 @@ const DriverStartDotIcon = () => (
   <div style={{ width: 16, height: 16, background: '#555', borderRadius: '50%', border: '4px solid #fff', boxShadow: '0 0 8px rgba(85,85,85,0.6)' }}></div>
 );
 
-const PassengerStartDotIcon = ({ color = '#00b0f0' }) => (
-  <div style={{ width: 16, height: 16, background: color, borderRadius: '50%', border: '4px solid #fff', boxShadow: `0 0 8px ${color === '#9cc93a' ? 'rgba(156,201,58,0.6)' : 'rgba(0,176,240,0.6)'}` }}></div>
+const PassengerStartDotIcon = ({ color = '#8ab528' }) => (
+  <div style={{ width: 16, height: 16, background: color, borderRadius: '50%', border: '4px solid #fff', boxShadow: '0 0 8px rgba(138,181,40,0.6)' }}></div>
 );
 
-const PassengerEndPinIcon = ({ color = '#00b0f0' }) => (
+const PassengerEndPinIcon = ({ color = '#8ab528' }) => (
   <svg width="34" height="34" viewBox="0 0 24 24" fill={color} stroke="#fff" strokeWidth="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>
 );
 
@@ -774,7 +774,7 @@ export default function ActiveRide() {
   const activePassenger = matches.find(m => m.id === activePassengerId);
   const activePassRoute = activePassenger?.sharedPath || [];
   const activePassengerPhase = activePassenger ? (passengerStates[activePassenger.id] || 0) : 0;
-  const activeColor = activePassengerPhase === 2 ? '#9cc93a' : '#00b0f0';
+  const activeColor = '#8ab528';
   const effectiveLocation = snappedLocation || currentLocation;
   const currentLat = effectiveLocation ? effectiveLocation.lat : driverFrom.lat;
   const currentLon = effectiveLocation ? effectiveLocation.lon : driverFrom.lon;
@@ -825,11 +825,11 @@ export default function ActiveRide() {
         {driverRoute.length > 0 && (
           <>
             <Source id="driver-route" type="geojson" data={toGeoJSON(driverRoute)}>
-              <Layer id="driver-route-line" type="line" paint={{ 'line-color': recalculatedRoute ? '#94a3b8' : '#555', 'line-width': recalculatedRoute ? 4 : 5, 'line-opacity': recalculatedRoute ? 0.6 : 0.8, 'line-dasharray': recalculatedRoute ? [1, 2] : [1] }} />
+              <Layer id="driver-route-line" type="line" paint={{ 'line-color': recalculatedRoute ? '#94a3b8' : '#00b0f0', 'line-width': recalculatedRoute ? 4 : 5, 'line-opacity': recalculatedRoute ? 0.6 : 0.8, 'line-dasharray': recalculatedRoute ? [1, 2] : [1] }} />
             </Source>
             {recalculatedRoute && (
               <Source id="recalc-route" type="geojson" data={toGeoJSON(recalculatedRoute)}>
-                <Layer id="recalc-route-line" type="line" paint={{ 'line-color': '#555', 'line-width': 5, 'line-opacity': 0.8 }} />
+                <Layer id="recalc-route-line" type="line" paint={{ 'line-color': '#00b0f0', 'line-width': 5, 'line-opacity': 0.8 }} />
               </Source>
             )}
             <Marker longitude={driverFrom.lon} latitude={driverFrom.lat} anchor="center">
