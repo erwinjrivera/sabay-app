@@ -168,19 +168,13 @@ export default function FindMatches() {
   // Fetch Passenger Route once on mount
   useEffect(() => {
     const fetchPassengerRoute = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFrom.lon},${passengerFrom.lat};${passengerTo.lon},${passengerTo.lat}?geometries=geojson&overview=full`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
-        const data = await res.json();
-        const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-        setPassengerRoute(coords);
-      } catch (err) {
-        if (err.name !== 'AbortError') console.error("OSRM Passenger Route Error", err);
-        setPassengerRoute([[passengerFrom.lat, passengerFrom.lon], [passengerTo.lat, passengerTo.lon]]);
-      }
+      setIsRouteLoading(true);
+      const coords = await fetchOSRMRoute(
+         { lat: passengerFrom.lat, lon: passengerFrom.lon }, 
+         { lat: passengerTo.lat, lon: passengerTo.lon }
+      );
+      setPassengerRoute(coords);
+      setIsRouteLoading(false);
     };
     fetchPassengerRoute();
   }, [passengerFrom.lat, passengerFrom.lon, passengerTo.lat, passengerTo.lon]);
@@ -826,7 +820,7 @@ export default function FindMatches() {
           </div>
         )}
         {isRouteLoading && (
-          <div style={{ position: 'absolute', top: '100px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(4px)', padding: '8px 16px', borderRadius: '9999px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 1010, border: '1px solid #f3f4f6' }}>
+          <div style={{ position: 'absolute', top: '140px', left: '50%', transform: 'translateX(-50%)', background: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(4px)', padding: '8px 16px', borderRadius: '9999px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', gap: '8px', zIndex: 1010, border: '1px solid #f3f4f6' }}>
             <Loader2 size={16} color="#3b82f6" style={{ animation: 'spin 1s linear infinite' }} />
             <span style={{ fontSize: '14px', fontWeight: 500, color: '#374151' }}>Loading route...</span>
           </div>
