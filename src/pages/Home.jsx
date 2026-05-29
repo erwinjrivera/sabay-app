@@ -181,6 +181,7 @@ export default function Home() {
            <span style={{ color: '#475569', fontSize: '0.80rem' }}>|</span>
            <button onClick={() => navigate('/privacy-policy')} style={{ background: 'transparent', border: 'none', color: '#0ea5e9', fontWeight: 600, fontSize: '0.80rem', cursor: 'pointer', padding: 0 }}>Privacy Policy</button>
         </div>
+        <span style={{ fontSize: '0.70rem', color: '#475569', marginTop: '2px', letterSpacing: '0.5px' }}>v1.0.0</span>
       </div>
 
       {/* VEHICLE DETAILS INCOMPLETE MODAL */}
