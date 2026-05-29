@@ -975,7 +975,7 @@ export default function ActiveRide() {
                setIs3DMode(false);
             }
           }}
-          style={{ position: 'absolute', bottom: '330px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000, animation: 'scaleIn 0.3s ease-out' }}
+          style={{ position: 'absolute', bottom: !isAutoFollowing ? '330px' : '280px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000, animation: 'scaleIn 0.3s ease-out', transition: 'bottom 0.3s ease-out' }}
         >
            <Compass size={20} color="#555" />
         </button>
