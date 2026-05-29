@@ -41,6 +41,44 @@ function getBearing(lat1, lon1, lat2, lon2) {
   return (brng + 360) % 360;
 }
 
+function getClosestPointOnPath(lat, lon, path) {
+    let minDist = Infinity;
+    let closestPt = null;
+    let bestSegmentIdx = -1;
+
+    for (let i = 0; i < path.length - 1; i++) {
+        const aLat = path[i][0];
+        const aLon = path[i][1];
+        const bLat = path[i+1][0];
+        const bLon = path[i+1][1];
+        
+        // Project (lat, lon) onto segment (aLat, aLon) -> (bLat, bLon)
+        // Treating as a flat 2D plane is sufficient for short road segments
+        const dx = bLon - aLon;
+        const dy = bLat - aLat;
+        
+        let projLat, projLon;
+        if (dx === 0 && dy === 0) {
+            projLat = aLat;
+            projLon = aLon;
+        } else {
+            const t = ((lon - aLon) * dx + (lat - aLat) * dy) / (dx * dx + dy * dy);
+            const clampedT = Math.max(0, Math.min(1, t));
+            projLat = aLat + clampedT * dy;
+            projLon = aLon + clampedT * dx;
+        }
+        
+        const d = getDistanceKM(lat, lon, projLat, projLon);
+        if (d < minDist) {
+            minDist = d;
+            closestPt = { lat: projLat, lon: projLon };
+            bestSegmentIdx = i;
+        }
+    }
+    
+    return { pt: closestPt, dist: minDist, idx: bestSegmentIdx };
+}
+
 // Icons
 const DriverCarIcon = ({ photoURL }) => (
   <div style={{ width: 50, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', transform: 'rotate(180deg)' }}>
@@ -353,30 +391,21 @@ export default function ActiveRide() {
         return;
     }
 
+    // Find closest point on active route (using true point-to-line segment projection)
     const activeRoute = recalculatedRoute || driverRoute;
+    const snapResult = getClosestPointOnPath(currentLocation.lat, currentLocation.lon, activeRoute);
     
-    // Find closest distance to the active route for triggering recalculation
-    let minDistToActive = Infinity;
-    let closestPointIdx = -1;
-    for (let i = 0; i < activeRoute.length; i++) {
-        const d = getDistanceKM(currentLocation.lat, currentLocation.lon, activeRoute[i][0], activeRoute[i][1]);
-        if (d < minDistToActive) {
-            minDistToActive = d;
-            closestPointIdx = i;
-        }
-    }
-    
-    if (minDistToActive <= 0.075 && closestPointIdx !== -1) {
+    if (snapResult.dist <= 0.075 && snapResult.pt) {
         let snappedHeading = currentLocation.heading;
-        if (closestPointIdx < activeRoute.length - 1) {
-            snappedHeading = getBearing(activeRoute[closestPointIdx][0], activeRoute[closestPointIdx][1], activeRoute[closestPointIdx + 1][0], activeRoute[closestPointIdx + 1][1]);
+        if (snapResult.idx !== -1 && snapResult.idx < activeRoute.length - 1) {
+            snappedHeading = getBearing(activeRoute[snapResult.idx][0], activeRoute[snapResult.idx][1], activeRoute[snapResult.idx + 1][0], activeRoute[snapResult.idx + 1][1]);
         }
-        setSnappedLocation({ lat: activeRoute[closestPointIdx][0], lon: activeRoute[closestPointIdx][1], heading: snappedHeading });
+        setSnappedLocation({ lat: snapResult.pt.lat, lon: snapResult.pt.lon, heading: snappedHeading });
     } else {
         setSnappedLocation(null);
     }
     
-    if (minDistToActive > 0.075 && !isRecalculatingRef.current) {
+    if (snapResult.dist > 0.075 && !isRecalculatingRef.current) {
         // Trigger recalculation!
         isRecalculatingRef.current = true;
         const fetchNewRoute = async () => {

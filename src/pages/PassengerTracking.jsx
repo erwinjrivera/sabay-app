@@ -38,6 +38,42 @@ const getInitials = (nameStr, defaultChar = 'U') => {
   return nameStr.substring(0, 2).toUpperCase();
 };
 
+function getClosestPointOnPath(lat, lon, path) {
+    let minDist = Infinity;
+    let closestPt = null;
+    let bestSegmentIdx = -1;
+
+    for (let i = 0; i < path.length - 1; i++) {
+        const aLat = path[i][0];
+        const aLon = path[i][1];
+        const bLat = path[i+1][0];
+        const bLon = path[i+1][1];
+        
+        const dx = bLon - aLon;
+        const dy = bLat - aLat;
+        
+        let projLat, projLon;
+        if (dx === 0 && dy === 0) {
+            projLat = aLat;
+            projLon = aLon;
+        } else {
+            const t = ((lon - aLon) * dx + (lat - aLat) * dy) / (dx * dx + dy * dy);
+            const clampedT = Math.max(0, Math.min(1, t));
+            projLat = aLat + clampedT * dy;
+            projLon = aLon + clampedT * dx;
+        }
+        
+        const d = getDistanceKM(lat, lon, projLat, projLon);
+        if (d < minDist) {
+            minDist = d;
+            closestPt = { lat: projLat, lon: projLon };
+            bestSegmentIdx = i;
+        }
+    }
+    
+    return { pt: closestPt, dist: minDist, idx: bestSegmentIdx };
+}
+
 // Icons
 const DriverCarIcon = ({ photoURL, name, themeColor = '#00b0f0' }) => {
   const initials = getInitials(name, 'D');
@@ -419,24 +455,19 @@ export default function PassengerTracking() {
 
   let driverLiveLat = isFinalState ? driverRide.from.lat : (driverRide.currentLat || driverRide.from.lat);
   let driverLiveLon = isFinalState ? driverRide.from.lon : (driverRide.currentLon || driverRide.from.lon);
-  const driverLiveBearing = isFinalState ? 0 : (driverRide.currentHeading || 0);
+  let driverLiveBearing = isFinalState ? 0 : (driverRide.currentHeading || 0);
 
   // Apply visual snapping to the driver route for the passenger app
   if (!isFinalState && driverRoute.length > 0 && driverRide.currentLat && driverRide.currentLon) {
-      let minDistToActive = Infinity;
-      let closestPoint = null;
-      for (let i = 0; i < driverRoute.length; i++) {
-          const d = getDistanceKM(driverRide.currentLat, driverRide.currentLon, driverRoute[i][0], driverRoute[i][1]);
-          if (d < minDistToActive) {
-              minDistToActive = d;
-              closestPoint = driverRoute[i];
-          }
-      }
+      const snapResult = getClosestPointOnPath(driverRide.currentLat, driverRide.currentLon, driverRoute);
       
       // Snap threshold: 0.075 km (75 meters)
-      if (minDistToActive <= 0.075 && closestPoint) {
-          driverLiveLat = closestPoint[0];
-          driverLiveLon = closestPoint[1];
+      if (snapResult.dist <= 0.075 && snapResult.pt) {
+          driverLiveLat = snapResult.pt.lat;
+          driverLiveLon = snapResult.pt.lon;
+          if (snapResult.idx !== -1 && snapResult.idx < driverRoute.length - 1) {
+              driverLiveBearing = getBearing(driverRoute[snapResult.idx][0], driverRoute[snapResult.idx][1], driverRoute[snapResult.idx + 1][0], driverRoute[snapResult.idx + 1][1]);
+          }
       }
   }
 
