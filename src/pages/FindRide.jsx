@@ -139,6 +139,7 @@ export default function FindRide() {
   // Search Suggester state
   const [suggestions, setSuggestions] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
 
 
   useEffect(() => {
@@ -197,6 +198,7 @@ export default function FindRide() {
   // Geolocation trigger
   const handleCurrentLocationclick = () => {
     if ('geolocation' in navigator) {
+      setIsFetchingLocation(true);
       navigator.geolocation.getCurrentPosition(async (pos) => {
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
@@ -217,9 +219,12 @@ export default function FindRide() {
           }
         } catch(e) {
           handleSelect('Coordinates: ' + lat.toFixed(4) + ', ' + lon.toFixed(4), '', lat, lon);
+        } finally {
+          setIsFetchingLocation(false);
         }
       }, (err) => {
         alert("Please enable location services to use Current Location.");
+        setIsFetchingLocation(false);
       });
     }
   };
@@ -440,11 +445,13 @@ export default function FindRide() {
                     
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, justifyContent: 'center' }}>
                       <div style={{ position: 'relative' }}>
+                        <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
                         <input 
                           ref={fromRef}
                           type="text" 
                           placeholder="Leaving from..."
                           value={fromLocation}
+                          disabled={activeField === 'from' && isFetchingLocation}
                           onChange={(e) => {
                              setFromLocation(e.target.value);
                              setFromCoords(null);
@@ -453,9 +460,14 @@ export default function FindRide() {
                              setActiveField('from');
                              setIsPanelOpen(false);
                           }}
-                          style={{ width: 'calc(100% - 8px)', background: activeField === 'from' ? '#334155' : 'transparent', color: '#f8fafc', border: '1px solid transparent', padding: '8px 36px 8px 14px', marginLeft: '-4px', borderRadius: '20px', fontSize: '0.9rem', lineHeight: '1.3', boxSizing: 'border-box', outline: 'none', transition: 'all 0.2s' }}
+                          style={{ width: 'calc(100% - 8px)', background: activeField === 'from' ? '#334155' : 'transparent', color: '#f8fafc', border: '1px solid transparent', padding: '8px 36px 8px 14px', marginLeft: '-4px', borderRadius: '20px', fontSize: '0.9rem', lineHeight: '1.3', boxSizing: 'border-box', outline: 'none', transition: 'all 0.2s', opacity: (activeField === 'from' && isFetchingLocation) ? 0.6 : 1 }}
                         />
-                        {activeField === 'from' && fromLocation && (
+                        {activeField === 'from' && isFetchingLocation && (
+                          <div style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', display: 'flex' }}>
+                            <Loader2 size={16} color="#00b0f0" style={{ animation: 'spin 1s linear infinite' }} />
+                          </div>
+                        )}
+                        {activeField === 'from' && !isFetchingLocation && fromLocation && (
                           <button onClick={() => setFromLocation('')} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: '#475569', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', cursor: 'pointer' }}>
                             <X size={12} color="#94a3b8" strokeWidth={3} />
                           </button>
@@ -468,6 +480,7 @@ export default function FindRide() {
                           type="text" 
                           placeholder="Going to..."
                           value={toLocation}
+                          disabled={activeField === 'to' && isFetchingLocation}
                           onChange={(e) => {
                              setToLocation(e.target.value);
                              setToCoords(null);
@@ -476,9 +489,14 @@ export default function FindRide() {
                              setActiveField('to');
                              setIsPanelOpen(false);
                           }}
-                          style={{ width: 'calc(100% - 8px)', background: activeField === 'to' ? '#334155' : 'transparent', color: activeField === 'to' || toLocation ? '#f8fafc' : '#94a3b8', border: '1px solid transparent', padding: '8px 36px 8px 14px', marginLeft: '-4px', borderRadius: '20px', fontSize: '0.9rem', lineHeight: '1.3', boxSizing: 'border-box', outline: 'none', transition: 'all 0.2s' }}
+                          style={{ width: 'calc(100% - 8px)', background: activeField === 'to' ? '#334155' : 'transparent', color: activeField === 'to' || toLocation ? '#f8fafc' : '#94a3b8', border: '1px solid transparent', padding: '8px 36px 8px 14px', marginLeft: '-4px', borderRadius: '20px', fontSize: '0.9rem', lineHeight: '1.3', boxSizing: 'border-box', outline: 'none', transition: 'all 0.2s', opacity: (activeField === 'to' && isFetchingLocation) ? 0.6 : 1 }}
                         />
-                        {activeField === 'to' && toLocation && (
+                        {activeField === 'to' && isFetchingLocation && (
+                          <div style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', display: 'flex' }}>
+                            <Loader2 size={16} color="#00b0f0" style={{ animation: 'spin 1s linear infinite' }} />
+                          </div>
+                        )}
+                        {activeField === 'to' && !isFetchingLocation && toLocation && (
                           <button onClick={() => setToLocation('')} style={{ position: 'absolute', right: '20px', top: '50%', transform: 'translateY(-50%)', background: '#475569', borderRadius: '50%', width: '18px', height: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, border: 'none', cursor: 'pointer' }}>
                             <X size={12} color="#94a3b8" strokeWidth={3} />
                           </button>
