@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import Map, { Source, Layer, Marker } from 'react-map-gl/maplibre';
@@ -791,6 +791,30 @@ export default function ActiveRide() {
     return { type: 'Feature', geometry: { type: 'LineString', coordinates } };
   };
 
+  const driverRouteGeoJSON = useMemo(() => toGeoJSON(driverRoute), [driverRoute]);
+  const recalcRouteGeoJSON = useMemo(() => recalculatedRoute ? toGeoJSON(recalculatedRoute) : null, [recalculatedRoute]);
+  const activePassRouteGeoJSON = useMemo(() => toGeoJSON(activePassRoute), [activePassRoute]);
+  
+  const interceptPickupGeoJSON = useMemo(() => {
+    if (!activePassenger) return toGeoJSON([]);
+    const path = activePassenger.interceptPaths?.pickupPath;
+    if (path) return toGeoJSON(path);
+    if (activePassenger.pickup && activePassenger.meetPickup) {
+      return toGeoJSON([{lat: activePassenger.pickup.lat, lon: activePassenger.pickup.lon}, {lat: activePassenger.meetPickup.lat, lon: activePassenger.meetPickup.lon}]);
+    }
+    return toGeoJSON([]);
+  }, [activePassenger]);
+
+  const interceptDropoffGeoJSON = useMemo(() => {
+    if (!activePassenger) return toGeoJSON([]);
+    const path = activePassenger.interceptPaths?.dropoffPath;
+    if (path) return toGeoJSON(path);
+    if (activePassenger.meetDropoff && activePassenger.dropoff) {
+      return toGeoJSON([{lat: activePassenger.meetDropoff.lat, lon: activePassenger.meetDropoff.lon}, {lat: activePassenger.dropoff.lat, lon: activePassenger.dropoff.lon}]);
+    }
+    return toGeoJSON([]);
+  }, [activePassenger]);
+
   return (
     <div style={{ height: '100dvh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
       
@@ -824,11 +848,11 @@ export default function ActiveRide() {
         
         {driverRoute.length > 0 && (
           <>
-            <Source id="driver-route" type="geojson" data={toGeoJSON(driverRoute)}>
+            <Source id="driver-route" type="geojson" data={driverRouteGeoJSON}>
               <Layer id="driver-route-line" type="line" paint={{ 'line-color': recalculatedRoute ? '#94a3b8' : '#00b0f0', 'line-width': recalculatedRoute ? 4 : 5, 'line-opacity': recalculatedRoute ? 0.6 : 0.8, 'line-dasharray': recalculatedRoute ? [1, 2] : [1] }} />
             </Source>
             {recalculatedRoute && (
-              <Source id="recalc-route" type="geojson" data={toGeoJSON(recalculatedRoute)}>
+              <Source id="recalc-route" type="geojson" data={recalcRouteGeoJSON}>
                 <Layer id="recalc-route-line" type="line" paint={{ 'line-color': '#00b0f0', 'line-width': 5, 'line-opacity': 0.8 }} />
               </Source>
             )}
@@ -851,7 +875,7 @@ export default function ActiveRide() {
         {/* Passenger Route */}
         {activePassRoute.length > 0 && (
           <>
-            <Source id="pass-route" type="geojson" data={toGeoJSON(activePassRoute)}>
+            <Source id="pass-route" type="geojson" data={activePassRouteGeoJSON}>
               <Layer id="pass-route-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 6, 'line-opacity': 1 }} />
             </Source>
             
@@ -864,7 +888,7 @@ export default function ActiveRide() {
             
             {/* Dotted theoretical intercept lines */}
             {driverRoute.length > 0 && activePassenger?.meetPickup && (
-               <Source id="intercept-pickup" type="geojson" data={toGeoJSON(activePassenger?.interceptPaths?.pickupPath || [{lat: activePassenger.pickup.lat, lon: activePassenger.pickup.lon}, {lat: activePassenger.meetPickup.lat, lon: activePassenger.meetPickup.lon}])}>
+               <Source id="intercept-pickup" type="geojson" data={interceptPickupGeoJSON}>
                  <Layer id="intercept-pickup-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }} />
                </Source>
             )}
@@ -896,7 +920,7 @@ export default function ActiveRide() {
 
             {/* Dotted theoretical intercept line from Driver -> Dropoff */}
             {driverRoute.length > 0 && activePassenger?.meetDropoff && (
-               <Source id="intercept-dropoff" type="geojson" data={toGeoJSON(activePassenger?.interceptPaths?.dropoffPath || [{lat: activePassenger.meetDropoff.lat, lon: activePassenger.meetDropoff.lon}, {lat: activePassenger.dropoff.lat, lon: activePassenger.dropoff.lon}])}>
+               <Source id="intercept-dropoff" type="geojson" data={interceptDropoffGeoJSON}>
                  <Layer id="intercept-dropoff-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }} />
                </Source>
             )}
