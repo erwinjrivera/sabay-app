@@ -84,7 +84,7 @@ export default function Login() {
         <div className="auth-box" style={{ background: 'transparent', boxShadow: 'none', padding: 0, width: '90%', maxWidth: '350px' }}>
           <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
             <h1 style={{ color: '#00b0f0', fontWeight: 800, fontSize: '2.5rem', marginBottom: '0.2rem' }}>Sabay</h1>
-            <h2 style={{ color: '#555', fontSize: '1rem', fontWeight: 500 }}>{isLogin ? 'a free carpool sharing for every Juan' : 'Create an Account'}</h2>
+            <h2 style={{ color: '#555', fontSize: '1rem', fontWeight: 500 }}>{isLogin ? 'Saan ka? Tara, Sabay!' : 'Create an Account'}</h2>
           </div>
           
           {error && <p style={{ color: '#ef4444', marginBottom: '1rem', fontSize: '0.875rem' }}>{error}</p>}
@@ -154,6 +154,19 @@ export default function Login() {
             )}
           </p>
         </div>
+      </div>
+      <div style={{ position: 'absolute', bottom: '24px', left: 0, width: '100%', textAlign: 'center', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <span style={{ fontSize: '0.80rem', color: '#64748b' }}>
+          By using Sabay, you agree to our 
+        </span>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
+           <button onClick={() => navigate('/terms-of-use')} style={{ background: 'transparent', border: 'none', color: '#0ea5e9', fontWeight: 600, fontSize: '0.80rem', cursor: 'pointer', padding: 0 }}>Terms of Use</button>
+           <span style={{ color: '#94a3b8', fontSize: '0.80rem' }}>|</span>
+           <button onClick={() => navigate('/privacy-policy')} style={{ background: 'transparent', border: 'none', color: '#0ea5e9', fontWeight: 600, fontSize: '0.80rem', cursor: 'pointer', padding: 0 }}>Privacy Policy</button>
+        </div>
+        <span style={{ fontSize: '0.70rem', color: '#64748b', marginTop: '2px', letterSpacing: '0.5px' }}>
+          v{__APP_VERSION__}-{__GIT_HASH__} (build {__BUILD_NUMBER__})
+        </span>
       </div>
     </div>
   );
