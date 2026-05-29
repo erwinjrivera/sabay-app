@@ -98,22 +98,21 @@ export default function OfferRide() {
            if (location.state.updatedField === 'from') {
               setFromLocation(location.state.address);
               setFromCoords(location.state.lat && location.state.lon ? { lat: location.state.lat, lon: location.state.lon } : null);
-              if (!location.state.originalFindState.toLocation) {
-                 setActiveField('to');
-                 setTimeout(() => toRef.current?.focus(), 100);
-              } else {
-                 setIsPanelOpen(true);
-              }
+              if (location.state.originalFindState) {
+               if (!location.state.originalFindState.toCoords) {
+                  setActiveField('to');
+                  setTimeout(() => toRef.current?.focus(), 100);
+               }
+           }
            } else if (location.state.updatedField === 'to') {
               setToLocation(location.state.address);
               setToCoords(location.state.lat && location.state.lon ? { lat: location.state.lat, lon: location.state.lon } : null);
-              if (!location.state.originalFindState.fromLocation) {
-                 setActiveField('from');
-                 setTimeout(() => fromRef.current?.focus(), 100);
-              } else {
-                 setActiveField('to');
-                 setIsPanelOpen(true);
-              }
+              if (location.state.originalFindState) {
+                  if (!location.state.originalFindState.fromCoords) {
+                     setActiveField('from');
+                     setTimeout(() => fromRef.current?.focus(), 100);
+                  }
+               }
            }
            
            saveRecentPlace(
@@ -294,20 +293,16 @@ export default function OfferRide() {
       
       setFromLocation(fullAddress);
       setFromCoords(lat && lon ? { lat, lon } : null);
-      if (!toLocation) {
+      if (!toCoords) {
         setActiveField('to');
         setTimeout(() => toRef.current?.focus(), 100);
-      } else {
-        setIsPanelOpen(true);
       }
     } else {
       setToLocation(fullAddress);
       setToCoords(lat && lon ? { lat, lon } : null);
-      if (!fromLocation) {
+      if (!fromCoords) {
         setActiveField('from');
         setTimeout(() => fromRef.current?.focus(), 100);
-      } else {
-        setIsPanelOpen(true); 
       }
     }
     setSuggestions([]);

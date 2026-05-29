@@ -280,6 +280,7 @@ export default function ActiveRide() {
   const computedHeadingRef = useRef(null);
 
   useEffect(() => {
+    let isMounted = true;
     const startTracking = async () => {
       try {
         const permissions = await Geolocation.checkPermissions();
@@ -287,10 +288,12 @@ export default function ActiveRide() {
            await Geolocation.requestPermissions();
         }
 
+        if (!isMounted) return;
+
         watchIdRef.current = await Geolocation.watchPosition(
           { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
           async (position, err) => {
-            if (position && !err) {
+            if (position && !err && isMounted) {
               const lat = position.coords.latitude;
               const lon = position.coords.longitude;
               let heading = position.coords.heading;
@@ -317,7 +320,7 @@ export default function ActiveRide() {
                     await updateDoc(doc(db, 'rideOffers', ride.id), {
                        currentLat: lat,
                        currentLon: lon,
-                       currentHeading: heading,
+                       currentHeading: heading ?? null,
                        lastLocationUpdate: new Date().toISOString()
                     });
                  } catch(err) { console.error("Broadcast failed:", err); }
@@ -325,7 +328,7 @@ export default function ActiveRide() {
             }
           }
         );
-      } catch(err) {
+      } catch (err) {
         console.error("Capacitor Tracking Error:", err);
       }
     };
@@ -333,6 +336,7 @@ export default function ActiveRide() {
     startTracking();
 
     return () => {
+      isMounted = false;
       if (watchIdRef.current) Geolocation.clearWatch({ id: watchIdRef.current });
     };
   }, [ride?.id]);
