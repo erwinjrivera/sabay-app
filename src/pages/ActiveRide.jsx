@@ -116,7 +116,7 @@ const MeetSpotIcon = ({ color = '#00b0f0' }) => (
 
 import { useMap as useMapLibre } from 'react-map-gl/maplibre';
 
-function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing, setIsAutoFollowing, setMapBearing, is3DMode }) {
+function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing, setIsAutoFollowing, setMapBearing, is3DMode, setIs3DMode }) {
   const { current: map } = useMapLibre();
   const isFirstRender = useRef(true);
 
@@ -137,14 +137,18 @@ function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing,
     const handleRotate = () => setMapBearing(map.getBearing());
     map.on('rotate', handleRotate);
 
+    const handlePitch = () => setIs3DMode(map.getPitch() > 30);
+    map.on('pitch', handlePitch);
+
     return () => {
       map.off('dragstart', handleInteract);
       map.off('zoomstart', handleInteract);
       map.off('pitchstart', handleInteract);
       map.off('rotatestart', handleInteract);
       map.off('rotate', handleRotate);
+      map.off('pitch', handlePitch);
     };
-  }, [map, setIsAutoFollowing, setMapBearing]);
+  }, [map, setIsAutoFollowing, setMapBearing, setIs3DMode]);
 
   useEffect(() => {
     if (isAutoFollowing && currentLat && currentLon && map) {
@@ -939,7 +943,7 @@ export default function ActiveRide() {
           </>
         )}
 
-        <AutoFollower currentLat={currentLat} currentLon={currentLon} currentBearing={currentBearing} isAutoFollowing={isAutoFollowing} setIsAutoFollowing={setIsAutoFollowing} setMapBearing={setMapBearing} is3DMode={is3DMode} />
+        <AutoFollower currentLat={currentLat} currentLon={currentLon} currentBearing={currentBearing} isAutoFollowing={isAutoFollowing} setIsAutoFollowing={setIsAutoFollowing} setMapBearing={setMapBearing} is3DMode={is3DMode} setIs3DMode={setIs3DMode} />
       </Map>
 
       {/* Map Mode Toggle (2D/3D) */}
@@ -964,9 +968,11 @@ export default function ActiveRide() {
             if (mapRef && typeof mapRef.easeTo === 'function') {
                mapRef.easeTo({ bearing: 0, pitch: 0 });
                setMapBearing(0);
+               setIs3DMode(false);
             } else if (mapRef && typeof mapRef.getMap === 'function') {
                mapRef.getMap().easeTo({ bearing: 0, pitch: 0 });
                setMapBearing(0);
+               setIs3DMode(false);
             }
           }}
           style={{ position: 'absolute', bottom: '330px', right: '20px', background: '#fff', border: 'none', borderRadius: '4px', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', zIndex: 1000, animation: 'scaleIn 0.3s ease-out' }}
