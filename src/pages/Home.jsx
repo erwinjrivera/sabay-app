@@ -172,7 +172,7 @@ export default function Home() {
          </div>
       </div>
 
-      <div style={{ position: 'absolute', bottom: '24px', left: 0, width: '100%', textAlign: 'center', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={{ position: 'absolute', bottom: 'calc(24px + env(safe-area-inset-bottom))', left: 0, width: '100%', textAlign: 'center', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <span style={{ fontSize: '0.80rem', color: '#94a3b8' }}>
           By using Sabay, you agree to our 
         </span>
