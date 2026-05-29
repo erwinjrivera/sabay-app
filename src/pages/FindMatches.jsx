@@ -1223,9 +1223,8 @@ export default function FindMatches() {
           left: 0,
           width: '100%',
           height: '100%',
-          background: 'rgba(0,0,0,0.5)',
+          background: 'transparent',
           zIndex: 1500,
-          opacity: isBottomPanelExpanded ? 1 : 0,
           pointerEvents: isBottomPanelExpanded ? 'auto' : 'none',
           transition: 'opacity 0.3s ease-in-out'
         }}

@@ -805,8 +805,8 @@ export default function PassengerTracking() {
         onClick={() => setIsBottomPanelExpanded(false)}
         style={{
           position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-          background: 'rgba(0,0,0,0.5)', zIndex: 1500,
-          opacity: isBottomPanelExpanded ? 1 : 0, pointerEvents: isBottomPanelExpanded ? 'auto' : 'none',
+          background: 'transparent', zIndex: 1500,
+          pointerEvents: isBottomPanelExpanded ? 'auto' : 'none',
           transition: 'opacity 0.3s ease-in-out'
         }}
       />
