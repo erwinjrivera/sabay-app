@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2, Play, Calendar, Clock, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { Loader2, ArrowLeft, Users, Play, Clock, Search, Navigation, UserCheck, ShieldCheck, Star, StopCircle, RefreshCw, MessageCircle, MoreHorizontal, User, Check, List, X, Calendar, ChevronDown, ChevronUp } from 'lucide-react';
+import { fetchOSRMRoute } from '../utils/osrm';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
 import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, increment, arrayRemove, arrayUnion, where, deleteField, runTransaction } from 'firebase/firestore';
@@ -136,6 +137,7 @@ export default function OfferMatches() {
   const ride = location.state?.ride;
   
   const [driverRoute, setDriverRoute] = useState([]);
+  const [isRouteLoading, setIsRouteLoading] = useState(true);
   const [matches, setMatches] = useState([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(true);
   const [actionProcessingId, setActionProcessingId] = useState(null);
@@ -182,19 +184,13 @@ export default function OfferMatches() {
   // Fetch Driver Route once on mount
   useEffect(() => {
     const fetchDriverRoute = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-        const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverFrom.lon},${driverFrom.lat};${driverTo.lon},${driverTo.lat}?geometries=geojson&overview=full`, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
-        const data = await res.json();
-        const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-        setDriverRoute(coords);
-      } catch (err) {
-        if (err.name !== 'AbortError') console.error("OSRM Driver Route Error", err);
-        setDriverRoute([[driverFrom.lat, driverFrom.lon], [driverTo.lat, driverTo.lon]]);
-      }
+      setIsRouteLoading(true);
+      const coords = await fetchOSRMRoute(
+         { lat: driverFrom.lat, lon: driverFrom.lon }, 
+         { lat: driverTo.lat, lon: driverTo.lon }
+      );
+      setDriverRoute(coords);
+      setIsRouteLoading(false);
     };
     fetchDriverRoute();
   }, [driverFrom.lat, driverFrom.lon, driverTo.lat, driverTo.lon]);
@@ -355,23 +351,10 @@ export default function OfferMatches() {
               };
               
               // Segment 1 & 3: Connector routes mapped natively to exactly the OSRM geometric paths!
-              try {
-                  const controller = new AbortController();
-                  const timeoutId = setTimeout(() => controller.abort(), 2000);
-                  const pFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFromPos.lon},${passengerFromPos.lat};${meetPickup[1]},${meetPickup[0]}?geometries=geojson`, { signal: controller.signal });
-                  const dFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${meetDropoff[1]},${meetDropoff[0]};${passengerToPos.lon},${passengerToPos.lat}?geometries=geojson`, { signal: controller.signal });
-                  const [pRes, dRes] = await Promise.all([pFetch, dFetch]);
-                  clearTimeout(timeoutId);
-                  if (!pRes.ok || !dRes.ok) throw new Error("OSRM Connector API failed");
-                  const pData = await pRes.json();
-                  const dData = await dRes.json();
-                  if (pData.routes?.length > 0) interceptPaths.pickupPath = pData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-                  if (dData.routes?.length > 0) interceptPaths.dropoffPath = dData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
-              } catch (e) {
-                  if (e.name !== 'AbortError') {
-                      console.error("OSRM Connector routing failed natively", e);
-                  }
-              }
+              const pCoords = await fetchOSRMRoute({ lat: passengerFromPos.lat, lon: passengerFromPos.lon }, { lat: meetPickup[0], lon: meetPickup[1] });
+              const dCoords = await fetchOSRMRoute({ lat: meetDropoff[0], lon: meetDropoff[1] }, { lat: passengerToPos.lat, lon: passengerToPos.lon });
+              interceptPaths.pickupPath = pCoords;
+              interceptPaths.dropoffPath = dCoords;
 
               // Final sequential sanity check
               if (!isLinkedMatch && pickupIdx >= dropIdx) return null;
@@ -663,94 +646,97 @@ export default function OfferMatches() {
     <div style={{ height: '100dvh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
       
       {/* BACKGROUND MAP */}
-      {isLoadingMatches && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1000, background: 'white', padding: '15px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex' }}>
-          <Loader2 size={32} color="#00b0f0" style={{ animation: 'spin 1.2s linear infinite' }} />
-        </div>
-      )}
-      <MapContainer 
-        center={[14.5552, 121.0400]} 
-        zoom={14} 
-        zoomControl={false}
-        style={{ height: '100%', width: '100%' }}
-      >
-        <TileLayer
-           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-           attribution='Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
-        
-        {/* DRIVER ROUTE */}
-        {driverRoute.length > 0 && (
-          <>
-            <Polyline positions={driverRoute} pathOptions={{ color: '#555', weight: 5, opacity: 0.8 }} />
-            <Marker position={[driverFrom.lat, driverFrom.lon]} icon={driverStartIcon} />
-            <Marker position={[driverTo.lat, driverTo.lon]} icon={driverIcon} />
-          </>
+      <div className="absolute inset-0 z-0">
+        {isRouteLoading && (
+          <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg flex items-center space-x-2 z-10 border border-gray-100">
+            <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+            <span className="text-sm font-medium text-gray-700">Loading route...</span>
+          </div>
         )}
+        <MapContainer 
+          center={[14.5552, 121.0400]} 
+          zoom={14} 
+          zoomControl={false}
+          style={{ height: '100%', width: '100%' }}
+        >
+          <TileLayer
+             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+             attribution='Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          />
+          
+          {/* DRIVER ROUTE */}
+          {driverRoute.length > 0 && (
+            <>
+              <Polyline positions={driverRoute} pathOptions={{ color: '#555', weight: 5, opacity: 0.8 }} />
+              <Marker position={[driverFrom.lat, driverFrom.lon]} icon={driverStartIcon} />
+              <Marker position={[driverTo.lat, driverTo.lon]} icon={driverIcon} />
+            </>
+          )}
 
-        {/* PASSENGER OVERLAY & INTERCEPTS */}
-        {activePassRoute.length > 0 && (
-          <>
-            {/* Main passenger transit path */}
-            <Polyline positions={activePassRoute} pathOptions={{ color: activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 6, opacity: 1 }} />
-            
-            {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node */}
-            {driverRoute.length > 0 && activePassenger?.meetPickup && (
-               <Polyline 
-                 positions={activePassenger?.interceptPaths?.pickupPath || [[activePassenger.pickup.lat, activePassenger.pickup.lon], [activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]]} 
-                 pathOptions={{ color: activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
-               />
-            )}
+          {/* PASSENGER OVERLAY & INTERCEPTS */}
+          {activePassRoute.length > 0 && (
+            <>
+              {/* Main passenger transit path */}
+              <Polyline positions={activePassRoute} pathOptions={{ color: activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 6, opacity: 1 }} />
+              
+              {/* Dotted theoretical intercept lines from Passenger Origin -> Nearest Driver node */}
+              {driverRoute.length > 0 && activePassenger?.meetPickup && (
+                 <Polyline 
+                   positions={activePassenger?.interceptPaths?.pickupPath || [[activePassenger.pickup.lat, activePassenger.pickup.lon], [activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]]} 
+                   pathOptions={{ color: activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 />
+              )}
 
-            {/* Meet around here Marker & Tooltip */}
-            {activePassenger?.meetPickup && (
-              <Marker position={[activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]} icon={getMeetSpotIcon(activePassenger.type)}>
-                 <Tooltip 
-                    direction="right" 
-                    offset={[10, 0]} 
-                    opacity={1} 
-                    permanent
-                 >
-                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                     <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                       <AvatarFallback src={activePassenger.profilePic} name={activePassenger.name} size={24} />
+              {/* Meet around here Marker & Tooltip */}
+              {activePassenger?.meetPickup && (
+                <Marker position={[activePassenger.meetPickup.lat, activePassenger.meetPickup.lon]} icon={getMeetSpotIcon(activePassenger.type)}>
+                   <Tooltip 
+                      direction="right" 
+                      offset={[10, 0]} 
+                      opacity={1} 
+                      permanent
+                   >
+                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                       <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                         <AvatarFallback src={activePassenger.profilePic} name={activePassenger.name} size={24} />
+                       </div>
+                       <span style={{ fontWeight: 600, color: '#333' }}>Meet around here</span>
                      </div>
-                     <span style={{ fontWeight: 600, color: '#333' }}>Meet around here</span>
-                   </div>
-                 </Tooltip>
-              </Marker>
-            )}
+                   </Tooltip>
+                </Marker>
+              )}
 
-            {/* Dotted theoretical intercept line from Driver -> Dropoff */}
-            {driverRoute.length > 0 && activePassenger?.meetDropoff && (
-               <Polyline 
-                 positions={activePassenger?.interceptPaths?.dropoffPath || [[activePassenger.meetDropoff.lat, activePassenger.meetDropoff.lon], [activePassenger.dropoff.lat, activePassenger.dropoff.lon]]} 
-                 pathOptions={{ color: activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
-               />
-            )}
+              {/* Dotted theoretical intercept line from Driver -> Dropoff */}
+              {driverRoute.length > 0 && activePassenger?.meetDropoff && (
+                 <Polyline 
+                   positions={activePassenger?.interceptPaths?.dropoffPath || [[activePassenger.meetDropoff.lat, activePassenger.meetDropoff.lon], [activePassenger.dropoff.lat, activePassenger.dropoff.lon]]} 
+                   pathOptions={{ color: activePassenger.type === 'completed' ? '#9cc93a' : activePassenger.type === 'confirmed' ? '#9cc93a' : activePassenger.type === 'match' ? '#00b0f0' : activePassenger.type === 'offered' ? '#eab308' : activePassenger.type === 'request' ? '#ff0043' : '#888', weight: 4, opacity: 1, dashArray: '5, 8' }}
+                 />
+              )}
 
-            {/* Drop off around here Marker & Tooltip */}
-            {activePassenger?.meetDropoff && (
-              <Marker position={[activePassenger.meetDropoff.lat, activePassenger.meetDropoff.lon]} icon={getMeetDropSpotIcon(activePassenger.type)}>
-                 <Tooltip 
-                    direction="left" 
-                    offset={[-10, 0]} 
-                    opacity={1} 
-                    permanent
-                 >
-                   <span style={{ fontWeight: 600, color: '#333' }}>Drop-off point</span>
-                 </Tooltip>
-              </Marker>
-            )}
+              {/* Drop off around here Marker & Tooltip */}
+              {activePassenger?.meetDropoff && (
+                <Marker position={[activePassenger.meetDropoff.lat, activePassenger.meetDropoff.lon]} icon={getMeetDropSpotIcon(activePassenger.type)}>
+                   <Tooltip 
+                      direction="left" 
+                      offset={[-10, 0]} 
+                      opacity={1} 
+                      permanent
+                   >
+                     <span style={{ fontWeight: 600, color: '#333' }}>Drop-off point</span>
+                   </Tooltip>
+                </Marker>
+              )}
 
-            {/* Passenger endpoints */}
-            <Marker position={[activePassenger.pickup.lat, activePassenger.pickup.lon]} icon={getPassengerStartIcon(activePassenger.type)} />
-            <Marker position={[activePassenger.dropoff.lat, activePassenger.dropoff.lon]} icon={getPassengerEndIcon(activePassenger.type)} />
-          </>
-        )}
+              {/* Passenger endpoints */}
+              <Marker position={[activePassenger.pickup.lat, activePassenger.pickup.lon]} icon={getPassengerStartIcon(activePassenger.type)} />
+              <Marker position={[activePassenger.dropoff.lat, activePassenger.dropoff.lon]} icon={getPassengerEndIcon(activePassenger.type)} />
+            </>
+          )}
 
-        <MapAdjuster route1={driverRoute} route2={activePassRoute} />
-      </MapContainer>
+          <MapAdjuster route1={driverRoute} route2={activePassRoute} />
+        </MapContainer>
+      </div>
 
       {/* TOP OVERLAYS */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>

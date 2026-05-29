@@ -818,12 +818,19 @@ export default function FindMatches() {
     <div style={{ height: '100dvh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
       
       {/* BACKGROUND MAP */}
-      {isLoadingMatches && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1000, background: 'white', padding: '15px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex' }}>
-          <Loader2 size={32} color="#00b0f0" style={{ animation: 'spin 1.2s linear infinite' }} />
-        </div>
-      )}
-      <MapContainer 
+      <div className="absolute inset-0 z-0">
+        {isLoadingMatches && (
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', zIndex: 1000, background: 'white', padding: '15px', borderRadius: '50%', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', display: 'flex' }}>
+            <Loader2 size={32} color="#00b0f0" style={{ animation: 'spin 1.2s linear infinite' }} />
+          </div>
+        )}
+        {isRouteLoading && (
+          <div className="absolute top-24 left-1/2 -translate-x-1/2 bg-white/90 backdrop-blur-sm px-4 py-2 rounded-full shadow-lg flex items-center space-x-2 z-10 border border-gray-100">
+            <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+            <span className="text-sm font-medium text-gray-700">Loading route...</span>
+          </div>
+        )}
+        <MapContainer 
         center={[14.5552, 121.0400]} 
         zoom={14} 
         zoomControl={false}
@@ -915,6 +922,7 @@ export default function FindMatches() {
 
         <MapAdjuster route1={passengerRoute} route2={activeDriver?.driverFullRoute || []} />
       </MapContainer>
+      </div>
 
       {/* TOP OVERLAYS */}
       <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', zIndex: 1000 }}>
