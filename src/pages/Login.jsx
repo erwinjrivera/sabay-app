@@ -13,7 +13,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [isResetMode, setIsResetMode] = useState(false);
   
-  const { currentUser, profileReady, loginGoogle, loginEmail, signupEmail, resetPassword } = useAuth();
+  const { currentUser, profileReady, isCheckingProfile, loginGoogle, loginEmail, signupEmail, resetPassword } = useAuth();
   const navigate = useNavigate();
 
   const getFriendlyErrorMessage = (errMsg) => {
@@ -26,32 +26,18 @@ export default function Login() {
     return 'An error occurred. Please try again.';
   };
 
-  // Helper: check if user has completed onboarding
-  const checkAndRedirect = async (user) => {
-    if (!user) return;
-    try {
-      const docSnap = await getDoc(doc(db, 'users', user.uid));
-      if (docSnap.exists() && docSnap.data().onboardingComplete === true) {
-        navigate('/');
-      } else {
-        navigate('/onboarding');
-      }
-    } catch (err) {
-      // Fallback: let AuthContext handle it
-      navigate('/');
-    }
-  };
+
 
   useEffect(() => {
     // If user is already logged in (Google auto-verify, or email was verified)
-    if (currentUser && currentUser.emailVerified !== false) {
+    if (currentUser && currentUser.emailVerified !== false && !isCheckingProfile) {
       if (profileReady) {
         navigate('/');
       } else {
         navigate('/onboarding');
       }
     }
-  }, [currentUser, profileReady, navigate]);
+  }, [currentUser, profileReady, isCheckingProfile, navigate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -59,8 +45,7 @@ export default function Login() {
     setMessage('');
     try {
       if (isLogin) {
-        const result = await loginEmail(email, password);
-        await checkAndRedirect(result.user);
+        await loginEmail(email, password);
       } else {
         await signupEmail(email, password);
         setMessage('Registration successful! Please check your email inbox to verify your account.');
@@ -86,8 +71,7 @@ export default function Login() {
 
   const handleGoogle = async () => {
     try {
-      const result = await loginGoogle();
-      await checkAndRedirect(result.user);
+      await loginGoogle();
     } catch (err) {
       setError(getFriendlyErrorMessage(err.message));
     }

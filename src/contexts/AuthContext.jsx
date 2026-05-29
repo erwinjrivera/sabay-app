@@ -14,6 +14,7 @@ export const AuthProvider = ({ children }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [userPhotoURL, setUserPhotoURL] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isCheckingProfile, setIsCheckingProfile] = useState(true);
 
   const checkOnboardingStatus = async (user) => {
     if (!user) {
@@ -234,6 +235,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setIsCheckingProfile(true);
       setCurrentUser(user);
       if (user && user.emailVerified !== false) {
         await checkOnboardingStatus(user);
@@ -243,6 +245,7 @@ export const AuthProvider = ({ children }) => {
         setProfileReady(false);
         setIsAdmin(false);
       }
+      setIsCheckingProfile(false);
       setLoading(false);
     });
     return unsubscribe;
@@ -280,7 +283,7 @@ export const AuthProvider = ({ children }) => {
     return sendPasswordResetEmail(auth, email);
   };
 
-  const value = { currentUser, profileReady, isAdmin, userPhotoURL, setUserPhotoURL, loginGoogle, loginEmail, signupEmail, logout, resetPassword, refreshProfile, cleanupStaleRides };
+  const value = { currentUser, profileReady, isCheckingProfile, isAdmin, userPhotoURL, setUserPhotoURL, loginGoogle, loginEmail, signupEmail, logout, resetPassword, refreshProfile, cleanupStaleRides };
 
   return (
     <AuthContext.Provider value={value}>

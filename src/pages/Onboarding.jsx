@@ -10,7 +10,7 @@ import MapBackground from '../components/MapBackground';
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { currentUser, profileReady, refreshProfile } = useAuth();
+  const { currentUser, profileReady, isCheckingProfile, refreshProfile } = useAuth();
 
   const [displayName, setDisplayName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -25,10 +25,10 @@ export default function Onboarding() {
       navigate('/login');
       return;
     }
-    if (profileReady) {
+    if (profileReady && !isCheckingProfile) {
       navigate('/');
     }
-  }, [currentUser, profileReady, navigate]);
+  }, [currentUser, profileReady, isCheckingProfile, navigate]);
 
   // Pre-fill from auth profile
   useEffect(() => {
