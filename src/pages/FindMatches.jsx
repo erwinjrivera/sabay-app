@@ -135,6 +135,7 @@ export default function FindMatches() {
   const ride = location.state?.ride;
   
   const [passengerRoute, setPassengerRoute] = useState([]);
+  const [isRouteLoading, setIsRouteLoading] = useState(true);
   const [matches, setMatches] = useState([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(true);
   const [actionProcessingId, setActionProcessingId] = useState(null);
