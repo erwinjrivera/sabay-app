@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronRight } from 'lucide-react';
 
 export default function SwipeButton({ text, onSwipe, color = '#00b0f0', isCompleted = false, customBorderRadius = '8px' }) {
@@ -17,11 +17,8 @@ export default function SwipeButton({ text, onSwipe, color = '#00b0f0', isComple
     setIsDragging(true);
   };
 
-  const handleDragMove = (e) => {
+  const handleDragMove = useCallback((e) => {
     if (!isDragging || !containerRef.current || !handleRef.current) return;
-    
-    // Prevent default scrolling on mobile if explicitly swiping
-    // We already use touchAction: 'none' on the container, but we can call preventDefault on the event loop below if needed
     
     let clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
     
@@ -35,9 +32,9 @@ export default function SwipeButton({ text, onSwipe, color = '#00b0f0', isComple
     if (newOffset > maxOffset) newOffset = maxOffset;
     
     setDragOffset(newOffset);
-  };
+  }, [isDragging]);
 
-  const handleDragEnd = () => {
+  const handleDragEnd = useCallback(() => {
     if (!isDragging) return;
     setIsDragging(false);
     
@@ -52,7 +49,7 @@ export default function SwipeButton({ text, onSwipe, color = '#00b0f0', isComple
     } else {
       setDragOffset(0);
     }
-  };
+  }, [isDragging, dragOffset, onSwipe]);
 
   useEffect(() => {
     const handleGlobalTouchMove = (e) => {
@@ -74,7 +71,7 @@ export default function SwipeButton({ text, onSwipe, color = '#00b0f0', isComple
         window.removeEventListener('touchend', handleDragEnd);
       };
     }
-  }, [isDragging, dragOffset]);
+  }, [isDragging, handleDragMove, handleDragEnd]);
 
   if (isCompleted) {
     return (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { MapContainer, TileLayer, Polyline, Marker, useMap, Tooltip } from 'react-leaflet';
@@ -6,7 +6,7 @@ import L from 'leaflet';
 import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2, Car, Calendar, Clock, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
-import { collection, query, getDocs, doc, getDoc, updateDoc, onSnapshot, increment, arrayUnion, arrayRemove, where } from 'firebase/firestore';
+import { collection, query, getDocs, doc, getDoc, updateDoc, onSnapshot, increment, arrayUnion, arrayRemove, where, deleteField, documentId, runTransaction } from 'firebase/firestore';
 import { sendRideNotification } from '../utils/notifications';
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
@@ -137,6 +137,7 @@ export default function FindMatches() {
   const [passengerRoute, setPassengerRoute] = useState([]);
   const [matches, setMatches] = useState([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(true);
+  const [actionProcessingId, setActionProcessingId] = useState(null);
   const [activeDriverId, setActiveDriverId] = useState(null);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [isBottomPanelExpanded, setIsBottomPanelExpanded] = useState(false);
@@ -155,8 +156,9 @@ export default function FindMatches() {
   const [volatilePassengerState, setVolatilePassengerState] = useState(ride);
 
   // Parse exact passenger coordinates bound intrinsically to real ride payloads
-  const passengerFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
-  const passengerTo = ride?.to ? { lat: ride.to.lat, lon: ride.to.lon } : { lat: 14.5547, lon: 121.0244 };
+  // Parse exact passenger coordinates bound intrinsically to real ride payloads
+  const passengerFrom = useMemo(() => (ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 }), [ride?.from, ride?.from?.lat, ride?.from?.lon]);
+  const passengerTo = useMemo(() => (ride?.to ? { lat: ride.to.lat, lon: ride.to.lon } : { lat: 14.5547, lon: 121.0244 }), [ride?.to, ride?.to?.lat, ride?.to?.lon]);
   
   // Format dynamic timestamps matching structural design spec
   const rideTimeStr = ride?.time ? dayjs(ride.time).format('h:mma') : '3:45pm';
@@ -170,6 +172,7 @@ export default function FindMatches() {
         const timeoutId = setTimeout(() => controller.abort(), 3000);
         const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${passengerFrom.lon},${passengerFrom.lat};${passengerTo.lon},${passengerTo.lat}?geometries=geojson&overview=full`, { signal: controller.signal });
         clearTimeout(timeoutId);
+        if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
         const data = await res.json();
         const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
         setPassengerRoute(coords);
@@ -179,7 +182,7 @@ export default function FindMatches() {
       }
     };
     fetchPassengerRoute();
-  }, []);
+  }, [passengerFrom.lat, passengerFrom.lon, passengerTo.lat, passengerTo.lon]);
 
   const volatilePassengerStateRef = useRef(ride);
 
@@ -193,7 +196,18 @@ export default function FindMatches() {
     }
 
     setIsLoadingMatches(true);
-    const reqRef = collection(db, 'rideOffers');
+    let reqRef;
+    if (volatilePassengerStateRef.current?.status === 'completed') {
+        if (volatilePassengerStateRef.current?.offeredByRideId) {
+            reqRef = query(collection(db, 'rideOffers'), where(documentId(), '==', volatilePassengerStateRef.current.offeredByRideId));
+        } else {
+            setIsLoadingMatches(false);
+            setMatches([]);
+            return;
+        }
+    } else {
+        reqRef = query(collection(db, 'rideOffers'), where('status', 'in', ['open', 'matched', 'confirmed', 'in_progress']));
+    }
     
     const unsubscribe = onSnapshot(reqRef, async (snap) => {
         const reqDocs = [];
@@ -294,10 +308,13 @@ export default function FindMatches() {
            try {
               // Extract passenger route dynamically!
               const resDriver = await fetch(`https://router.project-osrm.org/route/v1/driving/${pLon},${pLat};${dLon},${dLat}?geometries=geojson&overview=full`);
-              const driverData = await resDriver.json();
-              if (!driverData.routes || driverData.routes.length === 0) return null;
-              
-              const driverRoute = driverData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+               if (!resDriver.ok) throw new Error(`OSRM Error: ${resDriver.status}`);
+               const driverData = await resDriver.json();
+               if (!driverData.routes || driverData.routes.length === 0) {
+                   throw new Error("No OSRM routes found");
+               }
+               
+               const driverRoute = driverData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
               
               // Sub-function to find the true road-network driving distance optimal point on D
               const findBestNetworkNode = async (targetPos) => {
@@ -321,6 +338,7 @@ export default function FindMatches() {
                      const timeoutId = setTimeout(() => controller.abort(), 2000);
                      const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`, { signal: controller.signal });
                      clearTimeout(timeoutId);
+                     if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
                      const data = await res.json();
                      if (data.code !== 'Ok' || !data.durations || !data.durations[0]) throw new Error("Table API failed");
 
@@ -364,6 +382,7 @@ export default function FindMatches() {
                   const dFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${meetDropoff[1]},${meetDropoff[0]};${passengerTo.lon},${passengerTo.lat}?geometries=geojson`, { signal: controller.signal });
                   const [pRes, dRes] = await Promise.all([pFetch, dFetch]);
                   clearTimeout(timeoutId);
+                  if (!pRes.ok || !dRes.ok) throw new Error("OSRM Connector API failed");
                   const pData = await pRes.json();
                   const dData = await dRes.json();
                   if (pData.routes?.length > 0) interceptPaths.pickupPath = pData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
@@ -410,9 +429,78 @@ export default function FindMatches() {
               };
 
            } catch (e) {
-              console.error("OSRM Pass fetch failure", e);
-              return null;
-           }
+               console.error("OSRM Pass fetch failure", e);
+               
+               if (!isLinkedMatch) {
+                   // Fallback proxy if OSRM is rate-limited or fails
+                   const dx = dLon - pLon;
+                   const dy = dLat - pLat;
+                   const lenSq = (dx * dx) + (dy * dy);
+                   
+                   if (lenSq !== 0) {
+                       const pPickupX = passengerFrom.lon - pLon;
+                       const pPickupY = passengerFrom.lat - pLat;
+                       const projPickup = (pPickupX * dx) + (pPickupY * dy);
+                       
+                       const pDropX = passengerTo.lon - pLon;
+                       const pDropY = passengerTo.lat - pLat;
+                       const projDrop = (pDropX * dx) + (pDropY * dy);
+
+                       if (projPickup > lenSq) return null;
+                       if (projDrop < 0) return null;
+                       if (projPickup >= projDrop) return null;
+                   }
+
+                   const buffer = 0.045; 
+                   const r1MinLat = Math.min(pLat, dLat) - buffer;
+                   const r1MaxLat = Math.max(pLat, dLat) + buffer;
+                   const r1MinLon = Math.min(pLon, dLon) - buffer;
+                   const r1MaxLon = Math.max(pLon, dLon) + buffer;
+
+                   const r2MinLat = Math.min(passengerFrom.lat, passengerTo.lat);
+                   const r2MaxLat = Math.max(passengerFrom.lat, passengerTo.lat);
+                   const r2MinLon = Math.min(passengerFrom.lon, passengerTo.lon);
+                   const r2MaxLon = Math.max(passengerFrom.lon, passengerTo.lon);
+
+                   if (!((r1MaxLat > r2MinLat && r1MinLat < r2MaxLat) && (r1MaxLon > r2MinLon && r1MinLon < r2MaxLon))) {
+                       return null;
+                   }
+               }
+
+               const geometricPayload = {
+                  id: req.id,
+                  price: '0.00 ₱', 
+                  pickup: { lat: pLat, lon: pLon, address: req.from.address },
+                  dropoff: { lat: dLat, lon: dLon, address: req.to.address },
+                  meetPickup: { lat: passengerFrom.lat, lon: passengerFrom.lon, idx: 0 },
+                  meetDropoff: { lat: passengerTo.lat, lon: passengerTo.lon, idx: 1 },
+                  interceptPaths: {
+                     pickupPath: [[passengerFrom.lat, passengerFrom.lon], [passengerFrom.lat, passengerFrom.lon]],
+                     dropoffPath: [[passengerTo.lat, passengerTo.lon], [passengerTo.lat, passengerTo.lon]]
+                  },
+                  driverFullRoute: [[pLat, pLon], [dLat, dLon]],
+                  rawRequest: req,
+                  rating: ratingParams,
+                  reviews: reviewsParams,
+                  completedRides: completedRidesParams,
+                  carMake: carMakeParams,
+                  carModel: carModelParams,
+                  carColor: carColorParams,
+                  plateNumber: plateNumberParams
+               };
+
+               geometryCache.current[req.id] = geometricPayload;
+
+               return {
+                  ...geometricPayload,
+                  type: typeStatus,
+                  name: nameParams,
+                  time: timeParams,
+                  seats: req.seats || 1,
+                  seatsTaken: req.seatsTaken || 0,
+                  profilePic: req.userProfilePic || '',
+               };
+            }
         });
         
         const results = await Promise.all(matchPromises);
@@ -472,7 +560,7 @@ export default function FindMatches() {
     });
 
     return () => unsubscribe();
-  }, [passengerRoute, ride?.userId, refreshKey]);
+  }, [passengerRoute, passengerFrom, passengerTo, ride?.userId, ride?.id, ride?.date, ride?.time, refreshKey]);
 
   useEffect(() => {
     volatilePassengerStateRef.current = volatilePassengerState;
@@ -586,6 +674,7 @@ export default function FindMatches() {
   };
 
   const handleRequestJoin = async (matchId) => {
+    if (actionProcessingId) return;
     const match = matches.find(m => m.id === matchId);
     if (!match) return;
 
@@ -605,28 +694,57 @@ export default function FindMatches() {
         return;
     }
 
-    // Optimistic generic map transition
-    setMatches((prev) => 
-      prev.map((m) => m.id === matchId ? { ...m, type: 'request' } : m)
-    );
+    setActionProcessingId(matchId);
+
     try {
+      const driverDocRef = doc(db, 'rideOffers', matchId);
       const passengerDocRef = doc(db, 'rideRequests', ride.id);
-      await updateDoc(passengerDocRef, { 
-        status: 'request', 
-        offeredByRideId: matchId 
+
+      await runTransaction(db, async (transaction) => {
+          const dSnap = await transaction.get(driverDocRef);
+          if (!dSnap.exists()) throw new Error("Driver ride no longer exists.");
+          
+          const dData = dSnap.data();
+          const dConfirmedCount = parseInt(dData.seatsTaken || 0);
+          const dMaxSeats = parseInt(dData.seats || 4);
+          
+          // Verify capacity live on server
+          if (dConfirmedCount + passengerSeats > dMaxSeats) {
+              throw new Error("CAPACITY_FULL");
+          }
+          
+          const currentRequestedBy = dData.requestedByPassengerIds || [];
+          if (!currentRequestedBy.includes(ride.id)) {
+              currentRequestedBy.push(ride.id);
+          }
+
+          transaction.update(passengerDocRef, { 
+            status: 'request', 
+            offeredByRideId: matchId 
+          });
+
+          transaction.update(driverDocRef, {
+            requestedByPassengerIds: currentRequestedBy
+          });
       });
 
-      // Maintain Driver's queue dynamically, securing UI permanence
-      const driverDocRef = doc(db, 'rideOffers', matchId);
-      await updateDoc(driverDocRef, {
-        requestedByPassengerIds: arrayUnion(ride.id)
-      });
+      // Optimistic generic map transition
+      setMatches((prev) => 
+        prev.map((m) => m.id === matchId ? { ...m, type: 'request' } : m)
+      );
     } catch (error) {
       console.error("Match request state synchronization failed:", error);
+      if (error.message === "CAPACITY_FULL") {
+          setCapacityModalText(`This ride has just reached maximum capacity and can no longer accept your request.`);
+          setShowCapacityFullModal(true);
+      }
+    } finally {
+      setActionProcessingId(null);
     }
   };
 
   const handleAcceptOffer = async (matchId) => {
+    if (actionProcessingId) return;
     if (['confirmed', 'in_progress', 'completed'].includes(volatilePassengerState?.status)) {
       setCapacityModalText("You already have a confirmed ride. Please cancel your existing confirmed ride before accepting another offer.");
       setShowCapacityFullModal(true);
@@ -639,23 +757,48 @@ export default function FindMatches() {
       setShowCapacityFullModal(true);
       return;
     }
-    setMatches((prev) => 
-      prev.filter(m => m.id === matchId).map((m) => m.id === matchId ? { ...m, type: 'confirmed' } : m)
-    );
+    
+    setActionProcessingId(matchId);
+
     try {
       const passengerDocRef = doc(db, 'rideRequests', ride.id);
-      await updateDoc(passengerDocRef, { 
-        status: 'confirmed',
-        offeredByRideId: matchId 
+      const driverDocRef = doc(db, 'rideOffers', matchId);
+      const passengerSeats = parseInt(ride?.seats) || 1;
+
+      await runTransaction(db, async (transaction) => {
+          const dSnap = await transaction.get(driverDocRef);
+          if (!dSnap.exists()) throw new Error("Driver ride no longer exists.");
+          
+          const dData = dSnap.data();
+          const dConfirmedCount = parseInt(dData.seatsTaken || 0);
+          const dMaxSeats = parseInt(dData.seats || 4);
+          
+          // Verify capacity dynamically on server during lock
+          if (dConfirmedCount + passengerSeats > dMaxSeats) {
+              throw new Error("CAPACITY_FULL");
+          }
+
+          transaction.update(passengerDocRef, { 
+            status: 'confirmed',
+            offeredByRideId: matchId 
+          });
+
+          transaction.update(driverDocRef, {
+            seatsTaken: increment(passengerSeats)
+          });
       });
 
-      // Synchronize driver global seat vacancy accurately over network
-      const driverDocRef = doc(db, 'rideOffers', matchId);
-      await updateDoc(driverDocRef, {
-        seatsTaken: increment(ride?.seats || 1)
-      });
+      setMatches((prev) => 
+        prev.filter(m => m.id === matchId).map((m) => m.id === matchId ? { ...m, type: 'confirmed' } : m)
+      );
     } catch (error) {
       console.error("Accept offer state synchronization failed:", error);
+      if (error.message === "CAPACITY_FULL") {
+          setCapacityModalText("You cannot accept this offer because the driver's vehicle has just reached maximum seating capacity.");
+          setShowCapacityFullModal(true);
+      }
+    } finally {
+      setActionProcessingId(null);
     }
   };
 
@@ -1000,12 +1143,17 @@ export default function FindMatches() {
                  <>
                    <button 
                      onClick={() => handleMessageContact(match.rawRequest?.userId)}
-                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                     disabled={!!actionProcessingId}
+                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: actionProcessingId ? 'default' : 'pointer', opacity: actionProcessingId ? 0.5 : 1 }}
                    >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
-                   <button onClick={() => handleRequestJoin(match.id)} style={{ flex: 1, padding: '16px', background: '#00b0f0', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
-                     Request to Join
+                   <button 
+                     onClick={() => handleRequestJoin(match.id)} 
+                     disabled={!!actionProcessingId}
+                     style={{ flex: 1, padding: '16px', background: '#00b0f0', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: actionProcessingId ? 'default' : 'pointer', opacity: actionProcessingId && actionProcessingId !== match.id ? 0.5 : 1 }}
+                   >
+                     {actionProcessingId === match.id ? 'Processing...' : 'Request to Join'}
                    </button>
                  </>
                )}
@@ -1034,13 +1182,18 @@ export default function FindMatches() {
                  <>
                    <button 
                      onClick={() => handleMessageContact(match.rawRequest?.userId)}
-                     style={{ position: 'relative', width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                     disabled={!!actionProcessingId}
+                     style={{ position: 'relative', width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: actionProcessingId ? 'default' : 'pointer', opacity: actionProcessingId ? 0.5 : 1 }}
                    >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                      <div style={{ position: 'absolute', top: 8, right: 8, background: '#ff0043', color: '#fff', width: 14, height: 14, borderRadius: '50%', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #333' }}>1</div>
                    </button>
-                   <button onClick={() => handleAcceptOffer(match.id)} style={{ flex: 1, padding: '16px', background: '#ff0043', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
-                     Accept Offer
+                   <button 
+                     onClick={() => handleAcceptOffer(match.id)} 
+                     disabled={!!actionProcessingId}
+                     style={{ flex: 1, padding: '16px', background: '#ff0043', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: actionProcessingId ? 'default' : 'pointer', opacity: actionProcessingId && actionProcessingId !== match.id ? 0.5 : 1 }}
+                   >
+                     {actionProcessingId === match.id ? 'Processing...' : 'Accept Offer'}
                    </button>
                  </>
                )}
@@ -1086,9 +1239,11 @@ export default function FindMatches() {
           borderTopLeftRadius: '8px',
           borderTopRightRadius: '8px',
           boxShadow: '0 -4px 15px rgba(0,0,0,0.5)',
-          padding: '16px 24px calc(16px + env(safe-area-inset-bottom)) 24px',
+          padding: isBottomPanelExpanded 
+            ? '16px 24px calc(16px + env(safe-area-inset-bottom)) 24px' 
+            : 'calc(40px + env(safe-area-inset-bottom)) 24px calc(16px + env(safe-area-inset-bottom)) 24px',
           zIndex: 2000,
-          transform: isBottomPanelExpanded ? 'translateY(0)' : (matches.length > 0 ? 'translateY(calc(100% - 34px - env(safe-area-inset-bottom)))' : 'translateY(100%)'),
+          transform: isBottomPanelExpanded ? 'translateY(0)' : (matches.length > 0 ? 'translateY(calc(100% - 40px - env(safe-area-inset-bottom)))' : 'translateY(100%)'),
           transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.3s',
           display: 'flex',
           flexDirection: 'column',
@@ -1273,7 +1428,7 @@ export default function FindMatches() {
                 onClick={async () => {
                   try {
                       if (ride?.id) {
-                          await updateDoc(doc(db, 'rideRequests', ride.id), { status: 'cancelled' });
+                          await updateDoc(doc(db, 'rideRequests', ride.id), { status: 'cancelled', expiresAt: deleteField() });
                           
                           const matchingOffersRef = query(collection(db, 'rideOffers'), where('requestedByPassengerIds', 'array-contains', ride.id));
                           const offersSnap = await getDocs(matchingOffersRef);

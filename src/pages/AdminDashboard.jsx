@@ -48,7 +48,7 @@ export default function AdminDashboard() {
   }, []);
 
   return (
-    <div style={{ padding: '24px', paddingBottom: '100px', maxWidth: '600px', margin: '0 auto', color: '#fff', boxSizing: 'border-box' }}>
+    <div style={{ padding: '24px', paddingBottom: 'calc(100px + env(safe-area-inset-bottom))', maxWidth: '600px', margin: '0 auto', color: '#fff', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '32px' }}>
         <button onClick={() => navigate(-1)} style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer', padding: 0 }}>
           <ChevronLeft size={28} />

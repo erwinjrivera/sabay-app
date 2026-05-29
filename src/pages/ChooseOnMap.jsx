@@ -26,7 +26,7 @@ function MapMover({ setCenterCoords, initialZoom, userCoords }) {
       map.setView([userCoords.lat, userCoords.lng], initialZoom);
       setCenterCoords(userCoords);
     }
-  }, [userCoords, map, initialZoom]);
+  }, [userCoords, map, initialZoom, setCenterCoords]);
 
   useMapEvents({
     moveend: () => {

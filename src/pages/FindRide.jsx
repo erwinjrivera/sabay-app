@@ -154,23 +154,28 @@ export default function FindRide() {
     const fetchSuggestions = async () => {
       setIsSearching(true);
       try {
-        const res = await fetch('https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(query) + '&format=json&limit=5&countrycodes=ph');
+        const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&bbox=116.9,4.6,126.6,21.1`);
         const data = await res.json();
         
-        const mapped = data.map((d, index) => {
-          const parts = d.display_name.split(',');
+        const mapped = data.features.map((f, index) => {
+          const props = f.properties;
+          const title = props.name || props.street || props.city || "Location";
+          const descParts = [props.street, props.city, props.state, props.country].filter(Boolean);
+          const desc = descParts.filter(p => p !== title).join(', ');
+          
           return {
-            id: d.place_id || index,
-            title: parts[0],
-            desc: parts.slice(1).join(', '),
-            lat: d.lat,
-            lon: d.lon,
-            type: d.type
+            id: index,
+            title: title,
+            desc: desc,
+            lat: f.geometry.coordinates[1],
+            lon: f.geometry.coordinates[0],
+            type: props.osm_value || 'place'
           };
         });
         setSuggestions(mapped);
       } catch (err) {
         console.error("Geocoding failed", err);
+        setSuggestions([]);
       } finally {
         setIsSearching(false);
       }
@@ -190,19 +195,20 @@ export default function FindRide() {
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
         try {
-          const res = await fetch('https://nominatim.openstreetmap.org/reverse?lat=' + lat + '&lon=' + lon + '&format=json');
+          const res = await fetch(`https://photon.komoot.io/reverse?lon=${lon}&lat=${lat}`);
           const data = await res.json();
-          // Extract specific part or just address
-          const street = data.address?.road || data.address?.suburb || '';
-          const area = data.address?.city || data.address?.town || data.address?.village || data.address?.county || '';
-          
-          let fullAddress = '';
-          if (street && area) fullAddress = `${street}, ${area}`;
-          else if (street) fullAddress = street;
-          else if (area) fullAddress = area;
-          else fullAddress = data.display_name?.split(',').slice(0, 2).join(',') || 'Unknown Location';
-          
-          handleSelect(fullAddress, '', lat, lon);
+          if (data.features && data.features.length > 0) {
+              const props = data.features[0].properties;
+              const street = props.street || props.name || '';
+              const area = props.city || props.state || '';
+              
+              let fullAddress = '';
+              if (street && area) fullAddress = `${street}, ${area}`;
+              else fullAddress = street || area || 'Selected Location';
+              handleSelect(fullAddress, '', lat, lon);
+          } else {
+              handleSelect('Current Location', '', lat, lon);
+          }
         } catch(e) {
           handleSelect('Coordinates: ' + lat.toFixed(4) + ', ' + lon.toFixed(4), '', lat, lon);
         }
@@ -318,20 +324,20 @@ export default function FindRide() {
     // Aggressive Fallback Geocoding for FindRide precisely mapping identically
     if (!finalFromCoords && fromLocation) {
       try {
-        const res = await fetch('https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(fromLocation) + '&format=json&limit=1&countrycodes=ph');
+        const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(fromLocation)}&limit=1&bbox=116.9,4.6,126.6,21.1`);
         const data = await res.json();
-        if (data && data[0]) {
-           finalFromCoords = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+        if (data && data.features && data.features.length > 0) {
+           finalFromCoords = { lat: data.features[0].geometry.coordinates[1], lon: data.features[0].geometry.coordinates[0] };
         }
       } catch (err) {}
     }
 
     if (!finalToCoords && toLocation) {
       try {
-        const res = await fetch('https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(toLocation) + '&format=json&limit=1&countrycodes=ph');
+        const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(toLocation)}&limit=1&bbox=116.9,4.6,126.6,21.1`);
         const data = await res.json();
-        if (data && data[0]) {
-           finalToCoords = { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+        if (data && data.features && data.features.length > 0) {
+           finalToCoords = { lat: data.features[0].geometry.coordinates[1], lon: data.features[0].geometry.coordinates[0] };
         }
       } catch (err) {}
     }
@@ -351,6 +357,15 @@ export default function FindRide() {
       if (fromLocation) saveRecentPlace(fromLocation, '', 'ride', finalFromCoords.lat, finalFromCoords.lon);
       if (toLocation) saveRecentPlace(toLocation, '', 'ride', finalToCoords.lat, finalToCoords.lon);
 
+      let scheduledTime = dayjs();
+      if (dateVal && timeVal) {
+          const dStr = dateVal.format('YYYY-MM-DD');
+          const tStr = timeVal.format('HH:mm:ss');
+          scheduledTime = dayjs(`${dStr}T${tStr}`);
+      } else if (timeVal || dateVal) {
+          scheduledTime = dayjs(timeVal || dateVal);
+      }
+      
       const payload = {
         userId: currentUser.uid,
         userName: currentUser.displayName || 'Passenger',
@@ -371,7 +386,8 @@ export default function FindRide() {
         note: noteToDriver || '',
         date: dateVal ? dateVal.toISOString() : null,
         time: timeVal ? timeVal.toISOString() : null,
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        expiresAt: scheduledTime.add(8, 'hour').valueOf()
       };
 
       const addDocPromise = addDoc(collection(db, 'rideRequests'), payload);
@@ -610,6 +626,11 @@ export default function FindRide() {
                 {/* SUGGESTER LIST */}
                 {isSearching && currentQuery.length >= 3 && (
                   <p style={{ textAlign: 'center', margin: '2rem 0', color: '#888' }}>Searching Map Locations...</p>
+                )}
+
+                {/* EMPTY STATE */}
+                {!isSearching && currentQuery.length >= 3 && suggestions.length === 0 && (
+                  <p style={{ textAlign: 'center', margin: '2rem 0', color: '#888' }}>No results found</p>
                 )}
 
                 {!isSearching && suggestions.map((item) => (

@@ -290,7 +290,7 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 1rem 1.5rem;
-  padding-bottom: 250px; /* Space for bottom panel */
+  padding-bottom: calc(250px + env(safe-area-inset-bottom)); /* Space for bottom panel */
 }
 
 .fr-list-item {
@@ -407,8 +407,12 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   display: flex;
   flex-direction: column;
   transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
-  /* Make the panel slide mostly off screen. Keeping ~48px handle peek */
-  transform: translateY(calc(100% - 48px)); 
+  /* Make the panel slide mostly off screen. Keeping ~48px handle peek + safe area */
+  transform: translateY(calc(100% - 48px - env(safe-area-inset-bottom))); 
+}
+
+.fr-bottom-panel:not(.open) .fr-peek {
+  margin-bottom: env(safe-area-inset-bottom);
 }
 
 .fr-bottom-panel.open {
@@ -428,7 +432,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 
 .fr-panel-content {
-  padding: 0 2rem 2rem;
+  padding: 0 2rem calc(2rem + env(safe-area-inset-bottom));
   opacity: 0;
   transition: opacity 0.3s;
   pointer-events: none;

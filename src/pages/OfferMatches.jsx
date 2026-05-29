@@ -6,7 +6,7 @@ import L from 'leaflet';
 import { ArrowLeft, MessageCircle, MoreHorizontal, User, Check, List, Star, Phone, X, Loader2, Play, Calendar, Clock, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import 'leaflet/dist/leaflet.css';
 import { db } from '../firebase';
-import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, increment, arrayRemove, arrayUnion, where } from 'firebase/firestore';
+import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, increment, arrayRemove, arrayUnion, where, deleteField, runTransaction } from 'firebase/firestore';
 import { sendRideNotification } from '../utils/notifications';
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
@@ -138,6 +138,7 @@ export default function OfferMatches() {
   const [driverRoute, setDriverRoute] = useState([]);
   const [matches, setMatches] = useState([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState(true);
+  const [actionProcessingId, setActionProcessingId] = useState(null);
   const [activePassengerId, setActivePassengerId] = useState(null);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [isBottomPanelExpanded, setIsBottomPanelExpanded] = useState(false);
@@ -186,6 +187,7 @@ export default function OfferMatches() {
         const timeoutId = setTimeout(() => controller.abort(), 3000);
         const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverFrom.lon},${driverFrom.lat};${driverTo.lon},${driverTo.lat}?geometries=geojson&overview=full`, { signal: controller.signal });
         clearTimeout(timeoutId);
+        if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
         const data = await res.json();
         const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
         setDriverRoute(coords);
@@ -195,7 +197,7 @@ export default function OfferMatches() {
       }
     };
     fetchDriverRoute();
-  }, []);
+  }, [driverFrom.lat, driverFrom.lon, driverTo.lat, driverTo.lon]);
 
   // Matching Engine: Fetch and filter passengers dynamically
   useEffect(() => {
@@ -207,7 +209,12 @@ export default function OfferMatches() {
     }
 
     setIsLoadingMatches(true);
-    const reqRef = collection(db, 'rideRequests');
+    let reqRef;
+    if (dynamicRideStateRef.current?.status === 'completed') {
+        reqRef = query(collection(db, 'rideRequests'), where('offeredByRideId', '==', dynamicRideStateRef.current.id));
+    } else {
+        reqRef = query(collection(db, 'rideRequests'), where('status', 'in', ['open', 'request', 'offered', 'matched', 'confirmed', 'in_progress']));
+    }
     
     const unsubscribe = onSnapshot(reqRef, async (snap) => {
         const reqDocs = [];
@@ -311,6 +318,7 @@ export default function OfferMatches() {
                      const timeoutId = setTimeout(() => controller.abort(), 2000);
                      const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`, { signal: controller.signal });
                      clearTimeout(timeoutId);
+                     if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
                      const data = await res.json();
                      if (data.code !== 'Ok' || !data.durations || !data.durations[0]) throw new Error("Table API failed");
 
@@ -354,6 +362,7 @@ export default function OfferMatches() {
                   const dFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${meetDropoff[1]},${meetDropoff[0]};${passengerToPos.lon},${passengerToPos.lat}?geometries=geojson`, { signal: controller.signal });
                   const [pRes, dRes] = await Promise.all([pFetch, dFetch]);
                   clearTimeout(timeoutId);
+                  if (!pRes.ok || !dRes.ok) throw new Error("OSRM Connector API failed");
                   const pData = await pRes.json();
                   const dData = await dRes.json();
                   if (pData.routes?.length > 0) interceptPaths.pickupPath = pData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
@@ -449,7 +458,7 @@ export default function OfferMatches() {
     });
 
     return () => unsubscribe();
-  }, [driverRoute, ride?.userId, refreshKey]);
+  }, [driverRoute, driverFrom.lat, driverFrom.lon, driverTo.lat, driverTo.lon, ride?.userId, ride?.id, refreshKey]);
 
   // Synchronize matches when the driver's own live database document updates
   useEffect(() => {
@@ -490,6 +499,7 @@ export default function OfferMatches() {
   const activePassRoute = activePassenger?.sharedPath || [];
 
   const handleOfferRide = async (matchId) => {
+    if (actionProcessingId) return;
     const requestedPassenger = matches.find(m => m.id === matchId);
     if (!requestedPassenger) return;
 
@@ -509,30 +519,58 @@ export default function OfferMatches() {
       return;
     }
 
-    // Optimistic generic map transition
-    setMatches((prev) => 
-      prev.map((m) => m.id === matchId ? { ...m, type: 'offered' } : m)
-    );
-    // Force backend synchronization
-    try {
-      if (ride?.id) {
-          const driverDocRef = doc(db, 'rideOffers', ride.id);
-          await updateDoc(driverDocRef, {
-              offeredToPassengerIds: arrayUnion(matchId)
-          });
-      }
+    setActionProcessingId(matchId);
 
+    try {
       const matchDocRef = doc(db, 'rideRequests', matchId);
-      await updateDoc(matchDocRef, { 
-        status: 'offered', 
-        offeredByRideId: ride?.id || 'unknown' 
+      
+      await runTransaction(db, async (transaction) => {
+          const pSnap = await transaction.get(matchDocRef);
+          if (!pSnap.exists()) throw new Error("Passenger request no longer exists.");
+          
+          const pData = pSnap.data();
+          if (['confirmed', 'in_progress', 'completed'].includes(pData.status)) {
+              throw new Error("PASSENGER_UNAVAILABLE");
+          }
+
+          if (ride?.id) {
+              const driverDocRef = doc(db, 'rideOffers', ride.id);
+              const dSnap = await transaction.get(driverDocRef);
+              if (dSnap.exists()) {
+                  const dData = dSnap.data();
+                  const currentOfferedTo = dData.offeredToPassengerIds || [];
+                  if (!currentOfferedTo.includes(matchId)) {
+                      currentOfferedTo.push(matchId);
+                  }
+                  transaction.update(driverDocRef, {
+                      offeredToPassengerIds: currentOfferedTo
+                  });
+              }
+          }
+
+          transaction.update(matchDocRef, { 
+            status: 'offered', 
+            offeredByRideId: ride?.id || 'unknown' 
+          });
       });
+
+      // Optimistic generic map transition
+      setMatches((prev) => 
+        prev.map((m) => m.id === matchId ? { ...m, type: 'offered' } : m)
+      );
     } catch (error) {
       console.error("Offered request state synchronization failed:", error);
+      if (error.message === "PASSENGER_UNAVAILABLE") {
+          setCapacityModalText("This passenger has just confirmed a ride with someone else.");
+          setShowCapacityFullModal(true);
+      }
+    } finally {
+      setActionProcessingId(null);
     }
   };
 
   const handleAcceptRequest = async (matchId) => {
+    if (actionProcessingId) return;
     const requestedPassenger = matches.find(m => m.id === matchId);
     
     if (['confirmed', 'in_progress', 'completed'].includes(requestedPassenger?.rawRequest?.status)) {
@@ -551,25 +589,46 @@ export default function OfferMatches() {
       return;
     }
     
-    setMatches((prev) => 
-      prev.map((m) => m.id === matchId ? { ...m, type: 'confirmed' } : m)
-    );
+    setActionProcessingId(matchId);
+
     try {
-      // Safely sync Driver's global seatsTaken incrementally resolving overflow blocks universally
       const matchDocRef = doc(db, 'rideOffers', ride.id);
-      await updateDoc(matchDocRef, { 
-        status: 'confirmed',
-        seatsTaken: increment(passengerSeats)
-      });
-      
-      // Crucially synchronize Passenger's specific document confirming their exact identity workflow
       const passDocRef = doc(db, 'rideRequests', matchId);
-      await updateDoc(passDocRef, {
-        status: 'confirmed',
-        offeredByRideId: ride.id
+
+      await runTransaction(db, async (transaction) => {
+          const dSnap = await transaction.get(matchDocRef);
+          if (!dSnap.exists()) throw new Error("Driver ride no longer exists.");
+          
+          const dData = dSnap.data();
+          const dConfirmedCount = parseInt(dData.seatsTaken || 0);
+          const dMaxSeats = parseInt(dData.seats || 4);
+          
+          if (dConfirmedCount + passengerSeats > dMaxSeats) {
+              throw new Error("CAPACITY_FULL");
+          }
+
+          transaction.update(matchDocRef, { 
+            status: 'confirmed',
+            seatsTaken: increment(passengerSeats)
+          });
+          
+          transaction.update(passDocRef, {
+            status: 'confirmed',
+            offeredByRideId: ride.id
+          });
       });
+
+      setMatches((prev) => 
+        prev.map((m) => m.id === matchId ? { ...m, type: 'confirmed' } : m)
+      );
     } catch (error) {
       console.error("Accept request state synchronization failed:", error);
+      if (error.message === "CAPACITY_FULL") {
+          setCapacityModalText("You cannot accept this request because your vehicle has just reached maximum capacity.");
+          setShowCapacityFullModal(true);
+      }
+    } finally {
+      setActionProcessingId(null);
     }
   };
 
@@ -901,13 +960,18 @@ export default function OfferMatches() {
                {match.type === 'match' && (
                  <>
                    <button 
-                     onClick={() => handleMessageContact(match.userId)}
-                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                     onClick={() => handleMessageContact(match.rawRequest?.userId)}
+                     disabled={!!actionProcessingId}
+                     style={{ width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: actionProcessingId ? 'default' : 'pointer', opacity: actionProcessingId ? 0.5 : 1 }}
                    >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                    </button>
-                   <button onClick={() => handleOfferRide(match.id)} style={{ flex: 1, padding: '16px', background: '#00b0f0', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
-                     Offer Ride
+                   <button 
+                     onClick={() => handleOfferRide(match.id)} 
+                     disabled={!!actionProcessingId}
+                     style={{ flex: 1, padding: '16px', background: '#00b0f0', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: actionProcessingId ? 'default' : 'pointer', opacity: actionProcessingId && actionProcessingId !== match.id ? 0.5 : 1 }}
+                   >
+                     {actionProcessingId === match.id ? 'Processing...' : 'Offer Ride'}
                    </button>
                  </>
                )}
@@ -934,14 +998,19 @@ export default function OfferMatches() {
                {match.type === 'request' && (
                  <>
                    <button 
-                     onClick={() => handleMessageContact(match.userId)}
-                     style={{ position: 'relative', width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                     onClick={() => handleMessageContact(match.rawRequest?.userId)}
+                     disabled={!!actionProcessingId}
+                     style={{ position: 'relative', width: '60px', padding: '16px 0', background: '#333', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: actionProcessingId ? 'default' : 'pointer', opacity: actionProcessingId ? 0.5 : 1 }}
                    >
                      <MessageCircle size={20} fill="#fff" color="#fff" />
                      <div style={{ position: 'absolute', top: 8, right: 8, background: '#ff0043', color: '#fff', width: 14, height: 14, borderRadius: '50%', fontSize: '9px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #333' }}>1</div>
                    </button>
-                   <button onClick={() => handleAcceptRequest(match.id)} style={{ flex: 1, padding: '16px', background: '#ff0043', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer' }}>
-                     Accept Request
+                   <button 
+                     onClick={() => handleAcceptRequest(match.id)} 
+                     disabled={!!actionProcessingId}
+                     style={{ flex: 1, padding: '16px', background: '#ff0043', border: 'none', color: '#fff', fontWeight: 700, fontSize: '1rem', cursor: actionProcessingId ? 'default' : 'pointer', opacity: actionProcessingId && actionProcessingId !== match.id ? 0.5 : 1 }}
+                   >
+                     {actionProcessingId === match.id ? 'Processing...' : 'Accept Request'}
                    </button>
                  </>
                )}
@@ -987,9 +1056,11 @@ export default function OfferMatches() {
           borderTopLeftRadius: '8px',
           borderTopRightRadius: '8px',
           boxShadow: '0 -4px 15px rgba(0,0,0,0.5)',
-          padding: '16px 24px calc(16px + env(safe-area-inset-bottom)) 24px',
+          padding: isBottomPanelExpanded 
+            ? '16px 24px calc(16px + env(safe-area-inset-bottom)) 24px' 
+            : 'calc(40px + env(safe-area-inset-bottom)) 24px calc(16px + env(safe-area-inset-bottom)) 24px',
           zIndex: 2000,
-          transform: isBottomPanelExpanded ? 'translateY(0)' : (matches.length > 0 ? 'translateY(calc(100% - 34px - env(safe-area-inset-bottom)))' : 'translateY(100%)'),
+          transform: isBottomPanelExpanded ? 'translateY(0)' : (matches.length > 0 ? 'translateY(calc(100% - 40px - env(safe-area-inset-bottom)))' : 'translateY(100%)'),
           transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.3s',
           display: 'flex',
           flexDirection: 'column',
@@ -1291,7 +1362,7 @@ export default function OfferMatches() {
               <button 
                 onClick={async () => {
                    try {
-                     await updateDoc(doc(db, 'rideOffers', ride.id), { status: 'cancelled' });
+                     await updateDoc(doc(db, 'rideOffers', ride.id), { status: 'cancelled', expiresAt: deleteField() });
 
                      const tiedPassengers = matches.filter(m => m.rawRequest?.offeredByRideId === ride.id);
                      const promises = tiedPassengers.map(m => 

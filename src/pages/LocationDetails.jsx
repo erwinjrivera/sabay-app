@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import { ArrowLeft, Heart, Building2, Pencil } from 'lucide-react';
@@ -42,7 +42,8 @@ export default function LocationDetails() {
   const navigate = useNavigate();
   const { state, key } = useLocation();
 
-  const item = state?.item || { title: 'Unknown Area', desc: 'No geography found', lat: undefined, lon: undefined };
+  const rawItem = state?.item;
+  const item = useMemo(() => rawItem || { title: 'Unknown Area', desc: 'No geography found', lat: undefined, lon: undefined }, [rawItem]);
   const findState = state?.findState || null;
   const activeField = state?.activeField || 'from';
   const sourceMode = state?.sourceMode || 'find';
@@ -83,7 +84,7 @@ export default function LocationDetails() {
       setIsSaved(false);
       setSavedData(null);
     }
-  }, [item, key]);
+  }, [item, key, sourceMode]);
 
   useEffect(() => {
     // If coords are natively passed, do not fetch
@@ -118,7 +119,7 @@ export default function LocationDetails() {
     };
     
     if (isFetchingMap) fetchCoords();
-  }, [item]);
+  }, [item, isFetchingMap]);
 
   const handleSelect = () => {
      const fullAddress = item.desc && item.desc !== 'Philippines' ? `${item.title}, ${item.desc}` : item.title;

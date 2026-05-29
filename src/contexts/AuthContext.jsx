@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { auth, db } from '../firebase';
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendEmailVerification, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
-import { doc, getDoc, collection, query, where, getDocs, updateDoc, setDoc, increment } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, updateDoc, setDoc, increment, deleteField, limit } from 'firebase/firestore';
 import dayjs from 'dayjs';
 
 const AuthContext = createContext();
@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }) => {
     return false;
   };
 
-  const cleanupStaleRides = async (user) => {
+  const cleanupStaleRides = useCallback(async (user) => {
     try {
       const now = Date.now();
       const EIGHT_HOURS_MS = 8 * 60 * 60 * 1000;
@@ -91,7 +91,7 @@ export const AuthProvider = ({ children }) => {
         if (dayjs().diff(scheduledTime, 'hour') >= 8) {
           if (['in_progress', 'active'].includes(ride.status)) {
               // Mark Offer as completed
-              await updateDoc(doc(db, 'rideOffers', rideDoc.id), { status: 'completed' });
+              await updateDoc(doc(db, 'rideOffers', rideDoc.id), { status: 'completed', expiresAt: deleteField() });
               
               // Complete all associated requests
               const reqQ = query(collection(db, 'rideRequests'), where('offeredByRideId', '==', rideDoc.id));
@@ -100,7 +100,7 @@ export const AuthProvider = ({ children }) => {
               for (const reqDoc of reqSnap.docs) {
                  const reqData = reqDoc.data();
                  if (reqData.status !== 'completed' && reqData.status !== 'cancelled') {
-                     await updateDoc(doc(db, 'rideRequests', reqDoc.id), { status: 'completed' });
+                     await updateDoc(doc(db, 'rideRequests', reqDoc.id), { status: 'completed', expiresAt: deleteField() });
                      
                      // Increment passenger's completed rides if they were part of the ride
                      if (reqData.status === 'confirmed' || reqData.status === 'accepted') {
@@ -112,7 +112,7 @@ export const AuthProvider = ({ children }) => {
               }
           } else if (['open', 'confirmed'].includes(ride.status)) {
               // Mark Offer as expired
-              await updateDoc(doc(db, 'rideOffers', rideDoc.id), { status: 'expired' });
+              await updateDoc(doc(db, 'rideOffers', rideDoc.id), { status: 'expired', expiresAt: deleteField() });
               
               // Reset all associated requests so passengers can find a new ride
               const reqQ = query(collection(db, 'rideRequests'), where('offeredByRideId', '==', rideDoc.id));
@@ -159,13 +159,76 @@ export const AuthProvider = ({ children }) => {
           }
 
           if (!isLinkedToActiveRide) {
-             await updateDoc(doc(db, 'rideRequests', reqDoc.id), { status: 'expired' });
+             await updateDoc(doc(db, 'rideRequests', reqDoc.id), { status: 'expired', expiresAt: deleteField() });
           }
         }
       }
 
     } catch (err) {
       console.error("Error cleaning up stale rides:", err);
+    }
+  }, []);
+
+  const runDecentralizedSweep = async () => {
+    // Only run ~10% of the time to save global read costs, or just run limit(5) always to be safe
+    // Since limit(5) is extremely cheap, we'll run it every time someone opens the app to guarantee system health.
+    try {
+      const sweepCollection = async (colName) => {
+          // 1. Sweep already-migrated rides that have naturally expired
+          const q = query(collection(db, colName), where('expiresAt', '<', Date.now()), limit(5));
+          const snap = await getDocs(q);
+          for (const d of snap.docs) {
+             const data = d.data();
+             if (data.status === 'open' || data.status === 'confirmed') {
+                 await updateDoc(doc(db, colName, d.id), { status: 'expired', expiresAt: deleteField() });
+                 
+                 // If this is an offer, release all passenger locks globally
+                 if (colName === 'rideOffers') {
+                     const reqQ = query(collection(db, 'rideRequests'), where('offeredByRideId', '==', d.id));
+                     const reqSnap = await getDocs(reqQ);
+                     for (const reqDoc of reqSnap.docs) {
+                        await updateDoc(doc(db, 'rideRequests', reqDoc.id), { status: 'open', offeredByRideId: null });
+                     }
+                 }
+             } else {
+                 // Self-healing: if the ride is already terminated but still has expiresAt, strip it.
+                 await updateDoc(doc(db, colName, d.id), { expiresAt: deleteField() });
+             }
+          }
+
+          // 2. Self-healing migration for ghost rides (those lacking expiresAt)
+          const migrationQ = query(collection(db, colName), where('status', '==', 'open'), limit(10));
+          const migrationSnap = await getDocs(migrationQ);
+          for (const d of migrationSnap.docs) {
+              const data = d.data();
+              if (data.expiresAt === undefined) {
+                  let scheduledTime = dayjs();
+                  if (data.date && data.time) {
+                       const datePart = dayjs(data.date).format('YYYY-MM-DD');
+                       const timePart = dayjs(data.time).format('HH:mm:ss');
+                       scheduledTime = dayjs(`${datePart}T${timePart}`);
+                  } else if (data.time || data.date) {
+                       scheduledTime = dayjs(data.time || data.date);
+                  }
+                  
+                  if (!scheduledTime || !scheduledTime.isValid()) continue;
+                  
+                  // If it's already older than 8 hours past schedule, expire it immediately
+                  if (dayjs().diff(scheduledTime, 'hour') >= 8) {
+                      await updateDoc(doc(db, colName, d.id), { status: 'expired' });
+                  } else {
+                      // Migrate it so future expiresAt sweeps will catch it natively
+                      const newExp = scheduledTime.add(8, 'hour').valueOf();
+                      await updateDoc(doc(db, colName, d.id), { expiresAt: newExp });
+                  }
+              }
+          }
+      };
+
+      await sweepCollection('rideOffers');
+      await sweepCollection('rideRequests');
+    } catch (e) {
+       console.error("Decentralized sweep encountered an error", e);
     }
   };
 
@@ -175,6 +238,7 @@ export const AuthProvider = ({ children }) => {
       if (user && user.emailVerified !== false) {
         await checkOnboardingStatus(user);
         cleanupStaleRides(user);
+        runDecentralizedSweep();
       } else {
         setProfileReady(false);
         setIsAdmin(false);

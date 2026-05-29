@@ -183,14 +183,15 @@ export default function ActiveRide() {
           const currentPhase = passengerStates[m.id] || 0;
           if (currentPhase < 2) {
               await updateDoc(doc(db, 'rideRequests', m.id), { 
-                  status: 'cancelled'
+                  status: 'cancelled',
+                  expiresAt: deleteField()
               });
           }
       });
       await Promise.all(updates);
 
       if (ride?.id) {
-          await updateDoc(doc(db, 'rideOffers', ride.id), { status: 'cancelled' });
+          await updateDoc(doc(db, 'rideOffers', ride.id), { status: 'cancelled', expiresAt: deleteField() });
       }
       setIsGlobalCancelled(true);
       setShowCancelAllModal(false);
@@ -201,7 +202,7 @@ export default function ActiveRide() {
   const handleFinishCarpool = async () => {
     try {
       if (ride?.id) {
-          await updateDoc(doc(db, 'rideOffers', ride.id), { status: isGlobalCancelled ? 'cancelled' : 'completed' });
+          await updateDoc(doc(db, 'rideOffers', ride.id), { status: isGlobalCancelled ? 'cancelled' : 'completed', expiresAt: deleteField() });
       }
       navigate('/my-rides', { state: { initialTab: 'History' } });
     } catch (err) { console.error(err); }
@@ -211,7 +212,7 @@ export default function ActiveRide() {
     try {
       const updates = matches.map(async (m) => {
          if ((passengerStates[m.id] || 0) < 2) {
-             await updateDoc(doc(db, 'rideRequests', m.id), { status: 'completed' });
+             await updateDoc(doc(db, 'rideRequests', m.id), { status: 'completed', expiresAt: deleteField() });
              if (m.userId) {
                  await setDoc(doc(db, 'users', m.userId), { completedRides: increment(1) }, { merge: true });
              }
@@ -299,6 +300,7 @@ export default function ActiveRide() {
     const fetchDriverRoute = async () => {
       try {
         const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverFrom.lon},${driverFrom.lat};${driverTo.lon},${driverTo.lat}?geometries=geojson&overview=full`);
+        if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
         const data = await res.json();
         const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
         setDriverRoute(coords);
@@ -345,6 +347,7 @@ export default function ActiveRide() {
         const fetchNewRoute = async () => {
             try {
                 const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${currentLocation.lon},${currentLocation.lat};${driverToLon},${driverToLat}?geometries=geojson&overview=full`);
+                if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
                 const data = await res.json();
                 if (data.routes && data.routes.length > 0) {
                     const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
@@ -426,6 +429,7 @@ export default function ActiveRide() {
                   const tblRes = await fetch(
                       `https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=distance`
                   );
+                  if (!tblRes.ok) throw new Error(`OSRM Error: ${tblRes.status}`);
                   const tblData = await tblRes.json();
 
                   if (tblData.code === 'Ok' && tblData.distances?.[0]) {
@@ -492,6 +496,7 @@ export default function ActiveRide() {
                   const dropTblRes = await fetch(
                       `https://router.project-osrm.org/table/v1/driving/${dropCoords}?destinations=0&annotations=distance`
                   );
+                  if (!dropTblRes.ok) throw new Error(`OSRM Error: ${dropTblRes.status}`);
                   const dropTblData = await dropTblRes.json();
 
                   if (dropTblData.code === 'Ok' && dropTblData.distances) {
@@ -547,6 +552,7 @@ export default function ActiveRide() {
                   const dFetch = fetch(`https://router.project-osrm.org/route/v1/driving/${meetDropoff[1]},${meetDropoff[0]};${passengerToPos.lon},${passengerToPos.lat}?geometries=geojson`, { signal: controller.signal });
                   const [pRes, dRes] = await Promise.all([pFetch, dFetch]);
                   clearTimeout(timeoutId);
+                  if (!pRes.ok || !dRes.ok) throw new Error("OSRM Connector API failed");
                   const pData = await pRes.json();
                   const dData = await dRes.json();
                   if (pData.routes?.length > 0) interceptPaths.pickupPath = pData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
@@ -640,7 +646,7 @@ export default function ActiveRide() {
     }, (error) => {});
 
     return () => unsubscribe();
-  }, [driverRoute, ride?.id]);
+  }, [driverRoute, driverFrom.lat, driverFrom.lon, ride?.id]);
 
   const handleScroll = () => {
     if (!carouselRef.current) return;
@@ -662,7 +668,7 @@ export default function ActiveRide() {
           // Phase 1 -> 2 (Complete Ride Slider executed)
           (async () => {
              try {
-                await updateDoc(doc(db, 'rideRequests', passengerId), { status: 'completed' });
+                await updateDoc(doc(db, 'rideRequests', passengerId), { status: 'completed', expiresAt: deleteField() });
                 
                 if (passenger?.userId) {
                     await setDoc(doc(db, 'users', passenger.userId), {
@@ -1134,9 +1140,11 @@ export default function ActiveRide() {
           borderTopLeftRadius: '8px',
           borderTopRightRadius: '8px',
           boxShadow: '0 -4px 15px rgba(0,0,0,0.5)',
-          padding: '16px 24px calc(16px + env(safe-area-inset-bottom)) 24px',
+          padding: isDrawerExpanded 
+            ? '16px 24px calc(16px + env(safe-area-inset-bottom)) 24px' 
+            : 'calc(40px + env(safe-area-inset-bottom)) 24px calc(16px + env(safe-area-inset-bottom)) 24px',
           zIndex: 2000,
-          transform: isDrawerExpanded ? 'translateY(0)' : 'translateY(calc(100% - 34px - env(safe-area-inset-bottom)))',
+          transform: isDrawerExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px - env(safe-area-inset-bottom)))',
           transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.3s',
           display: 'flex',
           flexDirection: 'column',

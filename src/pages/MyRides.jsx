@@ -72,32 +72,42 @@ export default function MyRides() {
         cleanupStaleRides(currentUser);
     }
 
-    // High-performance mathematical map proxy mapping vector dot-products securely detecting inverted trips without OSRM intensity!
-    const isValidGeographicProxy = (ride1, ride2) => {
+    const isValidGeographicProxy = (ride1, ride2, isRide1Driver) => {
         if (!ride1.from?.lat || !ride1.to?.lat || !ride2.from?.lat || !ride2.to?.lat) return false;
 
-        const dx1 = ride1.to.lon - ride1.from.lon;
-        const dy1 = ride1.to.lat - ride1.from.lat;
-        const dx2 = ride2.to.lon - ride2.from.lon;
-        const dy2 = ride2.to.lat - ride2.from.lat;
+        const driver = isRide1Driver ? ride1 : ride2;
+        const pass = isRide1Driver ? ride2 : ride1;
+
+        const dx = driver.to.lon - driver.from.lon;
+        const dy = driver.to.lat - driver.from.lat;
+        const lenSq = (dx * dx) + (dy * dy);
         
-        // Block explicitly inverted trajectories spanning the identical geographical bounds
-        const dotProduct = (dx1 * dx2) + (dy1 * dy2);
-        if (dotProduct < 0) return false; 
+        if (lenSq === 0) return false;
 
-        // 5km spatial bounding-box buffer detecting structural map isolation (e.g., Manila vs Cebu)
+        const pPickupX = pass.from.lon - driver.from.lon;
+        const pPickupY = pass.from.lat - driver.from.lat;
+        const projPickup = (pPickupX * dx) + (pPickupY * dy);
+        
+        const pDropX = pass.to.lon - driver.from.lon;
+        const pDropY = pass.to.lat - driver.from.lat;
+        const projDrop = (pDropX * dx) + (pDropY * dy);
+
+        if (projPickup > lenSq) return false;
+        if (projDrop < 0) return false;
+        if (projPickup >= projDrop) return false;
+
         const buffer = 0.045; 
-        const r1MinLat = Math.min(ride1.from.lat, ride1.to.lat) - buffer;
-        const r1MaxLat = Math.max(ride1.from.lat, ride1.to.lat) + buffer;
-        const r1MinLon = Math.min(ride1.from.lon, ride1.to.lon) - buffer;
-        const r1MaxLon = Math.max(ride1.from.lon, ride1.to.lon) + buffer;
+        const dMinLat = Math.min(driver.from.lat, driver.to.lat) - buffer;
+        const dMaxLat = Math.max(driver.from.lat, driver.to.lat) + buffer;
+        const dMinLon = Math.min(driver.from.lon, driver.to.lon) - buffer;
+        const dMaxLon = Math.max(driver.from.lon, driver.to.lon) + buffer;
 
-        const r2MinLat = Math.min(ride2.from.lat, ride2.to.lat);
-        const r2MaxLat = Math.max(ride2.from.lat, ride2.to.lat);
-        const r2MinLon = Math.min(ride2.from.lon, ride2.to.lon);
-        const r2MaxLon = Math.max(ride2.from.lon, ride2.to.lon);
+        const pMinLat = Math.min(pass.from.lat, pass.to.lat);
+        const pMaxLat = Math.max(pass.from.lat, pass.to.lat);
+        const pMinLon = Math.min(pass.from.lon, pass.to.lon);
+        const pMaxLon = Math.max(pass.from.lon, pass.to.lon);
 
-        return (r1MaxLat > r2MinLat && r1MinLat < r2MaxLat) && (r1MaxLon > r2MinLon && r1MinLon < r2MaxLon);
+        return (dMaxLat > pMinLat && dMinLat < pMaxLat) && (dMaxLon > pMinLon && dMinLon < pMaxLon);
     };
 
     const isValidTemporalProxy = (ride1, ride2, isRide1Driver) => {
@@ -123,23 +133,54 @@ export default function MyRides() {
         return true;
     };
 
-    let allOffers = [];
-    let allReqs = [];
-    let offersReady = false;
-    let reqsReady = false;
+    let myOffers = [];
+    let myReqs = [];
+    let linkedOffers = [];
+    let linkedReqs = [];
+    let openOffers = [];
+    let openReqs = [];
+
+    let myOffersReady = false;
+    let myReqsReady = false;
+    let linkedReady = false;
+    
     const profileCache = {};
 
+    let linkedOffersUnsub = () => {};
+    let linkedReqsUnsub = () => {};
+
+    // Static fetch to calculate matches without blowing up realtime reads
+    const fetchOpenRidesOnce = async () => {
+        try {
+            const [oSnap, rSnap] = await Promise.all([
+                getDocs(query(collection(db, 'rideOffers'), where('status', '==', 'open'))),
+                getDocs(query(collection(db, 'rideRequests'), where('status', '==', 'open')))
+            ]);
+            openOffers = oSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+            openReqs = rSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch (e) {
+            console.error("Error fetching open rides cache", e);
+        }
+    };
+
     const processRides = async () => {
-        if (!offersReady || !reqsReady) return;
+        if (!myOffersReady || !myReqsReady || !linkedReady) return;
         
-        const myOffers = allOffers.filter(r => r.userId === currentUser.uid);
-        const myReqs = allReqs.filter(r => r.userId === currentUser.uid);
+        // Emulate the old global arrays for downstream business logic processing seamlessly
+        const mergedOffersMap = new Map();
+        [...myOffers, ...linkedOffers, ...openOffers].forEach(o => mergedOffersMap.set(o.id, o));
+        const allOffers = Array.from(mergedOffersMap.values());
+
+        const mergedReqsMap = new Map();
+        [...myReqs, ...linkedReqs, ...openReqs].forEach(r => mergedReqsMap.set(r.id, r));
+        const allReqs = Array.from(mergedReqsMap.values());
 
         const rawOffers = myOffers.map((data) => {
              const passengersMap = new Map();
              
-             if (data.requestedByPassengerIds && data.requestedByPassengerIds.length > 0) {
-                 for (let reqId of data.requestedByPassengerIds) {
+             const passengerArray = [...(data.requestedByPassengerIds || []), ...(data.offeredToPassengerIds || [])];
+             if (passengerArray.length > 0) {
+                 for (let reqId of passengerArray) {
                      const reqData = allReqs.find(r => r.id === reqId);
                      if (reqData) {
                          let pStatus = 'Request';
@@ -173,9 +214,11 @@ export default function MyRides() {
 
              const eligibleReqs = allReqs.filter(r => {
                  if (r.userId === currentUser.uid || !r.from?.lat || !r.to?.lat) return false;
-                 const isLinked = r.offeredByRideId === data.id || (data.requestedByPassengerIds || []).includes(r.id);
+                 const isLinked = r.offeredByRideId === data.id || 
+                                  (data.requestedByPassengerIds || []).includes(r.id) || 
+                                  (data.offeredToPassengerIds || []).includes(r.id);
                  if (isLinked) return true;
-                 return r.status === 'open' && isValidGeographicProxy(data, r) && isValidTemporalProxy(data, r, true);
+                 return r.status === 'open' && isValidGeographicProxy(data, r, true) && isValidTemporalProxy(data, r, true);
              });
              
              let matchesFound = 0;
@@ -203,10 +246,12 @@ export default function MyRides() {
 
              const eligibleOffers = allOffers.filter(r => {
                  if (r.userId === currentUser.uid || !r.from?.lat || !r.to?.lat) return false;
-                 const isLinked = data.offeredByRideId === r.id || (r.requestedByPassengerIds || []).includes(data.id);
+                 const isLinked = data.offeredByRideId === r.id || 
+                                  (r.requestedByPassengerIds || []).includes(data.id) ||
+                                  (r.offeredToPassengerIds || []).includes(data.id);
                  if (isLinked) return true;
                  return (!r.status || (r.status !== 'completed' && r.status !== 'cancelled' && r.status !== 'expired')) && 
-                        isValidGeographicProxy(data, r) && 
+                        isValidGeographicProxy(data, r, false) && 
                         isValidTemporalProxy(data, r, false);
              });
              
@@ -215,7 +260,6 @@ export default function MyRides() {
                  matchesFound = eligibleOffers.length;
              }
 
-             // Compute Active Pass-through: If the driver has actively started the ride, mirror the in_progress status locally to the passenger
              let computedStatus = data.status;
              if (data.offeredByRideId && data.status === 'confirmed') {
                  const linkedDriver = allOffers.find(r => r.id === data.offeredByRideId);
@@ -279,29 +323,84 @@ export default function MyRides() {
         setLoading(false);
     };
 
+    const setupLinkedListeners = () => {
+        const linkedOfferIds = [...new Set(myReqs.map(r => r.offeredByRideId).filter(Boolean))];
+        const linkedReqIds = [...new Set(myOffers.flatMap(r => [
+            ...(r.requestedByPassengerIds || []),
+            ...(r.offeredToPassengerIds || [])
+        ]).filter(Boolean))];
+
+        linkedOffersUnsub();
+        linkedReqsUnsub();
+        
+        let offersPending = linkedOfferIds.length > 0;
+        let reqsPending = linkedReqIds.length > 0;
+        
+        if (!offersPending && !reqsPending) {
+            linkedOffers = [];
+            linkedReqs = [];
+            linkedReady = true;
+            processRides();
+            return;
+        }
+
+        const checkLinkedReady = () => {
+            if (!offersPending && !reqsPending) {
+                linkedReady = true;
+                processRides();
+            }
+        };
+
+        if (linkedOfferIds.length > 0) {
+            const q = query(collection(db, 'rideOffers'), where('__name__', 'in', linkedOfferIds.slice(0, 30)));
+            linkedOffersUnsub = onSnapshot(q, snap => {
+                linkedOffers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                offersPending = false;
+                checkLinkedReady();
+            });
+        } else {
+            linkedOffers = [];
+            offersPending = false;
+        }
+
+        if (linkedReqIds.length > 0) {
+            const q = query(collection(db, 'rideRequests'), where('__name__', 'in', linkedReqIds.slice(0, 30)));
+            linkedReqsUnsub = onSnapshot(q, snap => {
+                linkedReqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+                reqsPending = false;
+                checkLinkedReady();
+            });
+        } else {
+            linkedReqs = [];
+            reqsPending = false;
+        }
+    };
+
     setLoading(true);
+    let myOffersUnsub = () => {};
+    let myReqsUnsub = () => {};
 
-    const offersUnsub = onSnapshot(collection(db, 'rideOffers'), snap => {
-        allOffers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        offersReady = true;
-        processRides();
-    }, (err) => {
-        console.error("Realtime Offers Error: ", err);
-    });
+    fetchOpenRidesOnce().then(() => {
+        myOffersUnsub = onSnapshot(query(collection(db, 'rideOffers'), where('userId', '==', currentUser.uid)), snap => {
+            myOffers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            myOffersReady = true;
+            if (myReqsReady) setupLinkedListeners();
+        }, (err) => console.error(err));
 
-    const requestsUnsub = onSnapshot(collection(db, 'rideRequests'), snap => {
-        allReqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        reqsReady = true;
-        processRides();
-    }, (err) => {
-        console.error("Realtime Reqs Error: ", err);
+        myReqsUnsub = onSnapshot(query(collection(db, 'rideRequests'), where('userId', '==', currentUser.uid)), snap => {
+            myReqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            myReqsReady = true;
+            if (myOffersReady) setupLinkedListeners();
+        }, (err) => console.error(err));
     });
 
     return () => {
-        offersUnsub();
-        requestsUnsub();
+        myOffersUnsub();
+        myReqsUnsub();
+        linkedOffersUnsub();
+        linkedReqsUnsub();
     };
-  }, [currentUser, navigate]);
+  }, [currentUser, navigate, cleanupStaleRides]);
 
   // Format timestamp helper
   const getRideTimeOnly = (ride) => {
@@ -450,7 +549,7 @@ export default function MyRides() {
       </div>
 
       {/* CONTENT AREA */}
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '100px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' }}>
 
         {/* RIDES LIST */}
         <div style={{ padding: '1rem 1.5rem' }}>
@@ -468,7 +567,7 @@ export default function MyRides() {
             <p style={{ margin: 0, fontSize: '0.9rem' }}>You don't have any {activeTab.toLowerCase()} rides at the moment.</p>
           </div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: '2rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}>
                    {filteredRides.map(ride => {
                      const isDriver = ride.collectionType === 'offer';
                      const activeColor = '#00b0f0';

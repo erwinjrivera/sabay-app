@@ -236,6 +236,7 @@ export default function PassengerTracking() {
          try {
              // Fetch Driver Route
              const resD = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverRide.from.lon},${driverRide.from.lat};${driverRide.to.lon},${driverRide.to.lat}?geometries=geojson&overview=full`);
+             if (!resD.ok) throw new Error(`OSRM Error: ${resD.status}`);
              const dataD = await resD.json();
              const dRoute = dataD.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
              setDriverRoute(dRoute);
@@ -264,6 +265,7 @@ export default function PassengerTracking() {
                     const timeoutId = setTimeout(() => controller.abort(), 2000);
                     const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`, { signal: controller.signal });
                     clearTimeout(timeoutId);
+                    if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
                     const data = await res.json();
                     if (data.code !== 'Ok' || !data.durations || !data.durations[0]) throw new Error("Table API failed");
      
@@ -315,6 +317,7 @@ export default function PassengerTracking() {
                  const dFetch = fetch(`https://router.project-osrm.org/route/v1/foot/${passengerToPos.lon},${passengerToPos.lat};${meetDropoff[1]},${meetDropoff[0]}?geometries=geojson&overview=full`, { signal: controller.signal });
                  const [pRes, dRes] = await Promise.all([pFetch, dFetch]);
                  clearTimeout(timeoutId);
+                 if (!pRes.ok || !dRes.ok) throw new Error("OSRM Connector API failed");
                  const pData = await pRes.json();
                  const dData = await dRes.json();
 
@@ -390,7 +393,11 @@ export default function PassengerTracking() {
      };
 
      fetchRoutes();
-  }, [driverRide?.from, passengerRequest?.from, driverRoute.length]);
+   }, [
+      driverRide?.from?.lat, driverRide?.from?.lon, driverRide?.to?.lat, driverRide?.to?.lon,
+      passengerRequest?.from?.lat, passengerRequest?.from?.lon, passengerRequest?.to?.lat, passengerRequest?.to?.lon,
+      driverRoute.length
+   ]);
 
 
   if (isInitializing || !driverRide || !passengerState) {
@@ -756,8 +763,11 @@ export default function PassengerTracking() {
           position: 'absolute', bottom: 0, left: 0, width: '100%',
           background: isBottomPanelExpanded ? 'rgba(40,45,50,0.98)' : 'rgba(40,45,50,0.9)', 
           borderTopLeftRadius: '8px', borderTopRightRadius: '8px',
-          boxShadow: '0 -4px 15px rgba(0,0,0,0.5)', padding: '16px 24px calc(16px + env(safe-area-inset-bottom)) 24px', zIndex: 2000,
-          transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 34px - env(safe-area-inset-bottom)))',
+          boxShadow: '0 -4px 15px rgba(0,0,0,0.5)', 
+          padding: isBottomPanelExpanded 
+            ? '16px 24px calc(16px + env(safe-area-inset-bottom)) 24px' 
+            : 'calc(40px + env(safe-area-inset-bottom)) 24px calc(16px + env(safe-area-inset-bottom)) 24px', zIndex: 2000,
+          transform: isBottomPanelExpanded ? 'translateY(0)' : 'translateY(calc(100% - 40px - env(safe-area-inset-bottom)))',
           transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.3s',
           display: 'flex', flexDirection: 'column', alignItems: 'center', boxSizing: 'border-box'
         }}
