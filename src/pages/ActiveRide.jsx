@@ -80,11 +80,12 @@ function getClosestPointOnPath(lat, lon, path) {
 }
 
 // Icons
-const DriverCarIcon = ({ photoURL }) => (
-  <div style={{ width: 50, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', transform: 'rotate(180deg)' }}>
-    <div style={{ position: 'absolute', width: 40, height: 40, background: '#00b0f0', borderRadius: '50% 50% 50% 0', transform: 'rotate(135deg)', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <img src={photoURL || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E"} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid #fff', transform: 'rotate(-315deg)', background: '#ccc' }} />
-    </div>
+const DriverCarIcon = () => (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0px 3px 6px rgba(0,0,0,0.25))' }}>
+    <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="24" cy="24" r="20" fill="white" />
+      <path d="M24 10 L36 34 L24 28 L12 34 Z" fill="#1b72e8" />
+    </svg>
   </div>
 );
 
