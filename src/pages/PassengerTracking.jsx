@@ -574,7 +574,7 @@ export default function PassengerTracking() {
         )}
 
         <Marker longitude={driverLiveLon} latitude={driverLiveLat} anchor="center" style={{ zIndex: 100 }}>
-           <div style={{ transform: `rotate(${driverLiveBearing}deg)`, transition: 'transform 1s linear' }}>
+           <div style={{ transform: `rotate(${driverLiveBearing - mapBearing}deg)`, transition: 'transform 1s linear' }}>
               <DriverCarIcon photoURL={targetPhotoURL} name={targetName} themeColor={activeColor} />
            </div>
         </Marker>

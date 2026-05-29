@@ -238,6 +238,8 @@ export default function ActiveRide() {
   };
 
   const watchIdRef = useRef(null);
+  const prevLocationRef = useRef(null);
+  const computedHeadingRef = useRef(null);
 
   useEffect(() => {
     const startTracking = async () => {
@@ -253,8 +255,22 @@ export default function ActiveRide() {
             if (position && !err) {
               const lat = position.coords.latitude;
               const lon = position.coords.longitude;
-              const heading = position.coords.heading;
+              let heading = position.coords.heading;
               
+              if (prevLocationRef.current) {
+                  const dist = getDistanceKM(prevLocationRef.current.lat, prevLocationRef.current.lon, lat, lon);
+                  if (dist > 0.005) { // 5 meters
+                      const computed = getBearing(prevLocationRef.current.lat, prevLocationRef.current.lon, lat, lon);
+                      computedHeadingRef.current = computed;
+                      heading = computed;
+                      prevLocationRef.current = { lat, lon };
+                  } else {
+                      heading = computedHeadingRef.current || heading;
+                  }
+              } else {
+                  prevLocationRef.current = { lat, lon };
+              }
+
               setCurrentLocation({ lat, lon, heading });
 
               // Broadcast Live Location to Firestore
@@ -341,17 +357,21 @@ export default function ActiveRide() {
     
     // Find closest distance to the active route for triggering recalculation
     let minDistToActive = Infinity;
-    let closestPointOnActive = null;
+    let closestPointIdx = -1;
     for (let i = 0; i < activeRoute.length; i++) {
         const d = getDistanceKM(currentLocation.lat, currentLocation.lon, activeRoute[i][0], activeRoute[i][1]);
         if (d < minDistToActive) {
             minDistToActive = d;
-            closestPointOnActive = activeRoute[i];
+            closestPointIdx = i;
         }
     }
     
-    if (minDistToActive <= 0.075 && closestPointOnActive) {
-        setSnappedLocation({ lat: closestPointOnActive[0], lon: closestPointOnActive[1], heading: currentLocation.heading });
+    if (minDistToActive <= 0.075 && closestPointIdx !== -1) {
+        let snappedHeading = currentLocation.heading;
+        if (closestPointIdx < activeRoute.length - 1) {
+            snappedHeading = getBearing(activeRoute[closestPointIdx][0], activeRoute[closestPointIdx][1], activeRoute[closestPointIdx + 1][0], activeRoute[closestPointIdx + 1][1]);
+        }
+        setSnappedLocation({ lat: activeRoute[closestPointIdx][0], lon: activeRoute[closestPointIdx][1], heading: snappedHeading });
     } else {
         setSnappedLocation(null);
     }
@@ -789,7 +809,9 @@ export default function ActiveRide() {
         
         {/* Real-time driver teardrop map marker indicator */}
         <Marker longitude={currentLon} latitude={currentLat} anchor="bottom" style={{ zIndex: 100 }}>
-          <DriverCarIcon photoURL={currentUser?.photoURL} />
+          <div style={{ transform: `rotate(${currentBearing - mapBearing}deg)`, transition: 'transform 1s linear', transformOrigin: 'bottom center' }}>
+            <DriverCarIcon photoURL={currentUser?.photoURL} />
+          </div>
         </Marker>
 
         {/* Passenger Route */}
