@@ -113,7 +113,7 @@ export default function Home() {
          
          <div style={{ textAlign: 'center', marginBottom: '16px' }}>
             <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: '#f8fafc', letterSpacing: '-1.5px', margin: 0 }}>Sabay</h1>
-            <p style={{ fontSize: '1.05rem', color: '#94a3b8', fontWeight: 600, margin: '4px 0 0 0' }}>Tara, sabay na!</p>
+            <p style={{ fontSize: '1.05rem', color: '#94a3b8', fontWeight: 600, margin: '4px 0 0 0' }}>Saan ka? Tara Sabay!</p>
          </div>
 
          {/* GRID ROW 1: Find & Offer */}
