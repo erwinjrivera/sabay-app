@@ -8,6 +8,7 @@ import { ArrowLeft, User, Phone, MessageCircle, Star, Loader2, CarFront, Check, 
 import { db } from '../firebase';
 import { doc, onSnapshot, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 import { sendRideNotification } from '../utils/notifications';
+import useWakeLock from '../hooks/useWakeLock';
 
 
 function toGeoJSON(coords) {
@@ -153,6 +154,7 @@ function AutoFollower({ panToCar, setPanToCar, currentLat, currentLon, setMapBea
 }
 
 export default function PassengerTracking() {
+  useWakeLock();
   const navigate = useNavigate();
   const location = useLocation();
   const passengerRequest = location.state?.ride;

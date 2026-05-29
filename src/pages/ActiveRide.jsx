@@ -9,6 +9,7 @@ import { collection, query, getDocs, doc, updateDoc, onSnapshot, getDoc, setDoc,
 import { Geolocation } from '@capacitor/geolocation';
 import SwipeButton from '../components/SwipeButton';
 import { useAuth } from '../contexts/AuthContext';
+import useWakeLock from '../hooks/useWakeLock';
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -166,6 +167,7 @@ function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing,
 }
 
 export default function ActiveRide() {
+  useWakeLock();
   const navigate = useNavigate();
   const location = useLocation();
   const carouselRef = useRef(null);
