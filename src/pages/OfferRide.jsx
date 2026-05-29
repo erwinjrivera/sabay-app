@@ -130,6 +130,13 @@ export default function OfferRide() {
     }
   }, [location.state, navigate, location.pathname]);
 
+  // Auto-expand the drawer if both locations are validly selected
+  useEffect(() => {
+    if (fromCoords && toCoords) {
+      setIsPanelOpen(true);
+    }
+  }, [fromCoords, toCoords]);
+
   // Map Passengers setting directly from Profile baseline
   useEffect(() => {
     if (!currentUser) return;

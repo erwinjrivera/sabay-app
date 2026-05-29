@@ -413,9 +413,28 @@ export default function PassengerTracking() {
   const isRideCancelled = !isRideCompleted && (driverRide?.status === 'cancelled' || passengerState?.status === 'cancelled');
   const isFinalState = isRideCompleted || isRideCancelled;
 
-  const driverLiveLat = isFinalState ? driverRide.from.lat : (driverRide.currentLat || driverRide.from.lat);
-  const driverLiveLon = isFinalState ? driverRide.from.lon : (driverRide.currentLon || driverRide.from.lon);
+  let driverLiveLat = isFinalState ? driverRide.from.lat : (driverRide.currentLat || driverRide.from.lat);
+  let driverLiveLon = isFinalState ? driverRide.from.lon : (driverRide.currentLon || driverRide.from.lon);
   const driverLiveBearing = isFinalState ? 0 : (driverRide.currentHeading || 0);
+
+  // Apply visual snapping to the driver route for the passenger app
+  if (!isFinalState && driverRoute.length > 0 && driverRide.currentLat && driverRide.currentLon) {
+      let minDistToActive = Infinity;
+      let closestPoint = null;
+      for (let i = 0; i < driverRoute.length; i++) {
+          const d = getDistanceKM(driverRide.currentLat, driverRide.currentLon, driverRoute[i][0], driverRoute[i][1]);
+          if (d < minDistToActive) {
+              minDistToActive = d;
+              closestPoint = driverRoute[i];
+          }
+      }
+      
+      // Snap threshold: 0.075 km (75 meters)
+      if (minDistToActive <= 0.075 && closestPoint) {
+          driverLiveLat = closestPoint[0];
+          driverLiveLon = closestPoint[1];
+      }
+  }
 
   const activeColor = isRideCancelled ? '#888' : (isRideCompleted ? '#9cc93a' : '#00b0f0');
 

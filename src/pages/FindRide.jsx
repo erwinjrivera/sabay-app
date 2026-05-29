@@ -130,6 +130,13 @@ export default function FindRide() {
     }
   }, [location.state, navigate, location.pathname]);
 
+  // Auto-expand the drawer if both locations are validly selected
+  useEffect(() => {
+    if (fromCoords && toCoords) {
+      setIsPanelOpen(true);
+    }
+  }, [fromCoords, toCoords]);
+
   // Search Suggester state
   const [suggestions, setSuggestions] = useState([]);
   const [isSearching, setIsSearching] = useState(false);

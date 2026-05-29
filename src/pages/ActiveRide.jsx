@@ -133,6 +133,7 @@ export default function ActiveRide() {
   const [activePassengerId, setActivePassengerId] = useState(null);
   const [passengerStates, setPassengerStates] = useState({}); // id -> 0 (arrive), 1 (complete), 2 (completed)
   const [currentLocation, setCurrentLocation] = useState(null);
+  const [snappedLocation, setSnappedLocation] = useState(null);
   const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
   const [drawerMode, setDrawerMode] = useState('ride');
   const [showCancelAllModal, setShowCancelAllModal] = useState(false);
@@ -336,9 +337,19 @@ export default function ActiveRide() {
     
     // Find closest distance to the active route for triggering recalculation
     let minDistToActive = Infinity;
+    let closestPointOnActive = null;
     for (let i = 0; i < activeRoute.length; i++) {
         const d = getDistanceKM(currentLocation.lat, currentLocation.lon, activeRoute[i][0], activeRoute[i][1]);
-        if (d < minDistToActive) minDistToActive = d;
+        if (d < minDistToActive) {
+            minDistToActive = d;
+            closestPointOnActive = activeRoute[i];
+        }
+    }
+    
+    if (minDistToActive <= 0.075 && closestPointOnActive) {
+        setSnappedLocation({ lat: closestPointOnActive[0], lon: closestPointOnActive[1], heading: currentLocation.heading });
+    } else {
+        setSnappedLocation(null);
     }
     
     if (minDistToActive > 0.075 && !isRecalculatingRef.current) {
@@ -706,11 +717,11 @@ export default function ActiveRide() {
   const activePassRoute = activePassenger?.sharedPath || [];
   const activePassengerPhase = activePassenger ? (passengerStates[activePassenger.id] || 0) : 0;
   const activeColor = activePassengerPhase === 2 ? '#9cc93a' : '#00b0f0';
-
-  const currentLat = currentLocation ? currentLocation.lat : driverFrom.lat;
-  const currentLon = currentLocation ? currentLocation.lon : driverFrom.lon;
-  // Fallback to calculated bearing if native heading is null
-  const currentBearing = (currentLocation && currentLocation.heading !== null && currentLocation.heading !== undefined) ? currentLocation.heading : getBearing(currentLat, currentLon, driverTo.lat, driverTo.lon);
+  const effectiveLocation = snappedLocation || currentLocation;
+  const currentLat = effectiveLocation ? effectiveLocation.lat : driverFrom.lat;
+  const currentLon = effectiveLocation ? effectiveLocation.lon : driverFrom.lon;
+  
+  const currentBearing = (effectiveLocation && effectiveLocation.heading !== null && effectiveLocation.heading !== undefined) ? effectiveLocation.heading : getBearing(currentLat, currentLon, driverTo.lat, driverTo.lon);
 
   const toGeoJSON = (coords) => {
     if (!coords || !Array.isArray(coords)) return { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } };
