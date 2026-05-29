@@ -155,7 +155,7 @@ export default function Login() {
           </p>
         </div>
       </div>
-      <div style={{ position: 'absolute', bottom: 'calc(24px + env(safe-area-inset-bottom))', left: 0, width: '100%', textAlign: 'center', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      <div style={{ position: 'absolute', bottom: 'calc(24px + env(safe-area-inset-bottom))', left: 0, width: '100%', textAlign: 'center', zIndex: 1005, display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <span style={{ fontSize: '0.80rem', color: '#64748b' }}>
           By using Sabay carpool, you agree to our 
         </span>
