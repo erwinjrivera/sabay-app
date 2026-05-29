@@ -1227,7 +1227,7 @@ export default function ActiveRide() {
       {/* Grey Background Overlay */}
       <div 
         onClick={() => setIsDrawerExpanded(false)}
-        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', zIndex: 1500, opacity: isDrawerExpanded ? 1 : 0, transition: 'opacity 0.3s', pointerEvents: isDrawerExpanded ? 'auto' : 'none' }}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'transparent', zIndex: 1500, pointerEvents: isDrawerExpanded ? 'auto' : 'none' }}
       ></div>
       
       {/* Drawer Surface */}
