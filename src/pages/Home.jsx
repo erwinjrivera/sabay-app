@@ -174,7 +174,7 @@ export default function Home() {
 
       <div style={{ position: 'absolute', bottom: 'calc(24px + env(safe-area-inset-bottom))', left: 0, width: '100%', textAlign: 'center', zIndex: 10, display: 'flex', flexDirection: 'column', gap: '8px' }}>
         <span style={{ fontSize: '0.80rem', color: '#94a3b8' }}>
-          By using Sabay, you agree to our 
+          By using Sabay carpool, you agree to our 
         </span>
         <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }}>
            <button onClick={() => navigate('/terms-of-use')} style={{ background: 'transparent', border: 'none', color: '#0ea5e9', fontWeight: 600, fontSize: '0.80rem', cursor: 'pointer', padding: 0 }}>Terms of Use</button>
