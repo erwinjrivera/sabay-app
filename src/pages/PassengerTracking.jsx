@@ -529,12 +529,17 @@ export default function PassengerTracking() {
   const interceptPickupGeoJSON = useMemo(() => toGeoJSON(intercepts?.pickupPath), [intercepts?.pickupPath]);
   const interceptDropoffGeoJSON = useMemo(() => toGeoJSON(intercepts?.dropoffPath), [intercepts?.dropoffPath]);
 
-  const driverRoutePaint = useMemo(() => ({
-    'line-color': recalculatedRoute ? '#94a3b8' : '#555',
-    'line-width': recalculatedRoute ? 4 : 5,
-    'line-opacity': recalculatedRoute ? 0.4 : 0.5,
-    'line-dasharray': recalculatedRoute ? [1, 2] : [1]
-  }), [recalculatedRoute]);
+  const driverRoutePaint = useMemo(() => {
+    const paint = {
+      'line-color': recalculatedRoute ? '#94a3b8' : '#555',
+      'line-width': recalculatedRoute ? 4 : 5,
+      'line-opacity': recalculatedRoute ? 0.4 : 0.5
+    };
+    if (recalculatedRoute) {
+      paint['line-dasharray'] = [1, 2];
+    }
+    return paint;
+  }, [recalculatedRoute]);
   
   const recalcRoutePaint = useMemo(() => ({ 'line-color': '#555', 'line-width': 5, 'line-opacity': 0.8 }), []);
 

@@ -197,7 +197,7 @@ export default function ActiveRide() {
   const [activePassengerId, setActivePassengerId] = useState(null);
   const [passengerStates, setPassengerStates] = useState({}); // id -> 0 (arrive), 1 (complete), 2 (completed)
   const [currentLocation, setCurrentLocation] = useState(null);
-  const [snappedLocation, setSnappedLocation] = useState(null);
+
   const [isDrawerExpanded, setIsDrawerExpanded] = useState(false);
   const [drawerMode, setDrawerMode] = useState('ride');
   const [showCancelAllModal, setShowCancelAllModal] = useState(false);
@@ -397,6 +397,20 @@ export default function ActiveRide() {
   }, [driverFrom.lon, driverFrom.lat, driverTo.lon, driverTo.lat]);
 
   // Dynamic Route Deviation Recalculation
+  const snappedLocation = useMemo(() => {
+    if (!currentLocation || driverRoute.length === 0) return null;
+    const activeRoute = recalculatedRoute || driverRoute;
+    const snapResult = getClosestPointOnPath(currentLocation.lat, currentLocation.lon, activeRoute);
+    if (snapResult.dist <= 0.075 && snapResult.pt) {
+        let snappedHeading = currentLocation.heading;
+        if (snapResult.idx !== -1 && snapResult.idx < activeRoute.length - 1) {
+            snappedHeading = getBearing(activeRoute[snapResult.idx][0], activeRoute[snapResult.idx][1], activeRoute[snapResult.idx + 1][0], activeRoute[snapResult.idx + 1][1]);
+        }
+        return { lat: snapResult.pt.lat, lon: snapResult.pt.lon, heading: snappedHeading };
+    }
+    return null;
+  }, [currentLocation, driverRoute, recalculatedRoute]);
+
   useEffect(() => {
     if (!currentLocation || driverRoute.length === 0) return;
     
@@ -420,16 +434,6 @@ export default function ActiveRide() {
     // Find closest point on active route (using true point-to-line segment projection)
     const activeRoute = recalculatedRoute || driverRoute;
     const snapResult = getClosestPointOnPath(currentLocation.lat, currentLocation.lon, activeRoute);
-    
-    if (snapResult.dist <= 0.075 && snapResult.pt) {
-        let snappedHeading = currentLocation.heading;
-        if (snapResult.idx !== -1 && snapResult.idx < activeRoute.length - 1) {
-            snappedHeading = getBearing(activeRoute[snapResult.idx][0], activeRoute[snapResult.idx][1], activeRoute[snapResult.idx + 1][0], activeRoute[snapResult.idx + 1][1]);
-        }
-        setSnappedLocation({ lat: snapResult.pt.lat, lon: snapResult.pt.lon, heading: snappedHeading });
-    } else {
-        setSnappedLocation(null);
-    }
     
     if (snapResult.dist > 0.075 && !isRecalculatingRef.current) {
         // Trigger recalculation!
@@ -857,12 +861,17 @@ export default function ActiveRide() {
     return toGeoJSON([]);
   }, [activePassenger]);
 
-  const driverRoutePaint = useMemo(() => ({
-    'line-color': recalculatedRoute ? '#94a3b8' : '#00b0f0',
-    'line-width': recalculatedRoute ? 4 : 5,
-    'line-opacity': recalculatedRoute ? 0.6 : 0.8,
-    'line-dasharray': recalculatedRoute ? [1, 2] : [1]
-  }), [recalculatedRoute]);
+  const driverRoutePaint = useMemo(() => {
+    const paint = {
+      'line-color': recalculatedRoute ? '#94a3b8' : '#00b0f0',
+      'line-width': recalculatedRoute ? 4 : 5,
+      'line-opacity': recalculatedRoute ? 0.6 : 0.8
+    };
+    if (recalculatedRoute) {
+      paint['line-dasharray'] = [1, 2];
+    }
+    return paint;
+  }, [recalculatedRoute]);
 
   const recalcRoutePaint = useMemo(() => ({ 'line-color': '#00b0f0', 'line-width': 5, 'line-opacity': 0.8 }), []);
   const passRoutePaint = useMemo(() => ({ 'line-color': activeColor, 'line-width': 6, 'line-opacity': 1 }), [activeColor]);
