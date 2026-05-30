@@ -80,20 +80,18 @@ function getClosestPointOnPath(lat, lon, path) {
 }
 
 // Icons
-const DriverCarIcon = ({ photoURL, name, themeColor = '#00b0f0' }) => {
-  const initials = getInitials(name, 'D');
+const DriverCarIcon = ({ themeColor = '#00b0f0' }) => {
   return (
-    <div style={{ width: 50, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', transform: 'rotate(180deg)' }}>
-      <div style={{ position: 'absolute', width: 40, height: 40, background: themeColor, borderRadius: '50% 50% 50% 0', transform: 'rotate(135deg)', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <img 
-          src={photoURL || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23fff'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E"} 
-          onError={(e) => { e.target.onerror = null; e.target.style.display='none'; e.target.nextSibling.style.display='flex'; }}
-          style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: '2px solid #fff', transform: 'rotate(-315deg)', background: '#ccc' }} 
-        />
-        <div style={{ display: 'none', width: 34, height: 34, borderRadius: '50%', background: '#ccc', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 'bold', color: '#fff', border: '2px solid #fff', transform: 'rotate(-315deg)' }}>
-          {initials}
-        </div>
-      </div>
+    <div style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0px 3px 6px rgba(0,0,0,0.3))' }}>
+      <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="4" width="20" height="32" rx="6" fill={themeColor} />
+        <rect x="12" y="12" width="16" height="6" rx="2" fill="#111" opacity="0.8" />
+        <rect x="12" y="24" width="16" height="5" rx="1" fill="#111" opacity="0.8" />
+        <rect x="12" y="4" width="4" height="2" fill="#ffeb3b" />
+        <rect x="24" y="4" width="4" height="2" fill="#ffeb3b" />
+        <rect x="12" y="34" width="4" height="2" fill="#ff3b3b" />
+        <rect x="24" y="34" width="4" height="2" fill="#ff3b3b" />
+      </svg>
     </div>
   );
 };
