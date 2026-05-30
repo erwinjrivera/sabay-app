@@ -157,7 +157,7 @@ function AutoFollower({ currentLat, currentLon, currentBearing, isAutoFollowing,
            center: [currentLon, currentLat],
            bearing: currentBearing || 0,
            pitch: is3DMode ? 60 : 0,
-           zoom: 17.5,
+           zoom: 18.5,
            duration: isFirstRender.current ? 0 : 1000
        });
        isFirstRender.current = false;
@@ -861,7 +861,7 @@ export default function ActiveRide() {
         initialViewState={{
           longitude: driverFrom.lon,
           latitude: driverFrom.lat,
-          zoom: 17.5,
+          zoom: 18.5,
           pitch: is3DMode ? 60 : 0,
           bearing: 0
         }}
