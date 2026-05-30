@@ -481,9 +481,28 @@ export default function PassengerTracking() {
         isRecalculatingRef.current = true;
         const fetchNewRoute = async () => {
             try {
-                const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverRide.currentLon},${driverRide.currentLat};${driverRide.to.lon},${driverRide.to.lat}?geometries=geojson&overview=full`);
-                if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
-                const data = await res.json();
+                let bearingsQuery = '';
+                if (typeof driverRide.currentHeading === 'number') {
+                    bearingsQuery = `&bearings=${Math.round(driverRide.currentHeading)},90;`;
+                }
+                const getRoute = async (bQuery) => {
+                    const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverRide.currentLon},${driverRide.currentLat};${driverRide.to.lon},${driverRide.to.lat}?geometries=geojson&overview=full${bQuery}`);
+                    if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
+                    return await res.json();
+                };
+                
+                let data;
+                try {
+                    data = await getRoute(bearingsQuery);
+                    if (data.code !== 'Ok') throw new Error(data.code);
+                } catch (e) {
+                    if (bearingsQuery) {
+                        data = await getRoute('');
+                    } else {
+                        throw e;
+                    }
+                }
+
                 if (data.routes && data.routes.length > 0) {
                     const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
                     setRecalculatedRoute(coords);
