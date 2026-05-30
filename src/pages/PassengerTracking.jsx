@@ -464,9 +464,12 @@ export default function PassengerTracking() {
         let snappedHeading = driverRide.currentHeading || 0;
         if (snapResult.idx !== -1 && snapResult.idx < activeRoute.length - 1) {
             const getBearingTemp = (lat1, lon1, lat2, lon2) => {
-                const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
-                const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
-                return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+                const toRad = x => x * Math.PI / 180;
+                const toDeg = x => x * 180 / Math.PI;
+                const dLon = toRad(lon2 - lon1);
+                const y = Math.sin(dLon) * Math.cos(toRad(lat2));
+                const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+                return (toDeg(Math.atan2(y, x)) + 360) % 360;
             };
             snappedHeading = getBearingTemp(activeRoute[snapResult.idx][0], activeRoute[snapResult.idx][1], activeRoute[snapResult.idx + 1][0], activeRoute[snapResult.idx + 1][1]);
         }
