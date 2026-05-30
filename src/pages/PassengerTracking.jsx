@@ -513,7 +513,7 @@ export default function PassengerTracking() {
     'line-dasharray': recalculatedRoute ? [1, 2] : [1]
   }), [recalculatedRoute]);
   
-  const recalcRoutePaint = useMemo(() => ({ 'line-color': '#00b0f0', 'line-width': 5, 'line-opacity': 0.8 }), []);
+  const recalcRoutePaint = useMemo(() => ({ 'line-color': '#555', 'line-width': 5, 'line-opacity': 0.8 }), []);
 
   const activeColor = useMemo(() => {
     const isRideCompleted = driverRide?.status === 'completed' || passengerState?.status === 'completed';
