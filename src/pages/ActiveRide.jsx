@@ -397,7 +397,7 @@ export default function ActiveRide() {
     }
 
     // Auto-cleanup if driver merges back to the original route
-    if (recalculatedRoute && minDistToOriginal < 0.050) {
+    if (recalculatedRoute && minDistToOriginal < 0.040) {
         setRecalculatedRoute(null);
         return;
     }
@@ -788,7 +788,9 @@ export default function ActiveRide() {
   const currentBearing = (effectiveLocation && effectiveLocation.heading !== null && effectiveLocation.heading !== undefined) ? effectiveLocation.heading : getBearing(currentLat, currentLon, driverTo.lat, driverTo.lon);
 
   const toGeoJSON = (coords) => {
-    if (!coords || !Array.isArray(coords)) return { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } };
+    if (!coords || !Array.isArray(coords) || coords.length < 2) {
+        return { type: 'FeatureCollection', features: [] };
+    }
     const coordinates = coords.map(c => {
       if (Array.isArray(c)) return [c[1], c[0]];
       if (c.lat !== undefined && c.lon !== undefined) return [c.lon, c.lat];
@@ -820,6 +822,17 @@ export default function ActiveRide() {
     }
     return toGeoJSON([]);
   }, [activePassenger]);
+
+  const driverRoutePaint = useMemo(() => ({
+    'line-color': recalculatedRoute ? '#94a3b8' : '#00b0f0',
+    'line-width': recalculatedRoute ? 4 : 5,
+    'line-opacity': recalculatedRoute ? 0.6 : 0.8,
+    'line-dasharray': recalculatedRoute ? [1, 2] : [1]
+  }), [recalculatedRoute]);
+
+  const recalcRoutePaint = useMemo(() => ({ 'line-color': '#00b0f0', 'line-width': 5, 'line-opacity': 0.8 }), []);
+  const passRoutePaint = useMemo(() => ({ 'line-color': activeColor, 'line-width': 6, 'line-opacity': 1 }), [activeColor]);
+  const interceptPaint = useMemo(() => ({ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }), [activeColor]);
 
   return (
     <div style={{ height: '100dvh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
@@ -855,11 +868,11 @@ export default function ActiveRide() {
         {driverRoute.length > 0 && (
           <>
             <Source id="driver-route" type="geojson" data={driverRouteGeoJSON}>
-              <Layer id="driver-route-line" type="line" paint={{ 'line-color': recalculatedRoute ? '#94a3b8' : '#00b0f0', 'line-width': recalculatedRoute ? 4 : 5, 'line-opacity': recalculatedRoute ? 0.6 : 0.8, 'line-dasharray': recalculatedRoute ? [1, 2] : [1] }} />
+              <Layer id="driver-route-line" type="line" paint={driverRoutePaint} />
             </Source>
             {recalculatedRoute && (
               <Source id="recalc-route" type="geojson" data={recalcRouteGeoJSON}>
-                <Layer id="recalc-route-line" type="line" paint={{ 'line-color': '#00b0f0', 'line-width': 5, 'line-opacity': 0.8 }} />
+                <Layer id="recalc-route-line" type="line" paint={recalcRoutePaint} />
               </Source>
             )}
             <Marker longitude={driverFrom.lon} latitude={driverFrom.lat} anchor="center">
@@ -882,7 +895,7 @@ export default function ActiveRide() {
         {activePassRoute.length > 0 && (
           <>
             <Source id="pass-route" type="geojson" data={activePassRouteGeoJSON}>
-              <Layer id="pass-route-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 6, 'line-opacity': 1 }} />
+              <Layer id="pass-route-line" type="line" paint={passRoutePaint} />
             </Source>
             
             <Marker longitude={activePassenger.pickup.lon} latitude={activePassenger.pickup.lat} anchor="center">
@@ -895,7 +908,7 @@ export default function ActiveRide() {
             {/* Dotted theoretical intercept lines */}
             {driverRoute.length > 0 && activePassenger?.meetPickup && (
                <Source id="intercept-pickup" type="geojson" data={interceptPickupGeoJSON}>
-                 <Layer id="intercept-pickup-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }} />
+                 <Layer id="intercept-pickup-line" type="line" paint={interceptPaint} />
                </Source>
             )}
 
@@ -927,7 +940,7 @@ export default function ActiveRide() {
             {/* Dotted theoretical intercept line from Driver -> Dropoff */}
             {driverRoute.length > 0 && activePassenger?.meetDropoff && (
                <Source id="intercept-dropoff" type="geojson" data={interceptDropoffGeoJSON}>
-                 <Layer id="intercept-dropoff-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }} />
+                 <Layer id="intercept-dropoff-line" type="line" paint={interceptPaint} />
                </Source>
             )}
 

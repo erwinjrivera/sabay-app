@@ -11,13 +11,17 @@ import { sendRideNotification } from '../utils/notifications';
 import useWakeLock from '../hooks/useWakeLock';
 
 
-function toGeoJSON(coords) {
-  if (!coords) return null;
-  return {
-    type: 'Feature',
-    geometry: { type: 'LineString', coordinates: coords.map(c => [c[1], c[0]]) }
-  };
-}
+const toGeoJSON = (coords) => {
+  if (!coords || !Array.isArray(coords) || coords.length < 2) {
+      return { type: 'FeatureCollection', features: [] };
+  }
+  const coordinates = coords.map(c => {
+    if (Array.isArray(c)) return [c[1], c[0]];
+    if (c.lat !== undefined && c.lon !== undefined) return [c.lon, c.lat];
+    return [0, 0];
+  });
+  return { type: 'Feature', geometry: { type: 'LineString', coordinates } };
+};
 
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371;
@@ -119,8 +123,7 @@ import { useMap as useMapLibre } from 'react-map-gl/maplibre';
 
 function AutoFollower({ panToCar, setPanToCar, currentLat, currentLon, setMapBearing }) {
   const { current: map } = useMapLibre();
-  const hasFittedRef = React.useRef(false);
-
+  
   React.useEffect(() => {
     if (!map) return;
     const handleInteract = (e) => {
@@ -220,7 +223,6 @@ export default function PassengerTracking() {
      const isFinalState = passengerState.status === 'completed' || passengerState.status === 'cancelled';
 
      if (isFinalState) {
-         // Pull once to guarantee payload but DO NOT hook a live watcher
          (async () => {
              const snap = await getDoc(doc(db, 'rideOffers', passengerState.offeredByRideId));
              if (snap.exists()) {
@@ -272,11 +274,10 @@ export default function PassengerTracking() {
   // 3. Compute Map Geometries once driver & passenger static routes exist
   useEffect(() => {
      if (!passengerRequest?.from?.lat || !driverRide?.from?.lat) return;
-     if (driverRoute.length > 0) return; // already done
+     if (driverRoute.length > 0) return; 
 
      const fetchRoutes = async () => {
          try {
-             // Fetch Driver Route
              const resD = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverRide.from.lon},${driverRide.from.lat};${driverRide.to.lon},${driverRide.to.lat}?geometries=geojson&overview=full`);
              if (!resD.ok) throw new Error(`OSRM Error: ${resD.status}`);
              const dataD = await resD.json();
@@ -286,7 +287,6 @@ export default function PassengerTracking() {
              const passengerFromPos = { lat: passengerRequest.from.lat, lon: passengerRequest.from.lon };
              const passengerToPos = { lat: passengerRequest.to.lat, lon: passengerRequest.to.lon };
 
-             // Sub-function to find the true road-network driving distance optimal point on driver route
              const findBestNetworkNode = async (targetPos, minIdx = 0) => {
                 const candidates = dRoute.map((pt, idx) => ({ pt, idx, dist: getDistanceKM(pt[0], pt[1], targetPos.lat, targetPos.lon) }))
                                                   .filter(c => c.dist <= 5.0 && c.idx >= minIdx);
@@ -323,7 +323,6 @@ export default function PassengerTracking() {
                 }
              };
 
-             // 1. Find pickup and initial dropoff using road-network proximity
              const bestPickup = await findBestNetworkNode(passengerFromPos);
              const bestDropoff = await findBestNetworkNode(passengerToPos);
 
@@ -343,14 +342,10 @@ export default function PassengerTracking() {
                 dropoffPath: [[meetDropoff[0], meetDropoff[1]], [passengerToPos.lat, passengerToPos.lon]]
              };
 
-             // Fetch road-following connector paths using foot profile + convergence detection
              try {
                  const controller = new AbortController();
                  const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-                 // PICKUP: Use FOOT profile
                  const pFetch = fetch(`https://router.project-osrm.org/route/v1/foot/${passengerFromPos.lon},${passengerFromPos.lat};${meetPickup[1]},${meetPickup[0]}?geometries=geojson&overview=full`, { signal: controller.signal });
-                 // DROPOFF: Route from destination outward
                  const bestDropNet = await findBestNetworkNode(passengerToPos, pickupIdx + 1);
                  if (bestDropNet) {
                      meetDropoff = bestDropNet.pt;
@@ -363,7 +358,6 @@ export default function PassengerTracking() {
                  const pData = await pRes.json();
                  const dData = await dRes.json();
 
-                 // PICKUP: find where the passenger's route FIRST joins the driver's route
                  if (pData.routes?.length > 0) {
                      let pPath = pData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
                      let convergenceIdx = pPath.length - 1;
@@ -393,7 +387,6 @@ export default function PassengerTracking() {
                      }
                  }
 
-                 // DROPOFF: find where the destination walking route FIRST joins the driver's route
                  if (dData.routes?.length > 0) {
                      let dPath = dData.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
                      let dropConvergenceIdx = dPath.length - 1;
@@ -441,6 +434,20 @@ export default function PassengerTracking() {
       driverRoute.length
    ]);
 
+  const driverRouteGeoJSON = useMemo(() => toGeoJSON(driverRoute), [driverRoute]);
+  const sharedPathGeoJSON = useMemo(() => toGeoJSON(sharedPath), [sharedPath]);
+  const interceptPickupGeoJSON = useMemo(() => toGeoJSON(intercepts?.pickupPath), [intercepts?.pickupPath]);
+  const interceptDropoffGeoJSON = useMemo(() => toGeoJSON(intercepts?.dropoffPath), [intercepts?.dropoffPath]);
+
+  const driverRoutePaint = useMemo(() => ({ 'line-color': '#555', 'line-width': 5, 'line-opacity': 0.5 }), []);
+  const activeColor = useMemo(() => {
+    const isRideCompleted = driverRide?.status === 'completed' || passengerState?.status === 'completed';
+    const isRideCancelled = !isRideCompleted && (driverRide?.status === 'cancelled' || passengerState?.status === 'cancelled');
+    return isRideCancelled ? '#888' : (isRideCompleted ? '#9cc93a' : '#00b0f0');
+  }, [driverRide?.status, passengerState?.status]);
+  
+  const sharedPathPaint = useMemo(() => ({ 'line-color': activeColor, 'line-width': 6, 'line-opacity': 1 }), [activeColor]);
+  const interceptPaint = useMemo(() => ({ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }), [activeColor]);
 
   if (isInitializing || !driverRide || !passengerState) {
      return (
@@ -459,11 +466,14 @@ export default function PassengerTracking() {
   let driverLiveLon = isFinalState ? driverRide.from.lon : (driverRide.currentLon || driverRide.from.lon);
   let driverLiveBearing = isFinalState ? 0 : (driverRide.currentHeading || 0);
 
-  // Apply visual snapping to the driver route for the passenger app
+  const getBearing = (lat1, lon1, lat2, lon2) => {
+    const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  };
+
   if (!isFinalState && driverRoute.length > 0 && driverRide.currentLat && driverRide.currentLon) {
       const snapResult = getClosestPointOnPath(driverRide.currentLat, driverRide.currentLon, driverRoute);
-      
-      // Snap threshold: 0.075 km (75 meters)
       if (snapResult.dist <= 0.075 && snapResult.pt) {
           driverLiveLat = snapResult.pt.lat;
           driverLiveLon = snapResult.pt.lon;
@@ -472,8 +482,6 @@ export default function PassengerTracking() {
           }
       }
   }
-
-  const activeColor = isRideCancelled ? '#888' : (isRideCompleted ? '#9cc93a' : '#00b0f0');
 
   let statusText = isRideCancelled ? "Ride Cancelled" : (isRideCompleted ? "Ride Completed" : "Driver is on their way");
   let statusSubtext = isRideCancelled ? "The driver has aborted the carpool." : (isRideCompleted ? "You've successfully reached your destination." : "Navigating to your pickup location");
@@ -485,16 +493,13 @@ export default function PassengerTracking() {
 
   const targetPhotoURL = driverProfile?.photoURL || driverRide?.userProfilePic || '';
   const targetName = driverProfile?.displayName || driverRide?.userName || 'Your Driver';
-  
   const ratingVal = driverProfile?.rating || driverRide?.rating;
   const targetRating = ratingVal ? parseFloat(ratingVal).toFixed(1) : '0.0';
   const targetReviews = driverProfile?.reviewsCount || driverRide?.reviewsCount || 0;
-  
-    const targetSeats = driverRide?.seats || 1;
-    const targetPrice = `${parseFloat(driverRide?.price || passengerState?.price || 0).toFixed(2)} ₱`;
-
-    const passPhoto = passengerState?.profilePic || passengerState?.userProfilePic || '';
-    const passName = passengerState?.name || passengerState?.userName || 'Passenger';
+  const targetSeats = driverRide?.seats || 1;
+  const targetPrice = `${parseFloat(driverRide?.price || passengerState?.price || 0).toFixed(2)} ₱`;
+  const passPhoto = passengerState?.profilePic || passengerState?.userProfilePic || '';
+  const passName = passengerState?.name || passengerState?.userName || 'Passenger';
 
   return (
     <div style={{ height: '100dvh', width: '100vw', position: 'relative', overflow: 'hidden', background: '#eaeaea' }}>
@@ -538,14 +543,14 @@ export default function PassengerTracking() {
         pitchWithRotate={true}
       >
         {driverRoute.length > 0 && (
-          <Source id="driver-route" type="geojson" data={toGeoJSON(driverRoute)}>
-            <Layer id="driver-route-line" type="line" paint={{ 'line-color': '#555', 'line-width': 5, 'line-opacity': 0.5 }} />
+          <Source id="driver-route" type="geojson" data={driverRouteGeoJSON}>
+            <Layer id="driver-route-line" type="line" paint={driverRoutePaint} />
           </Source>
         )}
 
         {sharedPath.length > 0 && (
-          <Source id="shared-path" type="geojson" data={toGeoJSON(sharedPath)}>
-            <Layer id="shared-path-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 6, 'line-opacity': 1 }} />
+          <Source id="shared-path" type="geojson" data={sharedPathGeoJSON}>
+            <Layer id="shared-path-line" type="line" paint={sharedPathPaint} />
           </Source>
         )}
 
@@ -568,8 +573,8 @@ export default function PassengerTracking() {
 
         {intercepts && (
            <>
-             <Source id="intercept-pickup" type="geojson" data={toGeoJSON(intercepts.pickupPath)}>
-               <Layer id="intercept-pickup-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }} />
+             <Source id="intercept-pickup" type="geojson" data={interceptPickupGeoJSON}>
+               <Layer id="intercept-pickup-line" type="line" paint={interceptPaint} />
              </Source>
              <Marker longitude={intercepts.meetPickup.lon} latitude={intercepts.meetPickup.lat} anchor="center">
                <div style={{ position: 'relative' }}>
@@ -591,8 +596,8 @@ export default function PassengerTracking() {
                </div>
              </Marker>
 
-             <Source id="intercept-dropoff" type="geojson" data={toGeoJSON(intercepts.dropoffPath)}>
-               <Layer id="intercept-dropoff-line" type="line" paint={{ 'line-color': activeColor, 'line-width': 4, 'line-dasharray': [2, 2] }} />
+             <Source id="intercept-dropoff" type="geojson" data={interceptDropoffGeoJSON}>
+               <Layer id="intercept-dropoff-line" type="line" paint={interceptPaint} />
              </Source>
              <Marker longitude={intercepts.meetDropoff.lon} latitude={intercepts.meetDropoff.lat} anchor="center">
                <div style={{ position: 'relative' }}>
