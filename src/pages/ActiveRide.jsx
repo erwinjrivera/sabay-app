@@ -921,9 +921,6 @@ export default function ActiveRide() {
             <Marker longitude={activePassenger.pickup.lon} latitude={activePassenger.pickup.lat} anchor="center">
               <PassengerStartDotIcon color={activeColor} />
             </Marker>
-            <Marker longitude={activePassenger.dropoff.lon} latitude={activePassenger.dropoff.lat} anchor="bottom">
-              <PassengerEndPinIcon color={activeColor} />
-            </Marker>
             
             {/* Dotted theoretical intercept lines */}
             {driverRoute.length > 0 && activePassenger?.meetPickup && (
