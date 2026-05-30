@@ -119,8 +119,11 @@ const PassengerStartDotIcon = ({ color = '#8ab528' }) => (
   <div style={{ width: 16, height: 16, background: color, borderRadius: '50%', border: '4px solid #fff', boxShadow: '0 0 8px rgba(138,181,40,0.6)' }}></div>
 );
 
-const PassengerEndPinIcon = ({ color = '#8ab528' }) => (
-  <svg width="34" height="34" viewBox="0 0 24 24" fill={color} stroke="#fff" strokeWidth="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>
+const PassengerEndPinIcon = () => (
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="#ea4335" stroke="#ea4335" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0px 4px 4px rgba(0,0,0,0.3))' }}>
+    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
+    <circle cx="12" cy="10" r="3" fill="white" stroke="white"></circle>
+  </svg>
 );
 
 const MeetSpotIcon = ({ color = '#00b0f0' }) => (
@@ -962,11 +965,23 @@ export default function ActiveRide() {
             )}
 
             {activePassenger?.meetDropoff && (
-               <Marker longitude={activePassenger.meetDropoff.lon} latitude={activePassenger.meetDropoff.lat} anchor="center">
+               <Marker longitude={activePassenger.meetDropoff.lon} latitude={activePassenger.meetDropoff.lat} anchor="bottom">
                  <div style={{ position: 'relative' }}>
-                   <MeetSpotIcon color={activeColor} />
-                   <div style={{ position: 'absolute', right: '100%', top: '50%', transform: 'translateY(-50%)', marginRight: '10px', background: '#fff', padding: '6px 10px', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', whiteSpace: 'nowrap' }}>
+                   <PassengerEndPinIcon />
+                   <div style={{ position: 'absolute', right: '100%', top: '50%', transform: 'translateY(-50%)', marginRight: '10px', background: '#fff', padding: '6px 10px', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
                      <span style={{ fontWeight: 600, color: '#333' }}>Drop-off point</span>
+                     <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>
+                       {activePassenger.profilePic ? (
+                          <img 
+                            src={activePassenger.profilePic} 
+                            alt="avatar" 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                          />
+                       ) : (
+                          getInitials(activePassenger.name, 'P')
+                       )}
+                     </div>
                      <div style={{ position: 'absolute', right: '-5px', top: '50%', transform: 'translateY(-50%)', width: 0, height: 0, borderTop: '5px solid transparent', borderBottom: '5px solid transparent', borderLeft: '5px solid #fff' }}></div>
                    </div>
                  </div>
