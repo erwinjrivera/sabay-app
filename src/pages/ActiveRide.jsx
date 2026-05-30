@@ -11,6 +11,18 @@ import SwipeButton from '../components/SwipeButton';
 import { useAuth } from '../contexts/AuthContext';
 import useWakeLock from '../hooks/useWakeLock';
 
+const FALLBACK_MAP_STYLE = {
+  version: 8,
+  sources: {
+    osm: {
+      type: 'raster',
+      tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'],
+      tileSize: 256,
+      attribution: '&copy; OpenStreetMap contributors'
+    }
+  },
+  layers: [{ id: 'osm', type: 'raster', source: 'osm', minzoom: 0, maxzoom: 22 }]
+};
 function getDistanceKM(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -868,18 +880,7 @@ export default function ActiveRide() {
         mapStyle={
           import.meta.env.VITE_MAPTILER_API_KEY 
             ? `https://api.maptiler.com/maps/basic-v2/style.json?key=${import.meta.env.VITE_MAPTILER_API_KEY}`
-            : {
-                version: 8,
-                sources: {
-                  osm: {
-                    type: 'raster',
-                    tiles: ['https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png'],
-                    tileSize: 256,
-                    attribution: '&copy; OpenStreetMap contributors'
-                  }
-                },
-                layers: [{ id: 'osm', type: 'raster', source: 'osm', minzoom: 0, maxzoom: 22 }]
-              }
+            : FALLBACK_MAP_STYLE
         }
         style={{ width: '100%', height: '100%' }}
       >
