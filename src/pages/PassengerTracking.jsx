@@ -170,6 +170,11 @@ export default function PassengerTracking() {
   const [sharedPath, setSharedPath] = useState([]);
   const [intercepts, setIntercepts] = useState(null);
   
+  const [recalculatedRoute, setRecalculatedRoute] = useState(null);
+  const isRecalculatingRef = useRef(false);
+  const [snappedLocation, setSnappedLocation] = useState(null);
+
+  
   const [isInitializing, setIsInitializing] = useState(true);
   const [panToCar, setPanToCar] = useState(false);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
@@ -434,12 +439,82 @@ export default function PassengerTracking() {
       driverRoute.length
    ]);
 
+  // Dynamic Route Deviation Recalculation (Passenger Tracking side)
+  useEffect(() => {
+    if (!driverRide || !driverRide.currentLat || !driverRide.currentLon || driverRoute.length === 0 || !driverRide.to) return;
+    
+    // Find closest point on ORIGINAL route to bridge the gap visually
+    let minDistToOriginal = Infinity;
+    for (let i = 0; i < driverRoute.length; i++) {
+        const d = getDistanceKM(driverRide.currentLat, driverRide.currentLon, driverRoute[i][0], driverRoute[i][1]);
+        if (d < minDistToOriginal) {
+            minDistToOriginal = d;
+        }
+    }
+
+    // Auto-cleanup if driver merges back to the original route
+    if (recalculatedRoute && minDistToOriginal < 0.040) {
+        setRecalculatedRoute(null);
+        return;
+    }
+
+    // Find closest point on active route
+    const activeRoute = recalculatedRoute || driverRoute;
+    const snapResult = getClosestPointOnPath(driverRide.currentLat, driverRide.currentLon, activeRoute);
+    
+    if (snapResult.dist <= 0.075 && snapResult.pt) {
+        let snappedHeading = driverRide.currentHeading || 0;
+        if (snapResult.idx !== -1 && snapResult.idx < activeRoute.length - 1) {
+            const getBearingTemp = (lat1, lon1, lat2, lon2) => {
+                const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+                const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+                return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+            };
+            snappedHeading = getBearingTemp(activeRoute[snapResult.idx][0], activeRoute[snapResult.idx][1], activeRoute[snapResult.idx + 1][0], activeRoute[snapResult.idx + 1][1]);
+        }
+        setSnappedLocation({ lat: snapResult.pt.lat, lon: snapResult.pt.lon, heading: snappedHeading });
+    } else {
+        setSnappedLocation(null);
+    }
+    
+    if (snapResult.dist > 0.075 && !isRecalculatingRef.current) {
+        isRecalculatingRef.current = true;
+        const fetchNewRoute = async () => {
+            try {
+                const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${driverRide.currentLon},${driverRide.currentLat};${driverRide.to.lon},${driverRide.to.lat}?geometries=geojson&overview=full`);
+                if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
+                const data = await res.json();
+                if (data.routes && data.routes.length > 0) {
+                    const coords = data.routes[0].geometry.coordinates.map(c => [c[1], c[0]]);
+                    setRecalculatedRoute(coords);
+                }
+            } catch (err) {
+                console.error("OSRM Recalculation Error", err);
+            } finally {
+                setTimeout(() => {
+                    isRecalculatingRef.current = false;
+                }, 5000); 
+            }
+        };
+        fetchNewRoute();
+    }
+  }, [driverRide?.currentLat, driverRide?.currentLon, driverRoute, recalculatedRoute, driverRide?.to?.lat, driverRide?.to?.lon]);
+
   const driverRouteGeoJSON = useMemo(() => toGeoJSON(driverRoute), [driverRoute]);
+  const recalcRouteGeoJSON = useMemo(() => recalculatedRoute ? toGeoJSON(recalculatedRoute) : null, [recalculatedRoute]);
   const sharedPathGeoJSON = useMemo(() => toGeoJSON(sharedPath), [sharedPath]);
   const interceptPickupGeoJSON = useMemo(() => toGeoJSON(intercepts?.pickupPath), [intercepts?.pickupPath]);
   const interceptDropoffGeoJSON = useMemo(() => toGeoJSON(intercepts?.dropoffPath), [intercepts?.dropoffPath]);
 
-  const driverRoutePaint = useMemo(() => ({ 'line-color': '#555', 'line-width': 5, 'line-opacity': 0.5 }), []);
+  const driverRoutePaint = useMemo(() => ({
+    'line-color': recalculatedRoute ? '#94a3b8' : '#555',
+    'line-width': recalculatedRoute ? 4 : 5,
+    'line-opacity': recalculatedRoute ? 0.4 : 0.5,
+    'line-dasharray': recalculatedRoute ? [1, 2] : [1]
+  }), [recalculatedRoute]);
+  
+  const recalcRoutePaint = useMemo(() => ({ 'line-color': '#00b0f0', 'line-width': 5, 'line-opacity': 0.8 }), []);
+
   const activeColor = useMemo(() => {
     const isRideCompleted = driverRide?.status === 'completed' || passengerState?.status === 'completed';
     const isRideCancelled = !isRideCompleted && (driverRide?.status === 'cancelled' || passengerState?.status === 'cancelled');
@@ -462,26 +537,9 @@ export default function PassengerTracking() {
   const isRideCancelled = !isRideCompleted && (driverRide?.status === 'cancelled' || passengerState?.status === 'cancelled');
   const isFinalState = isRideCompleted || isRideCancelled;
 
-  let driverLiveLat = isFinalState ? driverRide.from.lat : (driverRide.currentLat || driverRide.from.lat);
-  let driverLiveLon = isFinalState ? driverRide.from.lon : (driverRide.currentLon || driverRide.from.lon);
-  let driverLiveBearing = isFinalState ? 0 : (driverRide.currentHeading || 0);
-
-  const getBearing = (lat1, lon1, lat2, lon2) => {
-    const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
-    const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
-    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
-  };
-
-  if (!isFinalState && driverRoute.length > 0 && driverRide.currentLat && driverRide.currentLon) {
-      const snapResult = getClosestPointOnPath(driverRide.currentLat, driverRide.currentLon, driverRoute);
-      if (snapResult.dist <= 0.075 && snapResult.pt) {
-          driverLiveLat = snapResult.pt.lat;
-          driverLiveLon = snapResult.pt.lon;
-          if (snapResult.idx !== -1 && snapResult.idx < driverRoute.length - 1) {
-              driverLiveBearing = getBearing(driverRoute[snapResult.idx][0], driverRoute[snapResult.idx][1], driverRoute[snapResult.idx + 1][0], driverRoute[snapResult.idx + 1][1]);
-          }
-      }
-  }
+  let driverLiveLat = isFinalState ? driverRide.from.lat : (snappedLocation?.lat || driverRide.currentLat || driverRide.from.lat);
+  let driverLiveLon = isFinalState ? driverRide.from.lon : (snappedLocation?.lon || driverRide.currentLon || driverRide.from.lon);
+  let driverLiveBearing = isFinalState ? 0 : (snappedLocation?.heading !== undefined ? snappedLocation.heading : (driverRide.currentHeading || 0));
 
   let statusText = isRideCancelled ? "Ride Cancelled" : (isRideCompleted ? "Ride Completed" : "Driver is on their way");
   let statusSubtext = isRideCancelled ? "The driver has aborted the carpool." : (isRideCompleted ? "You've successfully reached your destination." : "Navigating to your pickup location");
@@ -545,6 +603,12 @@ export default function PassengerTracking() {
         {driverRoute.length > 0 && (
           <Source id="driver-route" type="geojson" data={driverRouteGeoJSON}>
             <Layer id="driver-route-line" type="line" paint={driverRoutePaint} />
+          </Source>
+        )}
+
+        {recalculatedRoute && (
+          <Source id="recalc-route" type="geojson" data={recalcRouteGeoJSON}>
+            <Layer id="recalc-route-line" type="line" paint={recalcRoutePaint} />
           </Source>
         )}
 
