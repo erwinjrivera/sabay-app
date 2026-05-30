@@ -100,8 +100,11 @@ const PassengerStartDotIcon = ({ color = '#00b0f0' }) => (
   <div style={{ width: 16, height: 16, background: color, borderRadius: '50%', border: '4px solid #fff', boxShadow: `0 0 8px ${color === '#9cc93a' ? 'rgba(156,201,58,0.6)' : 'rgba(0,176,240,0.6)'}` }}></div>
 );
 
-const PassengerEndPinIcon = ({ color = '#00b0f0' }) => (
-  <svg width="34" height="34" viewBox="0 0 24 24" fill={color} stroke="#fff" strokeWidth="1.5" style={{ transform: 'translate(0, -17px)' }}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>
+const PassengerEndPinIcon = () => (
+  <svg width="40" height="40" viewBox="0 0 24 24" fill="#ea4335" stroke="#ea4335" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ filter: 'drop-shadow(0px 4px 4px rgba(0,0,0,0.3))', transform: 'translate(0, -20px)' }}>
+    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path>
+    <circle cx="12" cy="10" r="3" fill="white" stroke="white"></circle>
+  </svg>
 );
 
 const MeetSpotIcon = ({ color = '#00b0f0' }) => (
@@ -644,7 +647,7 @@ export default function PassengerTracking() {
               <PassengerStartDotIcon color={activeColor} />
             </Marker>
             <Marker longitude={passengerRequest.to.lon} latitude={passengerRequest.to.lat} anchor="bottom">
-              <PassengerEndPinIcon color={activeColor} />
+              <PassengerEndPinIcon />
             </Marker>
           </>
         )}

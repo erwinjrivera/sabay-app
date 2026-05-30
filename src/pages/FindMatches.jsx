@@ -56,12 +56,15 @@ const passengerStartIcon = new L.DivIcon({
   iconAnchor: [12, 12]
 });
 
-const getDriverEndIcon = (type) => new L.DivIcon({
-  className: 'custom-end-pin',
-  html: `<svg width="34" height="34" viewBox="0 0 24 24" fill="${type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#9cc93a' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : '#888'}" stroke="#fff" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3.5" fill="#fff"></circle></svg>`,
-  iconSize: [34, 34],
-  iconAnchor: [17, 34],
-});
+const getDriverEndIcon = (type) => {
+  const color = type === 'completed' ? '#9cc93a' : type === 'confirmed' ? '#9cc93a' : type === 'match' ? '#00b0f0' : type === 'offered' ? '#ff0043' : type === 'request' ? '#eab308' : type === 'cancelled' ? '#888' : '#ea4335';
+  return new L.DivIcon({
+    className: 'custom-end-pin',
+    html: `<svg width="40" height="40" viewBox="0 0 24 24" fill="${color}" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0px 4px 4px rgba(0,0,0,0.3));"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"></path><circle cx="12" cy="10" r="3" fill="white" stroke="white"></circle></svg>`,
+    iconSize: [40, 40],
+    iconAnchor: [20, 40],
+  });
+};
 
 const pickupSpotIcon = new L.DivIcon({
   className: 'custom-pickup-dot',
