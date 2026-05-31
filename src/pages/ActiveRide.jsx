@@ -1489,7 +1489,7 @@ export default function ActiveRide() {
                        </p>
                        {!isGlobalCancelled && passengerAvatars}
                        <button onClick={handleFinishCarpool} style={{ width: '100%', padding: '16px', background: isGlobalCancelled ? '#333' : '#00b0f0', border: 'none', borderRadius: '8px', color: isGlobalCancelled ? '#ccc' : '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', boxShadow: 'none' }}>
-                         Exit Carpool
+                         Finish Carpool
                        </button>
                     </div>
                  );
