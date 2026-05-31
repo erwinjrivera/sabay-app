@@ -43,7 +43,7 @@ export default function MyRides() {
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(location.state?.initialTab || 'Pending');
-  const [historyFilter, setHistoryFilter] = useState('This Week');
+  const [historyFilter, setHistoryFilter] = useState('Last 7 Days');
   const [pendingFilter, setPendingFilter] = useState('Next 7 Days');
   const [customDateRange, setCustomDateRange] = useState({ from: '', to: '' });
 
