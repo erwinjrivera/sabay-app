@@ -210,10 +210,12 @@ export default function ActiveRide() {
   const [isGlobalCancelled, setIsGlobalCancelled] = useState(false);
   const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
   const [showFinishCarpoolPrompt, setShowFinishCarpoolPrompt] = useState(false);
+  const [showDestinationReachedModal, setShowDestinationReachedModal] = useState(false);
   const [isAutoFollowing, setIsAutoFollowing] = useState(true);
   const [mapBearing, setMapBearing] = useState(0);
   const [mapRef, setMapRef] = useState(null);
   const finishCarpoolPromptFiredRef = useRef(false);
+  const autoCompletedRef = useRef(false);
   const geometryCache = useRef({});
 
   useEffect(() => {
@@ -380,6 +382,44 @@ export default function ActiveRide() {
   
   const rideTimeStr = ride?.time ? dayjs(ride.time).format('h:mma') : 'Time';
   const rideDateStr = ride?.date ? dayjs(ride.date).format('MMM. D') : 'Date';
+
+  // Distance-based auto-completion (20 meters = 0.02 km)
+  useEffect(() => {
+     if (currentLocation && driverToLat && driverToLon && !autoCompletedRef.current && !isGlobalCancelled) {
+         const distToDest = getDistanceKM(currentLocation.lat, currentLocation.lon, driverToLat, driverToLon);
+         if (distToDest <= 0.02) {
+             autoCompletedRef.current = true;
+             
+             const processAutoCompletion = async () => {
+                 try {
+                   const updates = matches.map(async (m) => {
+                      if ((passengerStates[m.id] || 0) < 2) {
+                          await updateDoc(doc(db, 'rideRequests', m.id), { status: 'completed', expiresAt: deleteField() });
+                          if (m.userId) {
+                              await setDoc(doc(db, 'users', m.userId), { completedRides: increment(1) }, { merge: true });
+                          }
+                      }
+                   });
+                   await Promise.all(updates);
+
+                   if (ride?.id) {
+                       await updateDoc(doc(db, 'rideOffers', ride.id), { status: 'completed', expiresAt: deleteField() });
+                   }
+
+                   setPassengerStates(prev => {
+                       let updated = { ...prev };
+                       matches.forEach(m => { updated[m.id] = 2; });
+                       return updated;
+                   });
+                   
+                   setShowDestinationReachedModal(true);
+                 } catch (err) { console.error("Auto Completion Error:", err); }
+             };
+             
+             processAutoCompletion();
+         }
+     }
+  }, [currentLocation, driverToLat, driverToLon, matches, passengerStates, isGlobalCancelled, ride?.id]);
 
   useEffect(() => {
     const fetchDriverRoute = async () => {
@@ -1450,7 +1490,7 @@ export default function ActiveRide() {
                        </p>
                        {!isGlobalCancelled && passengerAvatars}
                        <button onClick={handleFinishCarpool} style={{ width: '100%', padding: '16px', background: isGlobalCancelled ? '#333' : '#00b0f0', border: 'none', borderRadius: '8px', color: isGlobalCancelled ? '#ccc' : '#fff', fontWeight: 700, fontSize: '1rem', cursor: 'pointer', boxShadow: 'none' }}>
-                         Finish Carpool
+                         Exit Carpool
                        </button>
                     </div>
                  );
@@ -1551,8 +1591,27 @@ export default function ActiveRide() {
         </div>
       )}
 
-      {/* RATING DRAWER MODAL */}
-      <div 
+      {/* CUSTOM DESTINATION REACHED MODAL */}
+      {showDestinationReachedModal && (
+        <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', zIndex: 10002, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 24px', boxSizing: 'border-box' }}>
+          <div style={{ background: '#1e293b', width: '100%', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.4)', textAlign: 'center', animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)' }}>
+            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(0, 176, 240, 0.15)', color: '#00b0f0', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <MapPin size={24} strokeWidth={3} />
+            </div>
+            <h3 style={{ margin: '0 0 8px', fontSize: '1.25rem', fontWeight: 800, color: '#fff' }}>Destination Reached</h3>
+            <p style={{ margin: '0 0 24px', color: '#cbd5e1', fontSize: '0.95rem', lineHeight: 1.4 }}>You have arrived at your destination. Your carpool has been automatically completed.</p>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button 
+                onClick={() => setShowDestinationReachedModal(false)} 
+                style={{ flex: 1, padding: '14px', background: '#00b0f0', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer' }}>
+                Okay
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* RATING DRAWER/MODAL FOR DRIVER TO RATE PASSENGER */}  <div 
         onClick={() => setShowRatingModal(false)}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.6)', zIndex: 10000, opacity: showRatingModal ? 1 : 0, transition: 'opacity 0.3s', pointerEvents: showRatingModal ? 'auto' : 'none' }}
       ></div>

@@ -43,6 +43,8 @@ export default function MyRides() {
   const [rides, setRides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(location.state?.initialTab || 'Pending');
+  const [historyFilter, setHistoryFilter] = useState('This Week');
+  const [customDateRange, setCustomDateRange] = useState({ from: '', to: '' });
 
   useEffect(() => {
     if (location.state?.initialTab) {
@@ -380,30 +382,162 @@ export default function MyRides() {
     };
 
     setLoading(true);
-    let myOffersUnsub = () => {};
-    let myReqsUnsub = () => {};
+    let myActiveOffersUnsub = () => {};
+    let myActiveReqsUnsub = () => {};
+    let myHistoryOffersUnsub = () => {};
+    let myHistoryReqsUnsub = () => {};
+
+    // Get date range based on filter
+    const getFilterDateRange = () => {
+        const today = dayjs();
+        let from = null;
+        let to = null;
+        switch(historyFilter) {
+            case 'This Week': {
+                const dayOfWeek = today.day();
+                from = dayOfWeek === 0 ? today.subtract(6, 'day').startOf('day') : today.startOf('week').add(1, 'day').startOf('day');
+                to = dayOfWeek === 0 ? today.endOf('day') : today.endOf('week').add(1, 'day').endOf('day');
+                break;
+            }
+            case 'Today':
+                from = today.startOf('day');
+                to = today.endOf('day');
+                break;
+            case 'Yesterday':
+                from = today.subtract(1, 'day').startOf('day');
+                to = today.subtract(1, 'day').endOf('day');
+                break;
+            case 'Last 7 Days':
+                from = today.subtract(7, 'day').startOf('day');
+                to = today.endOf('day');
+                break;
+            case 'This Month':
+                from = today.startOf('month');
+                to = today.endOf('day');
+                break;
+            case 'Last Week': {
+                const lw = today.subtract(1, 'week');
+                const lwDOW = lw.day();
+                from = lwDOW === 0 ? lw.subtract(6, 'day').startOf('day') : lw.startOf('week').add(1, 'day').startOf('day');
+                to = lwDOW === 0 ? lw.endOf('day') : lw.endOf('week').add(1, 'day').endOf('day');
+                break;
+            }
+            case 'Last Month':
+                from = today.subtract(1, 'month').startOf('month');
+                to = today.subtract(1, 'month').endOf('month');
+                break;
+            case 'Last 90 Days':
+                from = today.subtract(90, 'day').startOf('day');
+                to = today.endOf('day');
+                break;
+            case 'Custom':
+                if (customDateRange.from && customDateRange.to) {
+                    from = dayjs(customDateRange.from).startOf('day');
+                    to = dayjs(customDateRange.to).endOf('day');
+                } else {
+                    from = today.startOf('day');
+                    to = today.endOf('day');
+                }
+                break;
+            default: {
+                const dayOfWeek = today.day();
+                from = dayOfWeek === 0 ? today.subtract(6, 'day').startOf('day') : today.startOf('week').add(1, 'day').startOf('day');
+                to = dayOfWeek === 0 ? today.endOf('day') : today.endOf('week').add(1, 'day').endOf('day');
+            }
+        }
+        return { 
+            startDate: from ? from.format('YYYY-MM-DD') : null, 
+            endDate: to ? to.format('YYYY-MM-DD') : null 
+        };
+    };
+
+    const { startDate, endDate } = getFilterDateRange();
 
     fetchOpenRidesOnce().then(() => {
-        myOffersUnsub = onSnapshot(query(collection(db, 'rideOffers'), where('userId', '==', currentUser.uid)), snap => {
-            myOffers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            myOffersReady = true;
-            if (myReqsReady) setupLinkedListeners();
+        const offersActiveQuery = query(collection(db, 'rideOffers'), 
+            where('userId', '==', currentUser.uid),
+            where('status', 'in', ['open', 'in_progress', 'confirmed', 'offered'])
+        );
+        const offersHistoryQuery = query(collection(db, 'rideOffers'), 
+            where('userId', '==', currentUser.uid),
+            where('date', '>=', startDate),
+            where('date', '<=', endDate)
+        );
+
+        const reqsActiveQuery = query(collection(db, 'rideRequests'), 
+            where('userId', '==', currentUser.uid),
+            where('status', 'in', ['open', 'in_progress', 'confirmed', 'offered', 'requested', 'declined'])
+        );
+        const reqsHistoryQuery = query(collection(db, 'rideRequests'), 
+            where('userId', '==', currentUser.uid),
+            where('date', '>=', startDate),
+            where('date', '<=', endDate)
+        );
+
+        let activeOffers = [];
+        let historyOffers = [];
+        let activeReqs = [];
+        let historyReqs = [];
+        
+        let activeOffersReady = false;
+        let historyOffersReady = false;
+        let activeReqsReady = false;
+        let historyReqsReady = false;
+
+        const syncOffers = () => {
+            if (activeOffersReady && historyOffersReady) {
+                const merged = new Map();
+                [...activeOffers, ...historyOffers].forEach(o => merged.set(o.id, o));
+                myOffers = Array.from(merged.values());
+                myOffersReady = true;
+                if (myReqsReady) setupLinkedListeners();
+            }
+        };
+
+        const syncReqs = () => {
+            if (activeReqsReady && historyReqsReady) {
+                const merged = new Map();
+                [...activeReqs, ...historyReqs].forEach(r => merged.set(r.id, r));
+                myReqs = Array.from(merged.values());
+                myReqsReady = true;
+                if (myOffersReady) setupLinkedListeners();
+            }
+        };
+
+        myActiveOffersUnsub = onSnapshot(offersActiveQuery, snap => {
+            activeOffers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            activeOffersReady = true;
+            syncOffers();
         }, (err) => console.error(err));
 
-        myReqsUnsub = onSnapshot(query(collection(db, 'rideRequests'), where('userId', '==', currentUser.uid)), snap => {
-            myReqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            myReqsReady = true;
-            if (myOffersReady) setupLinkedListeners();
+        myHistoryOffersUnsub = onSnapshot(offersHistoryQuery, snap => {
+            historyOffers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            historyOffersReady = true;
+            syncOffers();
+        }, (err) => console.error(err));
+
+        myActiveReqsUnsub = onSnapshot(reqsActiveQuery, snap => {
+            activeReqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            activeReqsReady = true;
+            syncReqs();
+        }, (err) => console.error(err));
+
+        myHistoryReqsUnsub = onSnapshot(reqsHistoryQuery, snap => {
+            historyReqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            historyReqsReady = true;
+            syncReqs();
         }, (err) => console.error(err));
     });
 
     return () => {
-        myOffersUnsub();
-        myReqsUnsub();
+        myActiveOffersUnsub();
+        myHistoryOffersUnsub();
+        myActiveReqsUnsub();
+        myHistoryReqsUnsub();
         linkedOffersUnsub();
         linkedReqsUnsub();
     };
-  }, [currentUser, navigate, cleanupStaleRides]);
+  }, [currentUser, navigate, cleanupStaleRides, historyFilter, customDateRange.from, customDateRange.to]);
 
   // Format timestamp helper
   const getRideTimeOnly = (ride) => {
@@ -555,8 +689,77 @@ export default function MyRides() {
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' }}>
 
         {/* RIDES LIST */}
-        <div style={{ padding: '1rem 1.5rem' }}>
-      {loading ? (
+        <div style={{ padding: '0 24px', flex: 1, overflowY: 'auto' }}>
+        {activeTab === 'History' && (
+            <div style={{ background: '#fff', borderRadius: '16px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: historyFilter === 'Custom' ? '12px' : '0' }}>
+                 <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#334155' }}>History Filter</label>
+                 <select 
+                   value={historyFilter} 
+                   onChange={(e) => setHistoryFilter(e.target.value)}
+                   style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '0.9rem', fontWeight: 500, color: '#0f172a', outline: 'none', cursor: 'pointer' }}
+                 >
+                   <option value="This Week">This Week (Default)</option>
+                   <option value="Today">Today</option>
+                   <option value="Yesterday">Yesterday</option>
+                   <option value="Last 7 Days">Last 7 Days</option>
+                   <option value="This Month">This Month</option>
+                   <option value="Last Week">Last Week</option>
+                   <option value="Last Month">Last Month</option>
+                   <option value="Last 90 Days">Last 90 Days</option>
+                   <option value="Custom">Custom</option>
+                 </select>
+              </div>
+              {historyFilter === 'Custom' && (
+                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                       <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>From</label>
+                       <input 
+                         type="date" 
+                         value={customDateRange.from} 
+                         onChange={(e) => {
+                             const newFrom = e.target.value;
+                             const newTo = customDateRange.to;
+                             if (newTo && dayjs(newTo).diff(dayjs(newFrom), 'day') > 90) {
+                                 alert('Maximum selectable range is 90 days.');
+                                 return;
+                             }
+                             if (newTo && dayjs(newFrom).isAfter(dayjs(newTo))) {
+                                 setCustomDateRange({ from: newFrom, to: newFrom });
+                                 return;
+                             }
+                             setCustomDateRange(prev => ({ ...prev, from: newFrom }));
+                         }}
+                         style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none' }} 
+                       />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                       <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>To</label>
+                       <input 
+                         type="date" 
+                         value={customDateRange.to} 
+                         onChange={(e) => {
+                             const newTo = e.target.value;
+                             const newFrom = customDateRange.from;
+                             if (newFrom && dayjs(newTo).diff(dayjs(newFrom), 'day') > 90) {
+                                 alert('Maximum selectable range is 90 days.');
+                                 return;
+                             }
+                             if (newFrom && dayjs(newTo).isBefore(dayjs(newFrom))) {
+                                 alert('To Date cannot be before From Date.');
+                                 return;
+                             }
+                             setCustomDateRange(prev => ({ ...prev, to: newTo }));
+                         }}
+                         style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none' }} 
+                       />
+                    </div>
+                 </div>
+              )}
+            </div>
+        )}
+
+        {loading ? (
         <div style={{ height: '60vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '15px' }}>
           <Loader2 size={40} color="#999" style={{ animation: 'spin 1.2s linear infinite' }} />
           <h3 style={{ color: '#888', margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Loading your rides...</h3>
