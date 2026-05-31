@@ -691,13 +691,13 @@ export default function MyRides() {
         {/* RIDES LIST */}
         <div style={{ padding: '0 24px', flex: 1, overflowY: 'visible' }}>
         {activeTab === 'History' && (
-            <div style={{ background: '#fff', borderRadius: '16px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+            <div style={{ background: '#1e293b', borderRadius: '16px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: historyFilter === 'Custom' ? '12px' : '0' }}>
-                 <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#334155' }}>History Filter</label>
+                 <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#f8fafc' }}>History Filter</label>
                  <select 
                    value={historyFilter} 
                    onChange={(e) => setHistoryFilter(e.target.value)}
-                   style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '0.9rem', fontWeight: 500, color: '#0f172a', outline: 'none', cursor: 'pointer' }}
+                   style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', background: '#334155', fontSize: '0.9rem', fontWeight: 500, color: '#fff', outline: 'none', cursor: 'pointer' }}
                  >
                    <option value="This Week">This Week (Default)</option>
                    <option value="Today">Today</option>
@@ -713,7 +713,7 @@ export default function MyRides() {
               {historyFilter === 'Custom' && (
                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                     <div style={{ flex: 1 }}>
-                       <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>From</label>
+                       <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>From</label>
                        <input 
                          type="date" 
                          value={customDateRange.from} 
@@ -730,11 +730,11 @@ export default function MyRides() {
                              }
                              setCustomDateRange(prev => ({ ...prev, from: newFrom }));
                          }}
-                         style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none' }} 
+                         style={{ width: '100%', padding: '8px', borderRadius: '8px', border: 'none', background: '#334155', color: '#fff', boxSizing: 'border-box', outline: 'none', colorScheme: 'dark' }} 
                        />
                     </div>
                     <div style={{ flex: 1 }}>
-                       <label style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '4px' }}>To</label>
+                       <label style={{ display: 'block', fontSize: '0.75rem', color: '#94a3b8', marginBottom: '4px' }}>To</label>
                        <input 
                          type="date" 
                          value={customDateRange.to} 
@@ -751,7 +751,7 @@ export default function MyRides() {
                              }
                              setCustomDateRange(prev => ({ ...prev, to: newTo }));
                          }}
-                         style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #e2e8f0', boxSizing: 'border-box', outline: 'none' }} 
+                         style={{ width: '100%', padding: '8px', borderRadius: '8px', border: 'none', background: '#334155', color: '#fff', boxSizing: 'border-box', outline: 'none', colorScheme: 'dark' }} 
                        />
                     </div>
                  </div>
