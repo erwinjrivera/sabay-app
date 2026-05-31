@@ -557,139 +557,58 @@ export default function ActiveRide() {
               const passengerFromPos = { lat: pLat, lon: pLon };
               const passengerToPos = { lat: dLat, lon: dLon };
 
-              // --- PICKUP: Road-network distance via OSRM Table API ---
-              // Sample ~15 candidates along the driver route, ask OSRM for driving
-              // distance from the passenger to each, pick the shortest.
-              // Then refine to sub-segment precision in the winning neighbourhood.
-              let pickupIdx = -1;
+              // --- PICKUP & DROP-OFF: Road-network distance via OSRM Table API ---
+              const findBestNetworkNode = async (targetPos) => {
+                 const candidates = driverRoute.map((pt, idx) => ({ pt, idx, dist: getDistanceKM(pt[0], pt[1], targetPos.lat, targetPos.lon) }))
+                                               .filter(c => c.dist <= 5.0);
+                 if (candidates.length === 0) return null;
 
-              try {
-                  const NUM_SAMPLES = 15;
-                  const routeLen = driverRoute.length;
-                  const sampleStep = Math.max(1, Math.floor(routeLen / NUM_SAMPLES));
-                  const candidates = [];
-                  for (let i = 0; i < routeLen; i += sampleStep) {
-                      candidates.push({ idx: i, pt: driverRoute[i] });
-                  }
-                  if (candidates[candidates.length - 1].idx !== routeLen - 1) {
-                      candidates.push({ idx: routeLen - 1, pt: driverRoute[routeLen - 1] });
-                  }
-
-                  let coords = `${pLon},${pLat}`;
-                  candidates.forEach(c => { coords += `;${c.pt[1]},${c.pt[0]}`; });
-
-                  const tblRes = await fetch(
-                      `https://router.project-osrm.org/table/v1/driving/${coords}?sources=0&annotations=distance`
-                  );
-                  if (!tblRes.ok) throw new Error(`OSRM Error: ${tblRes.status}`);
-                  const tblData = await tblRes.json();
-
-                  if (tblData.code === 'Ok' && tblData.distances?.[0]) {
-                      let minDist = Infinity;
-                      let bestCandIdx = 0;
-                      for (let i = 0; i < candidates.length; i++) {
-                          const d = tblData.distances[0][i + 1];
-                          if (d !== null && d !== undefined && d < minDist) {
-                              minDist = d;
-                              bestCandIdx = i;
-                          }
-                      }
-                      // Refine: Euclidean closest in the neighbourhood of the winner
-                      const winner = candidates[bestCandIdx];
-                      const halfStep = Math.floor(sampleStep / 2);
-                      const refStart = Math.max(0, winner.idx - halfStep);
-                      const refEnd = Math.min(routeLen - 1, winner.idx + halfStep);
-                      let bestRefDist = Infinity;
-                      for (let i = refStart; i <= refEnd; i++) {
-                          const dist = getDistanceKM(driverRoute[i][0], driverRoute[i][1], pLat, pLon);
-                          if (dist < bestRefDist) { bestRefDist = dist; pickupIdx = i; }
-                      }
-                  }
-              } catch (e) {}
-
-              // Fallback: Euclidean with departure-zone skip
-              if (pickupIdx < 0) {
-                 let bestPickDist = Infinity;
-                 let cumDist = 0;
-                 for (let i = 0; i < driverRoute.length; i++) {
-                    if (i > 0) cumDist += getDistanceKM(driverRoute[i][0], driverRoute[i][1], driverRoute[i-1][0], driverRoute[i-1][1]);
-                    if (cumDist < 0.5) continue;
-                    const dist = getDistanceKM(driverRoute[i][0], driverRoute[i][1], passengerFromPos.lat, passengerFromPos.lon);
-                    if (dist < bestPickDist) { bestPickDist = dist; pickupIdx = i; }
+                 // Downsample to max 50 coordinates to fit OSRM public table limit
+                 let sampleSize = Math.max(1, Math.ceil(candidates.length / 50));
+                 let sampled = [];
+                 for (let i = 0; i < candidates.length; i += sampleSize) {
+                      sampled.push(candidates[i]);
                  }
-                 if (pickupIdx < 0) {
-                    driverRoute.forEach((pt, idx) => {
-                       const dist = getDistanceKM(pt[0], pt[1], passengerFromPos.lat, passengerFromPos.lon);
-                       if (dist < bestPickDist) { bestPickDist = dist; pickupIdx = idx; }
-                    });
+                 if (sampled.length > 90) sampled = sampled.slice(0, 90);
+
+                 let coords = `${targetPos.lon},${targetPos.lat}`;
+                 sampled.forEach(c => { coords += `;${c.pt[1]},${c.pt[0]}`; });
+
+                 try {
+                     const controller = new AbortController();
+                     const timeoutId = setTimeout(() => controller.abort(), 2000);
+                     const res = await fetch(`https://router.project-osrm.org/table/v1/driving/${coords}?sources=0`, { signal: controller.signal });
+                     clearTimeout(timeoutId);
+                     if (!res.ok) throw new Error(`OSRM Error: ${res.status}`);
+                     const data = await res.json();
+                     if (data.code !== 'Ok' || !data.durations || !data.durations[0]) throw new Error("Table API failed");
+
+                     let minDur = Infinity;
+                     let bestCandidate = null;
+                     for (let i = 0; i < sampled.length; i++) {
+                         const dur = data.durations[0][i + 1];
+                         if (dur !== null && dur < minDur) { minDur = dur; bestCandidate = sampled[i]; }
+                     }
+                     return bestCandidate || sampled.reduce((min, c) => c.dist < min.dist ? c : min, sampled[0]);
+                 } catch(e) {
+                     return sampled.reduce((min, c) => c.dist < min.dist ? c : min, sampled[0]);
                  }
-              }
+              };
 
-              // --- DROP-OFF: Road-network distance via OSRM Table API ---
-              // Same approach as pickup but uses destinations=0:
-              // driving distance FROM each candidate ON the route TO passenger destination.
-              let dropIdx = -1;
+              const bestPickup = await findBestNetworkNode(passengerFromPos);
+              const bestDropoff = await findBestNetworkNode(passengerToPos);
 
-              try {
-                  const NUM_DROP_SAMPLES = 15;
-                  const dropRouteLen = driverRoute.length;
-                  const dropStep = Math.max(1, Math.floor(dropRouteLen / NUM_DROP_SAMPLES));
-                  const dropCandidates = [];
-                  for (let i = 0; i < dropRouteLen; i += dropStep) {
-                      dropCandidates.push({ idx: i, pt: driverRoute[i] });
-                  }
-                  if (dropCandidates[dropCandidates.length - 1].idx !== dropRouteLen - 1) {
-                      dropCandidates.push({ idx: dropRouteLen - 1, pt: driverRoute[dropRouteLen - 1] });
-                  }
-
-                  let dropCoords = `${dLon},${dLat}`;
-                  dropCandidates.forEach(c => { dropCoords += `;${c.pt[1]},${c.pt[0]}`; });
-
-                  const dropTblRes = await fetch(
-                      `https://router.project-osrm.org/table/v1/driving/${dropCoords}?destinations=0&annotations=distance`
-                  );
-                  if (!dropTblRes.ok) throw new Error(`OSRM Error: ${dropTblRes.status}`);
-                  const dropTblData = await dropTblRes.json();
-
-                  if (dropTblData.code === 'Ok' && dropTblData.distances) {
-                      let minDropDist = Infinity;
-                      let bestDropCandIdx = 0;
-                      for (let i = 0; i < dropCandidates.length; i++) {
-                          const d = dropTblData.distances[i + 1]?.[0];
-                          if (d !== null && d !== undefined && d < minDropDist) {
-                              minDropDist = d;
-                              bestDropCandIdx = i;
-                          }
-                      }
-                      // Refine: Euclidean closest in the neighbourhood of the winner
-                      const dropWinner = dropCandidates[bestDropCandIdx];
-                      const dropHalfStep = Math.floor(dropStep / 2);
-                      const dropRefStart = Math.max(0, dropWinner.idx - dropHalfStep);
-                      const dropRefEnd = Math.min(dropRouteLen - 1, dropWinner.idx + dropHalfStep);
-                      let bestDropRefDist = Infinity;
-                      for (let i = dropRefStart; i <= dropRefEnd; i++) {
-                          const dist = getDistanceKM(driverRoute[i][0], driverRoute[i][1], dLat, dLon);
-                          if (dist < bestDropRefDist) { bestDropRefDist = dist; dropIdx = i; }
-                      }
-                  }
-              } catch (e) {}
-
-              // Fallback: Euclidean closest
-              if (dropIdx < 0) {
-                 let bestDropDist = Infinity;
-                 driverRoute.forEach((pt, idx) => {
-                    const dist = getDistanceKM(pt[0], pt[1], passengerToPos.lat, passengerToPos.lon);
-                    if (dist < bestDropDist) { bestDropDist = dist; dropIdx = idx; }
-                 });
-              }
+              let pickupIdx = bestPickup?.idx || 0;
+              let dropIdx = bestDropoff?.idx || (driverRoute.length - 1);
 
               // Ensure forward progress along driver's route
               if (pickupIdx >= dropIdx) {
-                 const temp = pickupIdx; pickupIdx = dropIdx; dropIdx = temp;
+                  pickupIdx = 0;
+                  dropIdx = Math.max(0, driverRoute.length - 1);
               }
 
-              let meetPickup = driverRoute[pickupIdx];
-              let meetDropoff = driverRoute[dropIdx];
+              let meetPickup = driverRoute[pickupIdx] || [driverFrom.lat, driverFrom.lon];
+              let meetDropoff = driverRoute[dropIdx] || [driverTo.lat, driverTo.lon];
               
               let interceptPaths = {
                  pickupPath: [[passengerFromPos.lat, passengerFromPos.lon], [meetPickup[0], meetPickup[1]]],
