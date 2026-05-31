@@ -686,10 +686,10 @@ export default function MyRides() {
       </div>
 
       {/* CONTENT AREA */}
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' }}>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(100px + env(safe-area-inset-bottom))', paddingTop: '24px' }}>
 
         {/* RIDES LIST */}
-        <div style={{ padding: '0 24px', flex: 1, overflowY: 'auto' }}>
+        <div style={{ padding: '0 24px', flex: 1, overflowY: 'visible' }}>
         {activeTab === 'History' && (
             <div style={{ background: '#fff', borderRadius: '16px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: historyFilter === 'Custom' ? '12px' : '0' }}>
