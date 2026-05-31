@@ -936,6 +936,18 @@ export default function ActiveRide() {
                  <div style={{ position: 'relative' }}>
                    <MeetSpotIcon color={activeColor} />
                    <div style={{ position: 'absolute', right: '100%', top: '50%', transform: 'translateY(-50%)', marginRight: '10px', background: '#fff', padding: '6px 10px', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}>
+                     <div style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#ccc', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '10px', fontWeight: 'bold' }}>
+                       {activePassenger.profilePic ? (
+                          <img 
+                            src={activePassenger.profilePic} 
+                            alt="avatar" 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            onError={(e) => { e.target.style.display = 'none'; e.target.parentNode.innerText = getInitials(activePassenger.name, 'P'); }}
+                          />
+                       ) : (
+                          getInitials(activePassenger.name, 'P')
+                       )}
+                     </div>
                      <span style={{ fontWeight: 600, color: '#333' }}>Drop-off point</span>
                      <div style={{ position: 'absolute', right: '-5px', top: '50%', transform: 'translateY(-50%)', width: 0, height: 0, borderTop: '5px solid transparent', borderBottom: '5px solid transparent', borderLeft: '5px solid #fff' }}></div>
                    </div>
