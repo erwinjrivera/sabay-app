@@ -83,7 +83,9 @@ export default function MyRides() {
         const lenSq = (dx * dx) + (dy * dy);
         
         if (lenSq === 0) return false;
+        const len = Math.sqrt(lenSq);
 
+        // Along-track projection
         const pPickupX = pass.from.lon - driver.from.lon;
         const pPickupY = pass.from.lat - driver.from.lat;
         const projPickup = (pPickupX * dx) + (pPickupY * dy);
@@ -95,6 +97,13 @@ export default function MyRides() {
         if (projPickup > lenSq) return false;
         if (projDrop < 0) return false;
         if (projPickup >= projDrop) return false;
+
+        // Cross-track distance (perpendicular distance to the line)
+        const crossPickup = Math.abs(dx * (driver.from.lat - pass.from.lat) - (driver.from.lon - pass.from.lon) * dy) / len;
+        const crossDrop = Math.abs(dx * (driver.from.lat - pass.to.lat) - (driver.from.lon - pass.to.lon) * dy) / len;
+
+        // 0.05 degrees is approx 5.5 km.
+        if (crossPickup > 0.05 || crossDrop > 0.05) return false;
 
         const buffer = 0.045; 
         const dMinLat = Math.min(driver.from.lat, driver.to.lat) - buffer;
@@ -128,7 +137,7 @@ export default function MyRides() {
         const mPassenger = isRide1Driver ? m2 : m1;
         
         const timeDiff = mDriver - mPassenger;
-        if (timeDiff < -5 || timeDiff > 180) return false;
+        if (timeDiff < -60 || timeDiff > 180) return false;
 
         return true;
     };
