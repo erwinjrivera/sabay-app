@@ -94,6 +94,10 @@ export default function MyRides() {
         const pDropY = pass.to.lat - driver.from.lat;
         const projDrop = (pDropX * dx) + (pDropY * dy);
 
+        // Strict along-track bounds with 2km buffer
+        const bufferLen = 0.02 * len;
+        if (projPickup < -bufferLen) return false;
+        if (projDrop > lenSq + bufferLen) return false;
         if (projPickup > lenSq) return false;
         if (projDrop < 0) return false;
         if (projPickup >= projDrop) return false;
@@ -102,21 +106,11 @@ export default function MyRides() {
         const crossPickup = Math.abs(dx * (driver.from.lat - pass.from.lat) - (driver.from.lon - pass.from.lon) * dy) / len;
         const crossDrop = Math.abs(dx * (driver.from.lat - pass.to.lat) - (driver.from.lon - pass.to.lon) * dy) / len;
 
-        // 0.05 degrees is approx 5.5 km.
-        if (crossPickup > 0.05 || crossDrop > 0.05) return false;
+        // 0.025 degrees is approx 2.7 km. OSRM limits to 5km route deviation, but 
+        // straight-line proxy must be tight to avoid massive ghost matching.
+        if (crossPickup > 0.025 || crossDrop > 0.025) return false;
 
-        const buffer = 0.045; 
-        const dMinLat = Math.min(driver.from.lat, driver.to.lat) - buffer;
-        const dMaxLat = Math.max(driver.from.lat, driver.to.lat) + buffer;
-        const dMinLon = Math.min(driver.from.lon, driver.to.lon) - buffer;
-        const dMaxLon = Math.max(driver.from.lon, driver.to.lon) + buffer;
-
-        const pMinLat = Math.min(pass.from.lat, pass.to.lat);
-        const pMaxLat = Math.max(pass.from.lat, pass.to.lat);
-        const pMinLon = Math.min(pass.from.lon, pass.to.lon);
-        const pMaxLon = Math.max(pass.from.lon, pass.to.lon);
-
-        return (dMaxLat > pMinLat && dMinLat < pMaxLat) && (dMaxLon > pMinLon && dMinLon < pMaxLon);
+        return true;
     };
 
     const isValidTemporalProxy = (ride1, ride2, isRide1Driver) => {
