@@ -366,14 +366,13 @@ export default function ActiveRide() {
   }, [ride?.id]);
 
   useEffect(() => {
-     const allCompleted = matches.length > 0 && matches.every(m => (passengerStates[m.id] || 0) === 2);
-     if (isGlobalCancelled || allCompleted) {
+     if (isGlobalCancelled || showDestinationReachedModal) {
         if (watchIdRef.current) {
            Geolocation.clearWatch({ id: watchIdRef.current });
            watchIdRef.current = null;
         }
      }
-  }, [isGlobalCancelled, matches, passengerStates]);
+  }, [isGlobalCancelled, showDestinationReachedModal]);
 
   const driverFrom = ride?.from ? { lat: ride.from.lat, lon: ride.from.lon } : { lat: 14.5552, lon: 121.0535 };
   const driverTo = ride?.to ? { lat: ride.to.lat, lon: ride.to.lon } : { lat: 14.5547, lon: 121.0244 };
