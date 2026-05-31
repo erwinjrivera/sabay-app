@@ -44,6 +44,7 @@ export default function MyRides() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(location.state?.initialTab || 'Pending');
   const [historyFilter, setHistoryFilter] = useState('This Week');
+  const [pendingFilter, setPendingFilter] = useState('Next 7 Days');
   const [customDateRange, setCustomDateRange] = useState({ from: '', to: '' });
 
   useEffect(() => {
@@ -384,6 +385,8 @@ export default function MyRides() {
     setLoading(true);
     let myActiveOffersUnsub = () => {};
     let myActiveReqsUnsub = () => {};
+    let myPendingOffersUnsub = () => {};
+    let myPendingReqsUnsub = () => {};
     let myHistoryOffersUnsub = () => {};
     let myHistoryReqsUnsub = () => {};
 
@@ -451,22 +454,91 @@ export default function MyRides() {
         };
     };
 
+    const getPendingFilterDateRange = () => {
+        const today = dayjs();
+        let from = null;
+        let to = null;
+        switch(pendingFilter) {
+            case 'Today':
+                from = today.startOf('day');
+                to = today.endOf('day');
+                break;
+            case 'Tomorrow':
+                from = today.add(1, 'day').startOf('day');
+                to = today.add(1, 'day').endOf('day');
+                break;
+            case 'Next 7 Days':
+                from = today.startOf('day');
+                to = today.add(7, 'day').endOf('day');
+                break;
+            case 'Next 30 Days':
+                from = today.startOf('day');
+                to = today.add(30, 'day').endOf('day');
+                break;
+            case 'This Week': {
+                const dayOfWeek = today.day();
+                from = dayOfWeek === 0 ? today.subtract(6, 'day').startOf('day') : today.startOf('week').add(1, 'day').startOf('day');
+                to = dayOfWeek === 0 ? today.endOf('day') : today.endOf('week').add(1, 'day').endOf('day');
+                break;
+            }
+            case 'Next Week': {
+                const nw = today.add(1, 'week');
+                const nwDOW = nw.day();
+                from = nwDOW === 0 ? nw.subtract(6, 'day').startOf('day') : nw.startOf('week').add(1, 'day').startOf('day');
+                to = nwDOW === 0 ? nw.endOf('day') : nw.endOf('week').add(1, 'day').endOf('day');
+                break;
+            }
+            case 'This Month':
+                from = today.startOf('month');
+                to = today.endOf('month');
+                break;
+            case 'Next Month':
+                from = today.add(1, 'month').startOf('month');
+                to = today.add(1, 'month').endOf('month');
+                break;
+            default:
+                from = today.startOf('day');
+                to = today.add(7, 'day').endOf('day');
+        }
+        return { 
+            pendingStartDate: from ? from.format('YYYY-MM-DD') : null, 
+            pendingEndDate: to ? to.format('YYYY-MM-DD') : null 
+        };
+    };
+
     const { startDate, endDate } = getFilterDateRange();
+    const { pendingStartDate, pendingEndDate } = getPendingFilterDateRange();
 
     fetchOpenRidesOnce().then(() => {
+        // Active = ONLY in_progress (no date limit, since they are active right now)
         const offersActiveQuery = query(collection(db, 'rideOffers'), 
             where('userId', '==', currentUser.uid),
-            where('status', 'in', ['open', 'in_progress', 'confirmed', 'offered'])
+            where('status', '==', 'in_progress')
         );
+        const reqsActiveQuery = query(collection(db, 'rideRequests'), 
+            where('userId', '==', currentUser.uid),
+            where('status', '==', 'in_progress')
+        );
+
+        // Pending = open, confirmed, offered + Date Bounds
+        const offersPendingQuery = query(collection(db, 'rideOffers'), 
+            where('userId', '==', currentUser.uid),
+            where('status', 'in', ['open', 'confirmed', 'offered']),
+            where('date', '>=', pendingStartDate),
+            where('date', '<=', pendingEndDate)
+        );
+        const reqsPendingQuery = query(collection(db, 'rideRequests'), 
+            where('userId', '==', currentUser.uid),
+            where('status', 'in', ['open', 'confirmed', 'offered', 'requested', 'declined']),
+            where('date', '>=', pendingStartDate),
+            where('date', '<=', pendingEndDate)
+        );
+
+        // History = any status + Date Bounds
         const offersHistoryQuery = query(collection(db, 'rideOffers'), 
             where('userId', '==', currentUser.uid),
             where('date', '>=', startDate),
             where('date', '<=', endDate)
-        );
-
-        const reqsActiveQuery = query(collection(db, 'rideRequests'), 
-            where('userId', '==', currentUser.uid),
-            where('status', 'in', ['open', 'in_progress', 'confirmed', 'offered', 'requested', 'declined'])
         );
         const reqsHistoryQuery = query(collection(db, 'rideRequests'), 
             where('userId', '==', currentUser.uid),
@@ -475,19 +547,23 @@ export default function MyRides() {
         );
 
         let activeOffers = [];
+        let pendingOffers = [];
         let historyOffers = [];
         let activeReqs = [];
+        let pendingReqs = [];
         let historyReqs = [];
         
         let activeOffersReady = false;
+        let pendingOffersReady = false;
         let historyOffersReady = false;
         let activeReqsReady = false;
+        let pendingReqsReady = false;
         let historyReqsReady = false;
 
         const syncOffers = () => {
-            if (activeOffersReady && historyOffersReady) {
+            if (activeOffersReady && pendingOffersReady && historyOffersReady) {
                 const merged = new Map();
-                [...activeOffers, ...historyOffers].forEach(o => merged.set(o.id, o));
+                [...activeOffers, ...pendingOffers, ...historyOffers].forEach(o => merged.set(o.id, o));
                 myOffers = Array.from(merged.values());
                 myOffersReady = true;
                 if (myReqsReady) setupLinkedListeners();
@@ -495,9 +571,9 @@ export default function MyRides() {
         };
 
         const syncReqs = () => {
-            if (activeReqsReady && historyReqsReady) {
+            if (activeReqsReady && pendingReqsReady && historyReqsReady) {
                 const merged = new Map();
-                [...activeReqs, ...historyReqs].forEach(r => merged.set(r.id, r));
+                [...activeReqs, ...pendingReqs, ...historyReqs].forEach(r => merged.set(r.id, r));
                 myReqs = Array.from(merged.values());
                 myReqsReady = true;
                 if (myOffersReady) setupLinkedListeners();
@@ -507,6 +583,12 @@ export default function MyRides() {
         myActiveOffersUnsub = onSnapshot(offersActiveQuery, snap => {
             activeOffers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             activeOffersReady = true;
+            syncOffers();
+        }, (err) => console.error(err));
+
+        myPendingOffersUnsub = onSnapshot(offersPendingQuery, snap => {
+            pendingOffers = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            pendingOffersReady = true;
             syncOffers();
         }, (err) => console.error(err));
 
@@ -522,6 +604,12 @@ export default function MyRides() {
             syncReqs();
         }, (err) => console.error(err));
 
+        myPendingReqsUnsub = onSnapshot(reqsPendingQuery, snap => {
+            pendingReqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            pendingReqsReady = true;
+            syncReqs();
+        }, (err) => console.error(err));
+
         myHistoryReqsUnsub = onSnapshot(reqsHistoryQuery, snap => {
             historyReqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             historyReqsReady = true;
@@ -531,13 +619,15 @@ export default function MyRides() {
 
     return () => {
         myActiveOffersUnsub();
+        myPendingOffersUnsub();
         myHistoryOffersUnsub();
         myActiveReqsUnsub();
+        myPendingReqsUnsub();
         myHistoryReqsUnsub();
         linkedOffersUnsub();
         linkedReqsUnsub();
     };
-  }, [currentUser, navigate, cleanupStaleRides, historyFilter, customDateRange.from, customDateRange.to]);
+  }, [currentUser, navigate, cleanupStaleRides, historyFilter, pendingFilter, customDateRange.from, customDateRange.to]);
 
   // Format timestamp helper
   const getRideTimeOnly = (ride) => {
@@ -690,6 +780,29 @@ export default function MyRides() {
 
         {/* RIDES LIST */}
         <div style={{ padding: '0 24px', flex: 1, overflowY: 'visible' }}>
+        
+        {activeTab === 'Pending' && (
+            <div style={{ background: '#1e293b', borderRadius: '16px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                 <label style={{ fontSize: '0.9rem', fontWeight: 600, color: '#f8fafc' }}>Pending Filter</label>
+                 <select 
+                   value={pendingFilter} 
+                   onChange={(e) => setPendingFilter(e.target.value)}
+                   style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', background: '#334155', fontSize: '0.9rem', fontWeight: 500, color: '#fff', outline: 'none', cursor: 'pointer' }}
+                 >
+                   <option value="Today">Today</option>
+                   <option value="Tomorrow">Tomorrow</option>
+                   <option value="Next 7 Days">Next 7 Days</option>
+                   <option value="Next 30 Days">Next 30 Days</option>
+                   <option value="This Week">This Week</option>
+                   <option value="Next Week">Next Week</option>
+                   <option value="This Month">This Month</option>
+                   <option value="Next Month">Next Month</option>
+                 </select>
+              </div>
+            </div>
+        )}
+
         {activeTab === 'History' && (
             <div style={{ background: '#1e293b', borderRadius: '16px', padding: '16px', marginBottom: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: historyFilter === 'Custom' ? '12px' : '0' }}>
