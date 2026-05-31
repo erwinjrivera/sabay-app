@@ -699,7 +699,7 @@ export default function MyRides() {
                    onChange={(e) => setHistoryFilter(e.target.value)}
                    style={{ padding: '8px 12px', borderRadius: '8px', border: 'none', background: '#334155', fontSize: '0.9rem', fontWeight: 500, color: '#fff', outline: 'none', cursor: 'pointer' }}
                  >
-                   <option value="This Week">This Week (Default)</option>
+                   <option value="This Week">This Week</option>
                    <option value="Today">Today</option>
                    <option value="Yesterday">Yesterday</option>
                    <option value="Last 7 Days">Last 7 Days</option>
