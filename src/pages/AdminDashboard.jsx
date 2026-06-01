@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, query, where, getCountFromServer, getDocs, limit, orderBy } from 'firebase/firestore';
-import { ChevronLeft, Users, Car, CheckCircle, Search } from 'lucide-react';
+import { ChevronLeft, Users, Car, CheckCircle, Search, Activity } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function AdminDashboard() {
@@ -10,6 +10,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({
     users: 0,
     activeOffers: 0,
+    ongoingRides: 0,
     activeRequests: 0,
     completedRides: 0
   });
@@ -27,12 +28,16 @@ export default function AdminDashboard() {
         const requestsQ = query(collection(db, 'rideRequests'), where('status', 'in', ['open', 'accepted', 'confirmed']));
         const requestsSnap = await getCountFromServer(requestsQ);
 
+        const ongoingQ = query(collection(db, 'rideOffers'), where('status', 'in', ['active', 'in_progress']));
+        const ongoingSnap = await getCountFromServer(ongoingQ);
+
         const completedQ = query(collection(db, 'rideOffers'), where('status', '==', 'completed'));
         const completedSnap = await getCountFromServer(completedQ);
 
         setStats({
           users: usersSnap.data().count,
           activeOffers: offersSnap.data().count,
+          ongoingRides: ongoingSnap.data().count,
           activeRequests: requestsSnap.data().count,
           completedRides: completedSnap.data().count
         });
@@ -80,6 +85,13 @@ export default function AdminDashboard() {
             <Search size={32} color="#00b0f0" style={{ marginBottom: '12px' }} />
             <div style={{ fontSize: '2rem', fontWeight: 800 }}>{stats.activeRequests}</div>
             <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '4px' }}>Active Finds</div>
+          </div>
+
+          {/* Stat Card: Ongoing Rides */}
+          <div style={{ background: '#282d32', padding: '20px', borderRadius: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <Activity size={32} color="#9c27b0" style={{ marginBottom: '12px' }} />
+            <div style={{ fontSize: '2rem', fontWeight: 800 }}>{stats.ongoingRides}</div>
+            <div style={{ fontSize: '0.85rem', color: '#aaa', marginTop: '4px' }}>Ongoing Rides</div>
           </div>
 
           {/* Stat Card: Completed Rides */}
